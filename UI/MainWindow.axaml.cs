@@ -61,7 +61,7 @@ namespace Aviscribe.UI
             ); // #TODO allow language selection
 
             var state = new GameState();
-            state.SetKingdom("Cap"); // #TODO allow manual selection // #TODO add automatic detection
+            state.SetKingdom("Sand"); // #TODO allow manual selection // #TODO add automatic detection
 
             var ocr = new TesseractOcrService("chi_tra"); // #TODO allow language selection
 
@@ -70,13 +70,15 @@ namespace Aviscribe.UI
 
         private void OnFrame(VideoFrame frame)
         {
-            //_processor!.ProcessFrame(frame);
+            _processor!.PushFrame(frame);
 
             if (updatePreview)
             {
                 UpdatePreview(frame.Frame);
                 updatePreview = false;
             }
+
+            //frame.Frame.Dispose();
         }
 
         private void StartPreview(object? sender, RoutedEventArgs args)
@@ -88,12 +90,15 @@ namespace Aviscribe.UI
             updatePreview = true;
             if (_currentDevice == null || _currentDevice.Id != selected.Id)
             {
+                _processor?.Stop();
                 _video?.Stop();
 
                 _currentDevice = selected;
                 _video = _videoProvider.GetVideoCapture(selected.Id);
                 _video.FrameReceived += OnFrame;
+
                 _video.Start();
+                _processor.Start();
             }
         }
 
@@ -114,54 +119,5 @@ namespace Aviscribe.UI
                 _previewImage!.Source = bitmap;
             });
         }
-
-        //private void UpdatePreview(VideoFrame frame)
-        //{
-        //    WriteableBitmap? _bitmap = new WriteableBitmap(
-        //        new PixelSize(frame.Width, frame.Height),
-        //        new Vector(96, 96),
-        //        PixelFormat.Bgra8888,
-        //        AlphaFormat.Premul);
-
-        //    using var locked = _bitmap.Lock();
-
-        //    int width = frame.Width;
-        //    int height = frame.Height;
-
-        //    int srcStride = width * 3; // BGR24 assumed tightly packed AFTER fix above
-        //    byte[] src = frame.Data;
-
-        //    unsafe
-        //    {
-        //        byte* dstBase = (byte*)locked.Address;
-
-        //        for (int y = 0; y < height; y++)
-        //        {
-        //            byte* dstRow = dstBase + (y * locked.RowBytes);
-        //            int srcRowIndex = y * srcStride;
-
-        //            for (int x = 0; x < width; x++)
-        //            {
-        //                int si = srcRowIndex + (x * 3);
-
-        //                byte b = src[si + 0];
-        //                byte g = src[si + 1];
-        //                byte r = src[si + 2];
-
-        //                int di = x * 4;
-
-        //                dstRow[di + 0] = b;
-        //                dstRow[di + 1] = g;
-        //                dstRow[di + 2] = r;
-        //                dstRow[di + 3] = 255;
-        //            }
-        //        }
-        //    }
-
-        //    Dispatcher.UIThread.Post(() =>
-        //    {
-        //        _previewImage!.Source = _bitmap;
-        //    });
-        //}
     }
 }
