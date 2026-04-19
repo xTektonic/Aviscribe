@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+		x:Class="Aviscribe.UI.MainWindow"
+        Width="1000" Height="600"
+        Title="Aviscribe">
+
+	<Grid ColumnDefinitions="300,*">
+
+		<!-- LEFT: Controls -->
+		<StackPanel Margin="10" Spacing="10">
+
+			<TextBlock Text="Video Source"/>
+
+			<ComboBox Name="cbInputSelect"/>
+
+			<Button Name="btnUpdatePreview" Content="Update Preview"/>
+
+		</StackPanel>
+
+		<!-- RIGHT: Preview -->
+		<Border Grid.Column="1" Background="Black" Margin="10">
+			<Image Name="imgPreview" Stretch="Uniform"/>
+		</Border>
+
+	</Grid>
+</Window>
