@@ -6,6 +6,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using OpenCvSharp.Extensions;
+using Accord.IO;
 
 namespace Aviscribe.Windows.Capture
 {
@@ -42,6 +43,8 @@ namespace Aviscribe.Windows.Capture
             using var bitmap = (Bitmap)eventArgs.Frame.Clone();
             VideoFrame frame = new VideoFrame(BitmapConverter.ToMat(bitmap), DateTime.UtcNow);
             FrameReceived?.Invoke(frame);
+
+            //bitmap.Save("C:\\Users\\[removed]\\Downloads\\moon_get.png");
         }
     }
 }

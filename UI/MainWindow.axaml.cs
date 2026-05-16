@@ -9,7 +9,10 @@ using Aviscribe.Core.Capture;
 using Aviscribe.Core.Ocr;
 using OpenCvSharp;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text.Json;
 
 namespace Aviscribe.UI
 {
@@ -61,15 +64,17 @@ namespace Aviscribe.UI
             ); // #TODO allow language selection
 
             var state = new GameState();
-            state.SetKingdom("Sand"); // #TODO allow manual selection // #TODO add automatic detection
+            state.SetKingdom("Cascade"); // #TODO allow manual selection // #TODO add automatic detection
 
-            var ocr = new TesseractOcrService("chi_tra"); // #TODO allow language selection
+            //var ocr = new TesseractOcrService("chi_tra"); // #TODO allow language selection
+            var ocr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath); // #TODO allow language selection
 
             _processor = new FrameProcessor(ocr, matcher, state);
         }
 
         private void OnFrame(VideoFrame frame)
         {
+            //frame.Frame.SaveImage("[removed]");
             _processor!.PushFrame(frame);
 
             if (updatePreview)

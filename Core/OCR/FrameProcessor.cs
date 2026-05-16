@@ -1,5 +1,10 @@
 ﻿using OpenCvSharp;
 using Aviscribe.Core.Capture;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Aviscribe.Core.Ocr
 {
@@ -9,22 +14,25 @@ namespace Aviscribe.Core.Ocr
         private readonly MoonMatcher _matcher;
         private readonly GameState _state;
 
-        private VideoFrame? _latestFrame;
         private readonly object _lock = new();
+        private VideoFrame? _latestFrame;
 
         private CancellationTokenSource? _cts;
-        private Task? _worker;
+        private Task? _frameWorker;
+        private Task? _ocrWorker;
 
-        private readonly Mat _gray = new();
-        private readonly Mat _thresh = new();
+        private readonly Dictionary<OcrRegionType, RegionHistory> _history = new();
+        private readonly HashSet<OcrRegionType> _activeRegions = new();
+        private readonly Dictionary<OcrRegionType, ulong> _lastHashes = new();
 
-        private Mat? _lastOcrRegion;
+        private readonly ConcurrentQueue<(OcrRegionType Type, Mat Image)> _ocrQueue = new();
 
-        private readonly Rect _textRegion = new Rect(685, 851, 607, 52);
-
-        // 🟢 NEW: OCR throttling (key improvement)
-        private DateTime _lastOcrTime = DateTime.MinValue;
-        private readonly TimeSpan _ocrCooldown = TimeSpan.FromMilliseconds(500);
+        private readonly OcrRegion[] _regions =
+        {
+            //new(OcrRegionType.Talkatoo, new Rect(666, 828, 649, 113), TextDetection.HasTalkatooText), // multiline
+            new(OcrRegionType.Talkatoo, new Rect(666, 862, 649, 48), TextDetection.HasTalkatooText), // single line
+            new(OcrRegionType.MoonGet, new Rect(490, 797, 930, 60), TextDetection.HasMoonText)
+        };
 
         public FrameProcessor(IOcrService ocr, MoonMatcher matcher, GameState state)
         {
@@ -33,28 +41,29 @@ namespace Aviscribe.Core.Ocr
             _state = state;
         }
 
+        // ----------------------------
+        // LIFECYCLE
+        // ----------------------------
         public void Start()
         {
             _cts = new CancellationTokenSource();
 
-            _worker = Task.Run(() =>
-            {
-                var token = _cts.Token;
-
-                while (!token.IsCancellationRequested)
-                {
-                    ProcessLatestFrame();
-                    Thread.Sleep(166);
-                }
-            }, _cts.Token);
+            _frameWorker = Task.Run(FrameLoop);
+            _ocrWorker = Task.Run(OcrLoop);
         }
 
         public void Stop()
         {
+            if (_frameWorker == null && _ocrWorker == null) // never actually started
+                return;
+
             _cts?.Cancel();
-            _worker?.Wait(500);
+            Task.WaitAll(new[] { _frameWorker, _ocrWorker }, 1500);
         }
 
+        // ----------------------------
+        // FRAME INPUT
+        // ----------------------------
         public void PushFrame(VideoFrame frame)
         {
             lock (_lock)
@@ -64,26 +73,35 @@ namespace Aviscribe.Core.Ocr
             }
         }
 
-        private void ProcessLatestFrame()
+        // ----------------------------
+        // FRAME LOOP (FAST)
+        // ----------------------------
+        private void FrameLoop()
         {
-            VideoFrame? frame;
-
-            lock (_lock)
+            while (!_cts!.IsCancellationRequested)
             {
-                frame = _latestFrame;
-                _latestFrame = null;
-            }
+                VideoFrame? frame = null;
 
-            if (frame == null)
-                return;
+                lock (_lock)
+                {
+                    frame = _latestFrame;
+                    _latestFrame = null;
+                }
 
-            try
-            {
-                ProcessFrame(frame);
-            }
-            finally
-            {
-                frame.Dispose();
+                if (frame == null)
+                {
+                    Thread.Sleep(1);
+                    continue;
+                }
+
+                try
+                {
+                    ProcessFrame(frame);
+                }
+                finally
+                {
+                    frame.Dispose();
+                }
             }
         }
 
@@ -94,58 +112,114 @@ namespace Aviscribe.Core.Ocr
             if (mat.Empty())
                 return;
 
-            using Mat cropped = mat[_textRegion].Clone();
-
-            // 🟢 FAST PATH: skip expensive comparison if cooldown active
-            if (!ShouldRunOcr(cropped))
-                return;
-
-            Preprocess(cropped);
-
-            var text = _ocr.ReadText(_thresh);
-
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
-            var result = _matcher.Match(text, _state.CurrentKingdom);
-
-            if (result.BestMatch != null)
-                _state.AddPending(result.BestMatch);
-
-            Console.WriteLine($"OCR: {text}");
-        }
-
-        // 🟢 NEW: unified gating logic
-        private bool ShouldRunOcr(Mat current)
-        {
-            // 1. cooldown gate (biggest win)
-            if (DateTime.UtcNow - _lastOcrTime < _ocrCooldown)
-                return false;
-
-            // 2. similarity gate
-            if (_lastOcrRegion != null)
+            foreach (var region in _regions)
             {
-                if (_lastOcrRegion.Size() == current.Size())
-                {
-                    double diff = Cv2.Norm(current, _lastOcrRegion, NormTypes.L2);
+                if (region.Type == OcrRegionType.MoonGet) continue;
 
-                    if (diff < 1.0)
-                        return false;
+                using var cropped = mat[region.Bounds];
+
+                bool detected = region.Detection(cropped);
+                //Console.WriteLine($"DETECTION ({region.Type}): {detected}");
+
+                if (!_history.TryGetValue(region.Type, out var history))
+                {
+                    history = new RegionHistory(10);
+                    _history[region.Type] = history;
                 }
 
-                _lastOcrRegion.Dispose();
+                history.Add(detected, cropped);
+
+                bool stable = history.IsStableDetection() && history.IsStableImage();
+
+                //Console.WriteLine($"STABILITY ({region.Type}): {stable}");
+
+                if (stable)
+                {
+                    if (!_activeRegions.Contains(region.Type))
+                    {
+                        ulong hash = ImageHash.Compute(cropped);
+
+                        if (!_lastHashes.TryGetValue(region.Type, out var lastHash) ||
+                            ImageHash.Hamming(hash, lastHash) > 5)
+                        {
+                            _ocrQueue.Enqueue((region.Type, cropped.Clone()));
+                            _lastHashes[region.Type] = hash;
+
+                            Console.WriteLine($"ENQUEUE OCR ({region.Type})");
+                        }
+                        else
+                        {
+                            Console.WriteLine(hash == lastHash
+                                ? $"SKIP OCR ({region.Type}): Image unchanged"
+                                : $"SKIP OCR ({region.Type}): Image similar (Hamming {ImageHash.Hamming(hash, lastHash)})");
+                        }
+
+                        _activeRegions.Add(region.Type);
+                    }
+                }
+                else
+                {
+                    _activeRegions.Remove(region.Type);
+                }
             }
-
-            _lastOcrRegion = current.Clone();
-            _lastOcrTime = DateTime.UtcNow;
-
-            return true;
         }
 
-        private void Preprocess(Mat input)
+        // ----------------------------
+        // OCR LOOP (SLOW)
+        // ----------------------------
+        private void OcrLoop()
         {
-            Cv2.CvtColor(input, _gray, ColorConversionCodes.BGR2GRAY);
-            Cv2.Threshold(_gray, _thresh, 160, 255, ThresholdTypes.Binary);
+            while (!_cts!.IsCancellationRequested)
+            {
+                if (!_ocrQueue.TryDequeue(out var item))
+                {
+                    Thread.Sleep(5);
+                    continue;
+                }
+
+                try
+                {
+                    var text = _ocr.ReadText(item.Image);
+
+                    //Console.WriteLine($"OCR RESULT ({item.Type}): \"{text}\"");
+
+                    if (string.IsNullOrWhiteSpace(text))
+                        continue;
+
+                    var result = _matcher.Match(text, _state.CurrentKingdom);
+
+                    if (result.BestMatch != null)
+                    {
+                        Handle(item.Type, result.BestMatch);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"OCR ERROR: {ex.Message}");
+                }
+                finally
+                {
+                    item.Image.Dispose();
+                }
+            }
+        }
+
+        // ----------------------------
+        // RESULT HANDLING
+        // ----------------------------
+        private void Handle(OcrRegionType type, Moon match)
+        {
+            switch (type)
+            {
+                case OcrRegionType.Talkatoo:
+                    _state.AddPending(match);
+                    Console.WriteLine($"ADD: {match.English}");
+                    break;
+
+                case OcrRegionType.MoonGet:
+                    Console.WriteLine($"REMOVE: {match.English}");
+                    break;
+            }
         }
     }
 }
