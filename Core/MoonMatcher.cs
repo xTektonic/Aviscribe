@@ -47,10 +47,6 @@ namespace Aviscribe.Core
 
             foreach (var moon in moons)
             {
-                if (moon.Id == 27)
-                {
-
-                }
                 // IMPORTANT FIX:
                 // Compare OCR input language against SAME language field in JSON
                 var moonText = Normalize(moon.GetName(_inputLanguage));

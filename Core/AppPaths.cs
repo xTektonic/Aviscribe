@@ -8,4 +8,10 @@
 
     public static string MoonList =>
         Path.Combine(DataFolder, "moon-list.json");
+
+    public static string OcrModelPath =>
+        Path.Combine(DataFolder, "rec.onnx");
+
+    public static string CharsetPath =>
+        Path.Combine(DataFolder, "dict.txt");
 }
