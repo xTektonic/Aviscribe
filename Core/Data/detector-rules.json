@@ -1,0 +1,20 @@
+{
+  "Name": "Aviscribe feature-threshold detector rules",
+  "CreatedUtc": "2026-05-30T04:43:29.1706705Z",
+  "MinimumRecallTarget": 0.995,
+  "MaximumFalsePositiveRate": 0.05,
+  "Rules": [
+    {
+      "RegionType": "Talkatoo",
+      "Feature": "LongestRowRunRatio",
+      "Threshold": 0.5208333333333334,
+      "PositiveWhenGreater": true
+    },
+    {
+      "RegionType": "Talkatoo",
+      "Feature": "EdgeDensity",
+      "Threshold": 0.08516307139188495,
+      "PositiveWhenGreater": true
+    }
+  ]
+}

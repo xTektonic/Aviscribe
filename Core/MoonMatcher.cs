@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace Aviscribe.Core
 {
@@ -29,6 +30,21 @@ namespace Aviscribe.Core
 
         public MatchResult Match(string input, string kingdom)
         {
+            return Match(input, _repo.GetByKingdom(kingdom));
+        }
+
+        public MatchResult MatchTalkatooText(string input, string kingdom, RunSettings settings)
+        {
+            return Match(input, _repo.GetTalkatooCandidates(kingdom, settings));
+        }
+
+        public MatchResult MatchCollectionText(string input, string kingdom, RunSettings settings)
+        {
+            return Match(input, _repo.GetCollectionCandidates(kingdom, settings));
+        }
+
+        public MatchResult Match(string input, IEnumerable<Moon> moons)
+        {
             if (string.IsNullOrWhiteSpace(input))
             {
                 return new MatchResult
@@ -40,8 +56,6 @@ namespace Aviscribe.Core
             }
 
             var normalizedInput = Normalize(input);
-
-            var moons = _repo.GetByKingdom(kingdom);
 
             var results = new List<(Moon moon, double score)>();
 
@@ -64,16 +78,42 @@ namespace Aviscribe.Core
                 .ToList();
 
             var best = ordered.FirstOrDefault();
+            var ambiguous = IsAmbiguousNumberedVariant(best, ordered);
 
             return new MatchResult
             {
-                BestMatch = best.score >= Threshold ? best.moon : null,
+                BestMatch = best.score >= Threshold && !ambiguous ? best.moon : null,
                 Score = best.score,
+                IsAmbiguous = ambiguous,
                 Candidates = ordered.Take(MaxCandidates).ToList()
             };
         }
 
-        public string GetDisplayName(Moon moon)
+        private bool IsAmbiguousNumberedVariant((Moon moon, double score) best, IReadOnlyList<(Moon moon, double score)> ordered)
+        {
+            if (best.moon == null || best.score < Threshold)
+                return false;
+
+            var bestBase = StripTrailingNumber(Normalize(best.moon.GetName(_inputLanguage)));
+            if (string.IsNullOrWhiteSpace(bestBase))
+                return false;
+
+            return ordered
+                .Skip(1)
+                .Take(8)
+                .Any(candidate =>
+                    candidate.score >= Threshold &&
+                    best.score - candidate.score <= 0.06 &&
+                    StripTrailingNumber(Normalize(candidate.moon.GetName(_inputLanguage))) == bestBase &&
+                    candidate.moon.Id != best.moon.Id);
+        }
+
+        private static string StripTrailingNumber(string input)
+        {
+            return Regex.Replace(input, @"[\d０-９]+$", string.Empty);
+        }
+
+        public string GetDisplayName(Moon? moon)
         {
             if (moon == null)
                 return string.Empty;

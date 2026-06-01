@@ -8,8 +8,9 @@ namespace Aviscribe.Core
 {
     public class MatchResult
     {
-        public Moon BestMatch { get; set; }
+        public Moon? BestMatch { get; set; }
         public double Score { get; set; }
+        public bool IsAmbiguous { get; set; }
 
         public List<(Moon moon, double score)> Candidates { get; set; } = new();
     }

@@ -2,7 +2,7 @@
 
 namespace Aviscribe.Core.Ocr
 {
-    internal static class ImageHash
+    public static class ImageHash
     {
         public static ulong Compute(Mat mat)
         {
