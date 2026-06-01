@@ -4,18 +4,86 @@
         Width="1000" Height="600"
         Title="Aviscribe">
 
-	<Grid ColumnDefinitions="300,*">
+	<Grid ColumnDefinitions="320,*">
 
 		<!-- LEFT: Controls -->
-		<StackPanel Margin="10" Spacing="10">
+		<ScrollViewer>
+		<StackPanel Margin="12" Spacing="10">
+
+			<TextBlock Text="Run" FontSize="18" FontWeight="SemiBold"/>
+
+			<TextBlock Text="Kingdom"/>
+			<ComboBox Name="cbKingdomSelect"/>
+
+			<TextBlock Text="Category"/>
+			<ComboBox Name="cbCategorySelect"/>
+
+			<TextBlock Text="Game Text Language"/>
+			<ComboBox Name="cbInputLanguageSelect"/>
+
+			<TextBlock Text="Display Language"/>
+			<ComboBox Name="cbOutputLanguageSelect"/>
+
+			<CheckBox Name="chkIncludePostGame" Content="Include postgame kingdoms"/>
+
+			<Border Height="1" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" Margin="0,4"/>
 
 			<TextBlock Text="Video Source"/>
 
 			<ComboBox Name="cbInputSelect"/>
 
-			<Button Name="btnUpdatePreview" Content="Update Preview"/>
+			<Button Name="btnUpdatePreview" Content="Start / Update Preview"/>
+
+			<TextBlock Name="txtStatus" Text="Ready" TextWrapping="Wrap"/>
+
+			<Border Height="1" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" Margin="0,4"/>
+
+			<TextBlock Text="Overlay Output" FontWeight="SemiBold"/>
+			<CheckBox Name="chkWriteOverlay" Content="Write pending moons to file"/>
+			<TextBox Name="txtOverlayPath"/>
+
+			<Border Height="1" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" Margin="0,4"/>
+
+			<TextBlock Text="Manual Correction" FontWeight="SemiBold"/>
+			<ComboBox Name="cbMoonSelect"/>
+			<Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="6" RowSpacing="6">
+				<Button Name="btnManualPending" Content="Pending"/>
+				<Button Name="btnManualCollected" Grid.Column="1" Content="Collected"/>
+				<Button Name="btnManualUncounted" Grid.Column="2" Content="Wrong"/>
+				<Button Name="btnManualRemove" Grid.Row="1" Grid.ColumnSpan="2" Content="Remove Selected"/>
+				<Button Name="btnResetKingdom" Grid.Row="1" Grid.Column="2" Content="Reset"/>
+			</Grid>
+
+			<Border Height="1" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" Margin="0,4"/>
+
+			<TextBlock Text="Needs Review" FontWeight="SemiBold"/>
+			<TextBlock Name="txtReviewPrompt" Text="No ambiguous reads" TextWrapping="Wrap"/>
+			<ComboBox Name="cbReviewSelect"/>
+			<Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+				<Button Name="btnReviewApply" Content="Use Selected"/>
+				<Button Name="btnReviewDismiss" Grid.Column="1" Content="Dismiss"/>
+			</Grid>
+
+			<Border Height="1" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" Margin="0,4"/>
+
+			<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" Margin="0,2">
+				<TextBlock Text="Counted" FontWeight="SemiBold"/>
+				<TextBlock Grid.Column="1" Text="Actual" FontWeight="SemiBold"/>
+				<TextBlock Name="txtCountedCount" Grid.Row="1" FontSize="24"/>
+				<TextBlock Name="txtActualCount" Grid.Row="1" Grid.Column="1" FontSize="24"/>
+			</Grid>
+
+			<TextBlock Text="Pending" FontWeight="SemiBold"/>
+			<ListBox Name="lstPending" MinHeight="90" MaxHeight="150"/>
+
+			<TextBlock Text="Counted Moons" FontWeight="SemiBold"/>
+			<ListBox Name="lstCollected" MinHeight="90" MaxHeight="150"/>
+
+			<TextBlock Text="Uncounted / Wrong Moons" FontWeight="SemiBold"/>
+			<ListBox Name="lstUncounted" MinHeight="90" MaxHeight="150"/>
 
 		</StackPanel>
+		</ScrollViewer>
 
 		<!-- RIGHT: Preview -->
 		<Border Grid.Column="1" Background="Black" Margin="10">

@@ -3,6 +3,7 @@ using Aviscribe.Core.Capture;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,21 +25,40 @@ namespace Aviscribe.Core.Ocr
         private readonly Dictionary<OcrRegionType, RegionHistory> _history = new();
         private readonly HashSet<OcrRegionType> _activeRegions = new();
         private readonly Dictionary<OcrRegionType, ulong> _lastHashes = new();
+        private long _processedFrameCount;
 
         private readonly ConcurrentQueue<(OcrRegionType Type, Mat Image)> _ocrQueue = new();
+        private readonly ITextPresenceDetector _textDetector;
 
-        private readonly OcrRegion[] _regions =
-        {
-            //new(OcrRegionType.Talkatoo, new Rect(666, 828, 649, 113), TextDetection.HasTalkatooText), // multiline
-            new(OcrRegionType.Talkatoo, new Rect(666, 862, 649, 48), TextDetection.HasTalkatooText), // single line
-            new(OcrRegionType.MoonGet, new Rect(490, 797, 930, 60), TextDetection.HasMoonText)
-        };
+        private readonly OcrRegion[] _regions;
 
-        public FrameProcessor(IOcrService ocr, MoonMatcher matcher, GameState state)
+        public event EventHandler<AmbiguousOcrResult>? AmbiguousMatchReceived;
+
+        public FrameProcessor(
+            IOcrService ocr,
+            MoonMatcher matcher,
+            GameState state,
+            ITextPresenceDetector? textDetector = null)
         {
             _ocr = ocr;
             _matcher = matcher;
             _state = state;
+            _textDetector = textDetector ?? new HeuristicTextPresenceDetector();
+
+            _regions =
+            [
+                //new(OcrRegionType.Talkatoo, new Rect(666, 828, 649, 113), _textDetector), // multiline
+                new(OcrRegionType.Talkatoo, new Rect(666, 862, 649, 48), _textDetector, StableFrameCount: 1, StableImageMaxHammingDistance: 64), // single line
+                new(
+                    OcrRegionType.MoonGet,
+                    new Rect(490, 797, 930, 60),
+                    _textDetector,
+                    StableFrameCount: 3,
+                    StableImageMaxHammingDistance: 64,
+                    DetectionBounds: new Rect(320, 600, 1250, 250),
+                    DetectionIntervalFrames: 3),
+                new(OcrRegionType.StoryMoon, new Rect(450, 820, 1100, 150), _textDetector, StableFrameCount: 12, DetectionIntervalFrames: 4)
+            ];
         }
 
         // ----------------------------
@@ -58,7 +78,12 @@ namespace Aviscribe.Core.Ocr
                 return;
 
             _cts?.Cancel();
-            Task.WaitAll(new[] { _frameWorker, _ocrWorker }, 1500);
+            var workers = new[] { _frameWorker, _ocrWorker }
+                .Where(worker => worker != null)
+                .Cast<Task>()
+                .ToArray();
+
+            Task.WaitAll(workers, 1500);
         }
 
         // ----------------------------
@@ -112,24 +137,29 @@ namespace Aviscribe.Core.Ocr
             if (mat.Empty())
                 return;
 
+            _processedFrameCount++;
+
             foreach (var region in _regions)
             {
-                if (region.Type == OcrRegionType.MoonGet) continue;
+                if ((_processedFrameCount - 1) % Math.Max(1, region.DetectionIntervalFrames) != 0)
+                    continue;
 
-                using var cropped = mat[region.Bounds];
+                using var detectionCrop = mat[region.DetectionBounds ?? region.Bounds];
 
-                bool detected = region.Detection(cropped);
+                var detection = region.Detector.Detect(region.Type, detectionCrop);
+                bool detected = detection.Present;
                 //Console.WriteLine($"DETECTION ({region.Type}): {detected}");
 
                 if (!_history.TryGetValue(region.Type, out var history))
                 {
-                    history = new RegionHistory(10);
+                    history = new RegionHistory(region.StableFrameCount);
                     _history[region.Type] = history;
                 }
 
-                history.Add(detected, cropped);
+                history.Add(detected, detectionCrop);
 
-                bool stable = history.IsStableDetection() && history.IsStableImage();
+                bool stable = history.IsStableDetection() &&
+                              history.IsStableImage(region.StableImageMaxHammingDistance);
 
                 //Console.WriteLine($"STABILITY ({region.Type}): {stable}");
 
@@ -137,12 +167,13 @@ namespace Aviscribe.Core.Ocr
                 {
                     if (!_activeRegions.Contains(region.Type))
                     {
-                        ulong hash = ImageHash.Compute(cropped);
+                        using var ocrCrop = mat[region.Bounds];
+                        ulong hash = ImageHash.Compute(ocrCrop);
 
                         if (!_lastHashes.TryGetValue(region.Type, out var lastHash) ||
                             ImageHash.Hamming(hash, lastHash) > 5)
                         {
-                            _ocrQueue.Enqueue((region.Type, cropped.Clone()));
+                            _ocrQueue.Enqueue((region.Type, ocrCrop.Clone()));
                             _lastHashes[region.Type] = hash;
 
                             Console.WriteLine($"ENQUEUE OCR ({region.Type})");
@@ -186,7 +217,18 @@ namespace Aviscribe.Core.Ocr
                     if (string.IsNullOrWhiteSpace(text))
                         continue;
 
-                    var result = _matcher.Match(text, _state.CurrentKingdom);
+                    var result = item.Type == OcrRegionType.Talkatoo
+                        ? _matcher.MatchTalkatooText(text, _state.CurrentKingdom, _state.Settings)
+                        : _matcher.MatchCollectionText(text, _state.CurrentKingdom, _state.Settings);
+
+                    if (result.IsAmbiguous)
+                    {
+                        Console.WriteLine($"AMBIGUOUS OCR ({item.Type}): \"{text}\"");
+                        AmbiguousMatchReceived?.Invoke(
+                            this,
+                            new AmbiguousOcrResult(item.Type, text, result.Candidates));
+                        continue;
+                    }
 
                     if (result.BestMatch != null)
                     {
@@ -217,7 +259,30 @@ namespace Aviscribe.Core.Ocr
                     break;
 
                 case OcrRegionType.MoonGet:
-                    Console.WriteLine($"REMOVE: {match.English}");
+                case OcrRegionType.StoryMoon:
+                    var outcome = _state.MarkCollected(match);
+                    switch (outcome)
+                    {
+                        case CollectionOutcome.Counted:
+                            Console.WriteLine($"COLLECTED: {match.English} ({_state.CountedMoonCount} counted)");
+                            break;
+
+                        case CollectionOutcome.Uncounted:
+                            Console.WriteLine($"UNCOUNTED: {match.English} ({_state.ActualMoonCount} actual, {_state.CountedMoonCount} counted)");
+                            break;
+
+                        case CollectionOutcome.AlreadyCounted:
+                            Console.WriteLine($"SKIP COLLECTED: {match.English}");
+                            break;
+
+                        case CollectionOutcome.AlreadyUncounted:
+                            Console.WriteLine($"SKIP UNCOUNTED: {match.English}");
+                            break;
+
+                        default:
+                            Console.WriteLine($"IGNORED: {match.English}");
+                            break;
+                    }
                     break;
             }
         }

@@ -427,3 +427,9 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Aviscribe local classifier artifacts
+/.dotnet-home/
+/Classifier/Data/
+/Classifier/Output/
+/Classifier/Models/

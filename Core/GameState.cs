@@ -6,41 +6,227 @@ using System.Threading.Tasks;
 
 namespace Aviscribe.Core
 {
+    public enum CollectionOutcome
+    {
+        Ignored,
+        Counted,
+        Uncounted,
+        AlreadyCounted,
+        AlreadyUncounted
+    }
+
     public class GameState
     {
-        public string CurrentKingdom { get; private set; }
+        private readonly object _sync = new();
+
+        public string CurrentKingdom { get; private set; } = string.Empty;
+        public RunSettings Settings { get; } = new();
 
         public List<Moon> Pending { get; private set; } = new();
         public List<Moon> Collected { get; private set; } = new();
+        public List<Moon> UncountedCollected { get; private set; } = new();
+
+        public event EventHandler? Changed;
+
+        public int CountedMoonCount
+        {
+            get
+            {
+                lock (_sync)
+                    return Collected.Sum(m => m.MoonCountValue);
+            }
+        }
+
+        public int ActualMoonCount
+        {
+            get
+            {
+                lock (_sync)
+                    return Collected.Concat(UncountedCollected).Sum(m => m.MoonCountValue);
+            }
+        }
 
         public void SetKingdom(string kingdom)
         {
-            if (CurrentKingdom != kingdom)
+            var changed = false;
+
+            lock (_sync)
             {
-                CurrentKingdom = kingdom;
+                if (CurrentKingdom != kingdom)
+                {
+                    CurrentKingdom = kingdom;
+                    Pending.Clear();
+                    Collected.Clear();
+                    UncountedCollected.Clear();
+                    changed = true;
+                }
+            }
+
+            if (changed)
+                OnChanged();
+        }
+
+        public void ResetKingdom()
+        {
+            lock (_sync)
+            {
                 Pending.Clear();
                 Collected.Clear();
+                UncountedCollected.Clear();
             }
+
+            OnChanged();
         }
 
         public void AddPending(Moon moon)
         {
             if (moon == null) return;
 
-            if (!Pending.Contains(moon) && !Collected.Contains(moon))
+            var changed = false;
+
+            lock (_sync)
             {
-                Pending.Add(moon);
+                if (!Pending.Contains(moon) && !Collected.Contains(moon) && !UncountedCollected.Contains(moon))
+                {
+                    Pending.Add(moon);
+                    changed = true;
+                }
+            }
+
+            if (changed)
+                OnChanged();
+        }
+
+        public CollectionOutcome MarkCollected(Moon moon)
+        {
+            if (moon == null) return CollectionOutcome.Ignored;
+
+            CollectionOutcome outcome;
+
+            lock (_sync)
+            {
+                if (Collected.Contains(moon))
+                    return CollectionOutcome.AlreadyCounted;
+
+                if (UncountedCollected.Contains(moon))
+                    return CollectionOutcome.AlreadyUncounted;
+
+                var countsForRules = moon.IsStory
+                    ? Settings.AllowsStoryMoons
+                    : Pending.Remove(moon);
+
+                if (countsForRules)
+                {
+                    Collected.Add(moon);
+                    outcome = CollectionOutcome.Counted;
+                }
+                else
+                {
+                    UncountedCollected.Add(moon);
+                    outcome = CollectionOutcome.Uncounted;
+                }
+            }
+
+            OnChanged();
+            return outcome;
+        }
+
+        public CollectionOutcome MarkUncounted(Moon moon)
+        {
+            if (moon == null) return CollectionOutcome.Ignored;
+
+            lock (_sync)
+            {
+                if (Collected.Contains(moon))
+                    return CollectionOutcome.AlreadyCounted;
+
+                if (UncountedCollected.Contains(moon))
+                    return CollectionOutcome.AlreadyUncounted;
+
+                Pending.Remove(moon);
+                UncountedCollected.Add(moon);
+            }
+
+            OnChanged();
+            return CollectionOutcome.Uncounted;
+        }
+
+        public bool Remove(Moon moon)
+        {
+            if (moon == null) return false;
+
+            bool changed;
+
+            lock (_sync)
+            {
+                changed = Pending.Remove(moon);
+                changed = Collected.Remove(moon) || changed;
+                changed = UncountedCollected.Remove(moon) || changed;
+            }
+
+            if (changed)
+                OnChanged();
+
+            return changed;
+        }
+
+        public void Restore(
+            string kingdom,
+            RunSettings settings,
+            IEnumerable<Moon> pending,
+            IEnumerable<Moon> collected,
+            IEnumerable<Moon> uncountedCollected)
+        {
+            lock (_sync)
+            {
+                CurrentKingdom = kingdom;
+                Settings.CopyFrom(settings);
+                Pending = pending.Distinct().ToList();
+                Collected = collected.Distinct().ToList();
+                UncountedCollected = uncountedCollected.Distinct().ToList();
+            }
+
+            OnChanged();
+        }
+
+        public GameStateSnapshot CreateSnapshot()
+        {
+            lock (_sync)
+            {
+                return new GameStateSnapshot(
+                    CurrentKingdom,
+                    Settings.Category,
+                    Settings.IncludePostGameKingdoms,
+                    Settings.InputLanguage,
+                    Settings.OutputLanguage,
+                    Pending.ToList(),
+                    Collected.ToList(),
+                    UncountedCollected.ToList(),
+                    Collected.Sum(m => m.MoonCountValue),
+                    Collected.Concat(UncountedCollected).Sum(m => m.MoonCountValue));
             }
         }
 
-        public void MarkCollected(Moon moon)
+        public void NotifySettingsChanged()
         {
-            if (moon == null) return;
+            OnChanged();
+        }
 
-            if (Pending.Remove(moon))
-            {
-                Collected.Add(moon);
-            }
+        private void OnChanged()
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    public sealed record GameStateSnapshot(
+        string CurrentKingdom,
+        RunCategory Category,
+        bool IncludePostGameKingdoms,
+        GameLanguage InputLanguage,
+        GameLanguage OutputLanguage,
+        IReadOnlyList<Moon> Pending,
+        IReadOnlyList<Moon> Collected,
+        IReadOnlyList<Moon> UncountedCollected,
+        int CountedMoonCount,
+        int ActualMoonCount);
 }

@@ -1,4 +1,4 @@
-﻿using OpenCvSharp;
+using OpenCvSharp;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -7,7 +7,7 @@ namespace Aviscribe.Core.Ocr
     internal class RegionHistory
     {
         private readonly Queue<bool> _detections = new();
-        private readonly Queue<Mat> _frames = new();
+        private readonly Queue<ulong> _hashes = new();
 
         public int WindowSize { get; }
 
@@ -19,14 +19,12 @@ namespace Aviscribe.Core.Ocr
         public void Add(bool detected, Mat frame)
         {
             _detections.Enqueue(detected);
-            _frames.Enqueue(frame.Clone());
+            _hashes.Enqueue(detected ? ImageHash.Compute(frame) : 0);
 
             if (_detections.Count > WindowSize)
             {
                 _detections.Dequeue();
-
-                var old = _frames.Dequeue();
-                old.Dispose();
+                _hashes.Dequeue();
             }
         }
 
@@ -36,18 +34,16 @@ namespace Aviscribe.Core.Ocr
                    _detections.All(x => x);
         }
 
-        public bool IsStableImage(double threshold = 1.0)
+        public bool IsStableImage(int maxHammingDistance = 12)
         {
-            return true; // #TODO fix
-
-            if (_frames.Count < WindowSize)
+            if (_hashes.Count < WindowSize)
                 return false;
 
-            var first = _frames.Peek();
+            var first = _hashes.Peek();
 
-            foreach (var f in _frames)
+            foreach (var hash in _hashes)
             {
-                if (Cv2.Norm(first, f, NormTypes.L2) > threshold)
+                if (ImageHash.Hamming(first, hash) > maxHammingDistance)
                     return false;
             }
 
@@ -56,10 +52,7 @@ namespace Aviscribe.Core.Ocr
 
         public void Clear()
         {
-            foreach (var f in _frames)
-                f.Dispose();
-
-            _frames.Clear();
+            _hashes.Clear();
             _detections.Clear();
         }
     }

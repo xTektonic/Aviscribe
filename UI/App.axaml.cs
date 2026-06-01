@@ -9,6 +9,11 @@ namespace Aviscribe.UI
     {
         private readonly IVideoProvider _captureProvider;
 
+        public AviscribeApp()
+            : this(new DesignVideoProvider())
+        {
+        }
+
         public AviscribeApp(IVideoProvider captureProvider)
         {
             _captureProvider = captureProvider;
