@@ -13,7 +13,8 @@ namespace Aviscribe.Classifier
             AmbiguousTalkatooUsesOnlyUnseenCandidate();
             AmbiguousMoonGetUsesPendingCandidate();
             AmbiguousTalkatooStillAsksWhenUnresolved();
-            BoundedQueueDropsStaleTalkatooWork();
+            TalkatooBacklogKeepsRapidDistinctReads();
+            TalkatooRefreshesChangedTextWithoutAbsentGap();
             FalseTalkatooEnqueuesDoNotCrowdOutLatestRealRead();
             MoonGetSurvivesOverlappingStoryMoon();
             Console.WriteLine("FrameProcessor smoke passed.");
@@ -182,10 +183,10 @@ namespace Aviscribe.Classifier
             }
         }
 
-        private static void BoundedQueueDropsStaleTalkatooWork()
+        private static void TalkatooBacklogKeepsRapidDistinctReads()
         {
-            var oldMoon = new Moon { Id = 1, Kingdom = "Cascade", English = "Old False Positive" };
-            var middleMoon = new Moon { Id = 2, Kingdom = "Cascade", English = "Middle False Positive" };
+            var oldMoon = new Moon { Id = 1, Kingdom = "Cascade", English = "Old Real Moon" };
+            var middleMoon = new Moon { Id = 2, Kingdom = "Cascade", English = "Middle Real Moon" };
             var recentMoon = new Moon { Id = 3, Kingdom = "Cascade", English = "Recent Real Moon" };
             var latestMoon = new Moon { Id = 4, Kingdom = "Cascade", English = "Latest Real Moon" };
             var repo = CreateRepo(oldMoon, middleMoon, recentMoon, latestMoon);
@@ -211,12 +212,38 @@ namespace Aviscribe.Classifier
                 Thread.Sleep(300);
 
                 var snapshot = state.CreateSnapshot();
-                if (snapshot.Pending.Any(moon => moon.Id == middleMoon.Id))
-                    throw new InvalidOperationException("Bounded queue processed stale middle work that should have been dropped.");
+                var pendingIds = snapshot.Pending.Select(moon => moon.Id).OrderBy(id => id).ToArray();
+                if (!pendingIds.SequenceEqual(new[] { 1, 2, 3, 4 }))
+                    throw new InvalidOperationException($"Rapid Talkatoo backlog lost one or more reads: [{string.Join(", ", pendingIds)}].");
             }
             finally
             {
                 ocr.Release();
+                processor.Stop();
+            }
+        }
+
+        private static void TalkatooRefreshesChangedTextWithoutAbsentGap()
+        {
+            var firstMoon = new Moon { Id = 1, Kingdom = "Cascade", English = "Old Real Moon" };
+            var secondMoon = new Moon { Id = 2, Kingdom = "Cascade", English = "Latest Real Moon" };
+            var repo = CreateRepo(firstMoon, secondMoon);
+            var state = CreateEnglishState("Cascade");
+            using var ocr = new ColorOcrService(blockFirstRead: false);
+            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
+
+            processor.Start();
+            try
+            {
+                PushPatternFrame(processor, 30, 0);
+                WaitFor(() => state.CreateSnapshot().Pending.Any(moon => moon.Id == firstMoon.Id), "Talkatoo did not enqueue the first active-region read.");
+                PushPatternFrame(processor, 210, 3);
+
+                WaitFor(() => state.CreateSnapshot().Pending.Any(moon => moon.Id == secondMoon.Id), "Talkatoo did not enqueue changed text while the region stayed active.");
+            }
+            finally
+            {
                 processor.Stop();
             }
         }
@@ -365,7 +392,13 @@ namespace Aviscribe.Classifier
         private sealed class ColorOcrService : IOcrService, IDisposable
         {
             private readonly ManualResetEventSlim _release = new(false);
+            private readonly bool _blockFirstRead;
             private bool _firstRead = true;
+
+            public ColorOcrService(bool blockFirstRead = true)
+            {
+                _blockFirstRead = blockFirstRead;
+            }
 
             public ManualResetEventSlim Started { get; } = new(false);
 
@@ -375,14 +408,15 @@ namespace Aviscribe.Classifier
                 {
                     _firstRead = false;
                     Started.Set();
-                    _release.Wait(TimeSpan.FromSeconds(5));
+                    if (_blockFirstRead)
+                        _release.Wait(TimeSpan.FromSeconds(5));
                 }
 
                 var pixel = frame.At<Vec3b>(0, 0);
                 return pixel.Item0 switch
                 {
-                    < 60 => "Old False Positive",
-                    < 120 => "Middle False Positive",
+                    < 60 => "Old Real Moon",
+                    < 120 => "Middle Real Moon",
                     < 180 => "Recent Real Moon",
                     _ => "Latest Real Moon"
                 };

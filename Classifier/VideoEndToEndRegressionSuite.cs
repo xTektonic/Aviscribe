@@ -10,6 +10,7 @@ namespace Aviscribe.Classifier
         private static readonly Rect TalkatooOcrBounds = new(666, 862, 649, 48);
         private static readonly Rect MoonGetDetectionBounds = new(320, 600, 1250, 250);
         private static readonly Rect MoonGetOcrBounds = new(490, 797, 930, 60);
+        private static readonly Rect StoryMoonBounds = new(450, 820, 1100, 150);
 
         private static readonly EndToEndExpectation[] Expectations =
         [
@@ -26,7 +27,7 @@ namespace Aviscribe.Classifier
             new("seaside-talkatoo-valley", OcrRegionType.Talkatoo, "Seaside", 237_596, 45),
             new("luncheon-talkatoo-fork", OcrRegionType.Talkatoo, "Luncheon", 277_182, 41),
 
-            new("cascade-moonget-first", OcrRegionType.MoonGet, "Cascade", 10_782, 1),
+            new("cascade-storymoon-first", OcrRegionType.StoryMoon, "Cascade", 10_782, 1),
             new("sand-moonget-skull-sign", OcrRegionType.MoonGet, "Sand", 32_382, 55),
             new("sand-moonget-palm-notes", OcrRegionType.MoonGet, "Sand", 57_582, 32),
             new("lake-moonget-broken-pillar", OcrRegionType.MoonGet, "Lake", 74_138, 7),
@@ -118,16 +119,24 @@ namespace Aviscribe.Classifier
 
         private static Rect DetectionBounds(OcrRegionType regionType)
         {
-            return regionType == OcrRegionType.Talkatoo
-                ? TalkatooDetectionBounds
-                : MoonGetDetectionBounds;
+            return regionType switch
+            {
+                OcrRegionType.Talkatoo => TalkatooDetectionBounds,
+                OcrRegionType.MoonGet => MoonGetDetectionBounds,
+                OcrRegionType.StoryMoon => StoryMoonBounds,
+                _ => throw new ArgumentOutOfRangeException(nameof(regionType))
+            };
         }
 
         private static Rect OcrBounds(OcrRegionType regionType)
         {
-            return regionType == OcrRegionType.Talkatoo
-                ? TalkatooOcrBounds
-                : MoonGetOcrBounds;
+            return regionType switch
+            {
+                OcrRegionType.Talkatoo => TalkatooOcrBounds,
+                OcrRegionType.MoonGet => MoonGetOcrBounds,
+                OcrRegionType.StoryMoon => StoryMoonBounds,
+                _ => throw new ArgumentOutOfRangeException(nameof(regionType))
+            };
         }
 
         private static void WriteFailureImages(

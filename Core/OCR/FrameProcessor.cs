@@ -24,6 +24,7 @@ namespace Aviscribe.Core.Ocr
         private readonly Dictionary<OcrRegionType, RegionHistory> _history = new();
         private readonly HashSet<OcrRegionType> _activeRegions = new();
         private readonly Dictionary<OcrRegionType, ulong> _lastHashes = new();
+        private readonly Dictionary<OcrRegionType, long> _lastEnqueueFrames = new();
         private long _processedFrameCount;
         private string _observedKingdom;
         private long _suppressStoryMoonUntilFrame;
@@ -51,7 +52,7 @@ namespace Aviscribe.Core.Ocr
             _regions =
             [
                 //new(OcrRegionType.Talkatoo, new Rect(666, 828, 649, 113), _textDetector), // multiline
-                new(OcrRegionType.Talkatoo, new Rect(666, 862, 649, 48), _textDetector, StableFrameCount: 2, StableImageMaxHammingDistance: 64), // single line
+                new(OcrRegionType.Talkatoo, new Rect(666, 862, 649, 48), _textDetector, StableFrameCount: 1, StableImageMaxHammingDistance: 64), // single line
                 new(
                     OcrRegionType.MoonGet,
                     new Rect(490, 797, 930, 60),
@@ -202,28 +203,39 @@ namespace Aviscribe.Core.Ocr
 
                 if (stable)
                 {
-                    if (!_activeRegions.Contains(region.Type))
+                    var active = _activeRegions.Contains(region.Type);
+                    var canRefreshActiveRegion = region.Type == OcrRegionType.Talkatoo;
+
+                    if (!active || canRefreshActiveRegion)
                     {
                         using var ocrCrop = mat[region.Bounds];
                         ulong hash = ImageHash.Compute(ocrCrop);
                         var useHashDedupe = region.Type == OcrRegionType.Talkatoo;
+                        var hammingDistance = _lastHashes.TryGetValue(region.Type, out var lastHash)
+                            ? ImageHash.Hamming(hash, lastHash)
+                            : int.MaxValue;
+                        var periodicTalkatooRefresh =
+                            region.Type == OcrRegionType.Talkatoo &&
+                            _lastEnqueueFrames.TryGetValue(region.Type, out var lastEnqueueFrame) &&
+                            _processedFrameCount - lastEnqueueFrame >= 4;
 
                         if (!useHashDedupe ||
-                            !_lastHashes.TryGetValue(region.Type, out var lastHash) ||
-                            ImageHash.Hamming(hash, lastHash) > 5)
+                            hammingDistance > 5 ||
+                            periodicTalkatooRefresh)
                         {
                             EnqueueOcr(region.Type, ocrCrop.Clone(), kingdom, settings);
 
                             if (useHashDedupe)
                                 _lastHashes[region.Type] = hash;
 
+                            _lastEnqueueFrames[region.Type] = _processedFrameCount;
                             Console.WriteLine($"ENQUEUE OCR ({region.Type})");
                         }
                         else
                         {
-                            Console.WriteLine(hash == lastHash
+                            Console.WriteLine(hammingDistance == 0
                                 ? $"SKIP OCR ({region.Type}): Image unchanged"
-                                : $"SKIP OCR ({region.Type}): Image similar (Hamming {ImageHash.Hamming(hash, lastHash)})");
+                                : $"SKIP OCR ({region.Type}): Image similar (Hamming {hammingDistance})");
                         }
 
                         _activeRegions.Add(region.Type);
@@ -356,7 +368,7 @@ namespace Aviscribe.Core.Ocr
 
         private void EnqueueOcr(OcrRegionType type, Mat image, string kingdom, RunSettings settings)
         {
-            const int maxQueuedPerRegion = 2;
+            var maxQueuedPerRegion = type == OcrRegionType.Talkatoo ? 8 : 2;
 
             lock (_ocrQueueLock)
             {
@@ -382,7 +394,32 @@ namespace Aviscribe.Core.Ocr
                         _ocrQueue.Enqueue(kept.Dequeue());
                 }
 
-                _ocrQueue.Enqueue(new OcrWorkItem(type, image, kingdom, settings.Clone()));
+                var workItem = new OcrWorkItem(type, image, kingdom, settings.Clone());
+                if (type == OcrRegionType.Talkatoo)
+                {
+                    _ocrQueue.Enqueue(workItem);
+                    return;
+                }
+
+                var prioritized = new Queue<OcrWorkItem>(_ocrQueue.Count + 1);
+                var delayedTalkatoo = new Queue<OcrWorkItem>();
+
+                while (_ocrQueue.Count > 0)
+                {
+                    var item = _ocrQueue.Dequeue();
+                    if (item.Type == OcrRegionType.Talkatoo)
+                        delayedTalkatoo.Enqueue(item);
+                    else
+                        prioritized.Enqueue(item);
+                }
+
+                prioritized.Enqueue(workItem);
+
+                while (delayedTalkatoo.Count > 0)
+                    prioritized.Enqueue(delayedTalkatoo.Dequeue());
+
+                while (prioritized.Count > 0)
+                    _ocrQueue.Enqueue(prioritized.Dequeue());
             }
         }
 
@@ -419,6 +456,7 @@ namespace Aviscribe.Core.Ocr
             _history.Clear();
             _activeRegions.Clear();
             _lastHashes.Clear();
+            _lastEnqueueFrames.Clear();
             _suppressStoryMoonUntilFrame = 0;
             ClearOcrQueue();
             _observedKingdom = currentKingdom;

@@ -54,6 +54,7 @@ namespace Aviscribe.Classifier
 
         private static readonly NegativeExpectation[] NegativeExpectations =
         [
+            new("sand-platform-after-lone-pillar-not-moonget", OcrRegionType.MoonGet, 68_624),
             new("sand-yellow-platform-not-talkatoo", OcrRegionType.Talkatoo, 217_178),
         ];
 

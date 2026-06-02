@@ -19,7 +19,7 @@ namespace Aviscribe.Classifier
             new("wooded-talkatoo-elevator", OcrRegionType.Talkatoo, "Wooded", 82_562, 45),
             new("wooded-talkatoo-behind-rock-wall", OcrRegionType.Talkatoo, "Wooded", 117_404, 5),
 
-            new("cascade-moonget-first", OcrRegionType.MoonGet, "Cascade", 10_782, 1),
+            new("cascade-storymoon-first", OcrRegionType.StoryMoon, "Cascade", 10_782, 1),
             new("sand-moonget-skull-sign", OcrRegionType.MoonGet, "Sand", 32_382, 55),
             new("sand-moonget-palm-notes", OcrRegionType.MoonGet, "Sand", 57_582, 32),
             new("lake-moonget-broken-pillar", OcrRegionType.MoonGet, "Lake", 74_138, 7),

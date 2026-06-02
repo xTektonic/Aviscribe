@@ -901,13 +901,14 @@ namespace Aviscribe.Core.Ocr
 
             if (image.Height > 100)
             {
-                if (HasMoonGetBannerText(image))
+                if (HasMoonGetSeparatorLayout(image))
                     return true;
 
                 if (!HasLargeMoonGetCelebrationMass(image))
                     return false;
 
-                return HasLargeMoonGetCelebrationText(MeasureMoonGetText(image));
+                return HasLargeMoonGetCelebrationText(MeasureMoonGetText(image)) &&
+                    HasMoonGetBannerText(image);
             }
 
             var metrics = MeasureMoonGetText(image);
@@ -1017,9 +1018,6 @@ namespace Aviscribe.Core.Ocr
         {
             var paleNeutralRatio = MeasurePaleNeutralRatio(image);
 
-            if (HasMoonGetSeparatorLayout(image))
-                return true;
-
             if (paleNeutralRatio > 0.82)
                 return false;
 
@@ -1111,9 +1109,9 @@ namespace Aviscribe.Core.Ocr
                 rowCounts[sampledY] = rowCount;
             }
 
-            var minLineRow = (int)(sampledHeight * 0.35);
-            var maxLineRow = (int)(sampledHeight * 0.84);
-            var lineThreshold = sampledWidth * 0.45;
+            var minLineRow = (int)(sampledHeight * 0.48);
+            var maxLineRow = (int)(sampledHeight * 0.82);
+            var lineThreshold = sampledWidth * 0.72;
             var bestLineStart = -1;
             var bestLineEnd = -1;
             var bestLineScore = 0;
@@ -1239,7 +1237,7 @@ namespace Aviscribe.Core.Ocr
                     : surroundingTotal / (double)surroundingRows;
 
                 return
-                    lineAverage >= sampledWidth * 0.48 &&
+                    lineAverage >= sampledWidth * 0.72 &&
                     lineAverage >= surroundingAverage * 1.25 &&
                     lineAverage - surroundingAverage >= sampledWidth * 0.12;
             }
