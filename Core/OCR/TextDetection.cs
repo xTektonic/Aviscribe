@@ -23,16 +23,31 @@ namespace Aviscribe.Core.Ocr
             var metrics = MeasureYellowText(mask);
             var hasWhiteMarker = HasWhiteTalkatooMoonMarker(image);
             var whiteSupport = MeasureTextWhiteSupport(image);
+            var yellowPixels = Cv2.CountNonZero(mask);
 
             if (hasWhiteMarker && (metrics.HasTextBand || metrics.HasWhiteMarkerTextBand))
                 return true;
 
+            if (metrics.HasTextBand)
+            {
+                return true;
+            }
+
+            if ((metrics.HasMarkerSupportedTextBand ||
+                 metrics.HasOutlinedTextBand ||
+                 metrics.HasStrongOutlinedTextBand) &&
+                whiteSupport.Pixels >= 120 &&
+                whiteSupport.ActiveColumns >= 20)
+            {
+                return true;
+            }
+
             return
-                HasTalkatooMoonMarker(image) &&
-                whiteSupport.Pixels >= 520 &&
-                whiteSupport.ActiveColumns >= 42 &&
-                metrics.HasStrongOutlinedTextBand &&
-                (metrics.HasMarkerSupportedTextBand || metrics.HasOutlinedTextBand);
+                yellowPixels >= 650 &&
+                whiteSupport.Pixels >= 120 &&
+                whiteSupport.ActiveColumns >= 20 &&
+                metrics.LongestColumnRun <= 220 &&
+                HasTalkatooText_v3(image);
         }
 
         private static YellowTextMetrics MeasureYellowText(Mat mask)
@@ -122,6 +137,7 @@ namespace Aviscribe.Core.Ocr
             var totalPixels = Math.Max(1, mask.Width * mask.Height);
             var spanWidth = right - (left == mask.Width ? right : left);
             var yellowRatio = yellowPixels / (double)totalPixels;
+            var activeColumnDensity = activeColumns / (double)Math.Max(1, spanWidth);
 
             var hasTextBand =
                 yellowPixels >= 650 &&
@@ -161,6 +177,7 @@ namespace Aviscribe.Core.Ocr
                 yellowRatio >= 0.035 &&
                 bestBandScore >= 700 &&
                 activeColumns >= 85 &&
+                activeColumnDensity >= 0.45 &&
                 spanWidth >= 125 &&
                 spanWidth <= 575 &&
                 (left == mask.Width ? 0 : left) >= 90 &&
@@ -171,8 +188,10 @@ namespace Aviscribe.Core.Ocr
                 yellowRatio >= 0.08 &&
                 bestBandScore >= 2000 &&
                 activeColumns >= 140 &&
+                activeColumnDensity >= 0.45 &&
                 spanWidth >= 125 &&
                 spanWidth <= 575 &&
+                longestColumnRun <= 220 &&
                 (left == mask.Width ? 0 : left) >= 90 &&
                 medianActiveRow >= 42;
 
@@ -881,7 +900,15 @@ namespace Aviscribe.Core.Ocr
                 return false;
 
             if (image.Height > 100)
-                return HasMoonGetBannerText(image);
+            {
+                if (HasMoonGetBannerText(image))
+                    return true;
+
+                if (!HasLargeMoonGetCelebrationMass(image))
+                    return false;
+
+                return HasLargeMoonGetCelebrationText(MeasureMoonGetText(image));
+            }
 
             var metrics = MeasureMoonGetText(image);
 
@@ -924,14 +951,76 @@ namespace Aviscribe.Core.Ocr
             return strictOutlinedText || lightBackgroundText;
         }
 
+        private static bool HasLargeMoonGetCelebrationMass(Mat image)
+        {
+            const int step = 4;
+            var sampledWidth = (image.Width + step - 1) / step;
+            var sampledHeight = (image.Height + step - 1) / step;
+            var rowCounts = new int[sampledHeight];
+            var activeColumns = new bool[sampledWidth];
+            var whitePixels = 0;
+
+            for (var y = 0; y < image.Height; y += step)
+            {
+                var sampledY = y / step;
+                var rowCount = 0;
+
+                for (var x = 0; x < image.Width; x += step)
+                {
+                    var pixel = image.At<Vec3b>(y, x);
+                    var b = pixel.Item0;
+                    var g = pixel.Item1;
+                    var r = pixel.Item2;
+
+                    if (!IsMoonGetTextPixel(r, g, b))
+                        continue;
+
+                    rowCount++;
+                    whitePixels++;
+                    activeColumns[x / step] = true;
+                }
+
+                rowCounts[sampledY] = rowCount;
+            }
+
+            var activeRows = rowCounts.Count(count => count >= sampledWidth * 0.10);
+            var strongRows = rowCounts.Count(count => count >= sampledWidth * 0.30);
+            var maxRow = rowCounts.Length == 0 ? 0 : rowCounts.Max();
+            var span = MeasureBooleanSpan(activeColumns);
+
+            return
+                whitePixels >= sampledWidth * sampledHeight * 0.06 &&
+                maxRow >= sampledWidth * 0.36 &&
+                activeRows >= 12 &&
+                strongRows >= 3 &&
+                span >= sampledWidth * 0.45;
+        }
+
+        private static bool HasLargeMoonGetCelebrationText(MoonGetTextMetrics metrics)
+        {
+            return
+                metrics.WhitePixels >= 90_000 &&
+                metrics.WhiteRatio >= 0.08 &&
+                metrics.BandScore >= 12_000 &&
+                metrics.ActiveColumns >= 600 &&
+                metrics.SpanWidth >= 520 &&
+                metrics.BandRows >= 18 &&
+                metrics.TextComponentCount >= 4 &&
+                metrics.TextComponentCount <= 260 &&
+                metrics.TextComponentArea >= 4_500 &&
+                metrics.TextComponentSpan >= 420 &&
+                metrics.OutlinedPixels >= 1_000 &&
+                metrics.OutlinedColumns >= 120;
+        }
+
         private static bool HasMoonGetBannerText(Mat image)
         {
             var paleNeutralRatio = MeasurePaleNeutralRatio(image);
 
-            if (paleNeutralRatio <= 0.55 && HasMoonGetSeparatorLayout(image))
+            if (HasMoonGetSeparatorLayout(image))
                 return true;
 
-            if (paleNeutralRatio > 0.55)
+            if (paleNeutralRatio > 0.82)
                 return false;
 
             var darkIntegral = BuildDarkIntegral(image, maxValue: 105);
@@ -1024,7 +1113,7 @@ namespace Aviscribe.Core.Ocr
 
             var minLineRow = (int)(sampledHeight * 0.35);
             var maxLineRow = (int)(sampledHeight * 0.84);
-            var lineThreshold = sampledWidth * 0.58;
+            var lineThreshold = sampledWidth * 0.45;
             var bestLineStart = -1;
             var bestLineEnd = -1;
             var bestLineScore = 0;
@@ -1054,13 +1143,13 @@ namespace Aviscribe.Core.Ocr
                 return false;
 
             var lineRows = bestLineEnd - bestLineStart;
-            if (lineRows < 2 || lineRows > 12)
+            if (lineRows < 2 || lineRows > 24)
                 return false;
 
             var titleRows = 0;
             var titleBottom = Math.Max(0, bestLineStart - 4);
-            var titleRowThreshold = sampledWidth * 0.12;
-            var titleStrongRowThreshold = sampledWidth * 0.24;
+            var titleRowThreshold = sampledWidth * 0.09;
+            var titleStrongRowThreshold = sampledWidth * 0.16;
             var strongTitleRows = 0;
 
             for (var y = 0; y < titleBottom; y++)
@@ -1098,10 +1187,10 @@ namespace Aviscribe.Core.Ocr
             }
 
             return
-                titleRows >= 8 &&
-                strongTitleRows >= 3 &&
-                titleColumnSpan >= sampledWidth * 0.42 &&
-                nameRows >= 2;
+                titleRows >= 5 &&
+                strongTitleRows >= 2 &&
+                titleColumnSpan >= sampledWidth * 0.32 &&
+                nameRows >= 1;
 
             void CommitLineRun(int end)
             {
@@ -1110,7 +1199,7 @@ namespace Aviscribe.Core.Ocr
 
                 var runLength = end - runStart;
                 if (runLength >= 2 &&
-                    runLength <= 12 &&
+                    runLength <= 24 &&
                     HasSeparatorLineContrast(runStart, end) &&
                     runScore > bestLineScore)
                 {
@@ -1150,9 +1239,9 @@ namespace Aviscribe.Core.Ocr
                     : surroundingTotal / (double)surroundingRows;
 
                 return
-                    lineAverage >= sampledWidth * 0.62 &&
-                    lineAverage >= surroundingAverage * 1.55 &&
-                    lineAverage - surroundingAverage >= sampledWidth * 0.22;
+                    lineAverage >= sampledWidth * 0.48 &&
+                    lineAverage >= surroundingAverage * 1.25 &&
+                    lineAverage - surroundingAverage >= sampledWidth * 0.12;
             }
         }
 

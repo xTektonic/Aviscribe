@@ -68,7 +68,9 @@ namespace Aviscribe.Core
                 if (string.IsNullOrWhiteSpace(moonText))
                     continue;
 
-                var score = Levenshtein.Similarity(normalizedInput, moonText);
+                var score = Math.Max(
+                    Levenshtein.Similarity(normalizedInput, moonText),
+                    LongestCommonSubstringSimilarity(normalizedInput, moonText));
 
                 results.Add((moon, score));
             }
@@ -137,8 +139,42 @@ namespace Aviscribe.Core
                 .Replace("！", "!")
                 .Replace("’", "'")
                 .Replace("。", "")
+                .Replace("宫", "宮")
+                .Replace("髅", "髏")
+                .Replace("撃", "擊")
+                .Replace("击", "擊")
+                .Replace("结", "結")
+                .Replace("目", "月")
                 .Replace(" ", "")
                 .Trim();
+        }
+
+        private static double LongestCommonSubstringSimilarity(string input, string moonText)
+        {
+            if (input.Length < 4 || moonText.Length < 4)
+                return 0;
+
+            var longest = 0;
+            var lengths = new int[input.Length + 1, moonText.Length + 1];
+
+            for (var i = 1; i <= input.Length; i++)
+            {
+                for (var j = 1; j <= moonText.Length; j++)
+                {
+                    if (input[i - 1] != moonText[j - 1])
+                        continue;
+
+                    var length = lengths[i - 1, j - 1] + 1;
+                    lengths[i, j] = length;
+                    longest = Math.Max(longest, length);
+                }
+            }
+
+            if (longest < 4)
+                return 0;
+
+            var shorter = Math.Min(input.Length, moonText.Length);
+            return longest / (double)Math.Max(1, shorter);
         }
     }
 }

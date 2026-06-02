@@ -90,6 +90,208 @@ try
             FrameExtractor.Extract(args[1], args[2], modulo, mode == "full" ? null : RoiDefinitions.StandardTextRegions);
             break;
 
+        case "video-info":
+        {
+            if (args.Length < 2)
+            {
+                Console.Error.WriteLine("Usage: video-info <videoPath>");
+                return 1;
+            }
+
+            VideoSampler.PrintInfo(args[1]);
+            break;
+        }
+
+        case "sample-video-grid":
+        {
+            if (args.Length < 3)
+            {
+                Console.Error.WriteLine("Usage: sample-video-grid <videoPath> <outputDir> [stepSeconds] [maxSamples]");
+                return 1;
+            }
+
+            var stepSeconds = args.Length > 3 && double.TryParse(args[3], out var parsedStepSeconds)
+                ? parsedStepSeconds
+                : 30;
+            var maxSamples = args.Length > 4 && int.TryParse(args[4], out var parsedMaxSamples)
+                ? parsedMaxSamples
+                : 0;
+            VideoSampler.WriteGrid(args[1], args[2], stepSeconds, maxSamples);
+            break;
+        }
+
+        case "extract-video-frames":
+        {
+            if (args.Length < 4)
+            {
+                Console.Error.WriteLine("Usage: extract-video-frames <videoPath> <outputDir> <frame> [frame...]");
+                return 1;
+            }
+
+            VideoSampler.WriteFrames(args[1], args[2], args.Skip(3).Select(int.Parse));
+            break;
+        }
+
+        case "mine-video-events":
+        {
+            if (args.Length < 6)
+            {
+                Console.Error.WriteLine("Usage: mine-video-events <videoPath> <outputDir> <Talkatoo|MoonGet|StoryMoon> <startFrame> <maxFrames> [stride] [maxRuns] [kingdom]");
+                return 1;
+            }
+
+            if (!Enum.TryParse<OcrRegionType>(args[3], ignoreCase: true, out var regionType))
+            {
+                Console.Error.WriteLine("Region must be Talkatoo, MoonGet, or StoryMoon.");
+                return 1;
+            }
+
+            var startFrame = int.Parse(args[4]);
+            var maxFrames = int.Parse(args[5]);
+            var stride = args.Length > 6 && int.TryParse(args[6], out var parsedStride)
+                ? parsedStride
+                : 2;
+            var maxRuns = args.Length > 7 && int.TryParse(args[7], out var parsedMaxRuns)
+                ? parsedMaxRuns
+                : 40;
+            var kingdom = args.Length > 8 ? args[8] : null;
+
+            VideoEventMiner.Run(args[1], args[2], regionType, startFrame, maxFrames, stride, maxRuns, kingdom);
+            break;
+        }
+
+        case "video-regression":
+        {
+            var videoPath = args.Length > 1
+                ? args[1]
+                : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
+            var outputDir = args.Length > 2 ? args[2] : Path.Combine("Classifier", "Output", "VideoRegressionFailures");
+            VideoRegressionSuite.Run(videoPath, outputDir);
+            break;
+        }
+
+        case "ocr-probe":
+        {
+            var videoPath = args.Length > 1
+                ? args[1]
+                : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
+            VideoOcrProbe.Print(videoPath, ProgramHelpers.VideoOcrRegressionRequests());
+            break;
+        }
+
+        case "video-ocr-regression":
+        {
+            var videoPath = args.Length > 1
+                ? args[1]
+                : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
+            VideoOcrProbe.AssertMatches(videoPath, ProgramHelpers.VideoOcrRegressionRequests());
+            break;
+        }
+
+        case "verify-video-pipeline":
+        {
+            var videoPath = args.Length > 1
+                ? args[1]
+                : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
+            var outputRoot = args.Length > 2
+                ? args[2]
+                : Path.Combine("Classifier", "Output", "VideoPipelineVerification");
+            VideoPipelineVerifier.Run(videoPath, outputRoot);
+            break;
+        }
+
+        case "video-e2e-regression":
+        {
+            var videoPath = args.Length > 1
+                ? args[1]
+                : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
+            var outputDir = args.Length > 2
+                ? args[2]
+                : Path.Combine("Classifier", "Output", "VideoEndToEndFailures");
+            VideoEndToEndRegressionSuite.Run(videoPath, outputDir);
+            break;
+        }
+
+        case "all-moons-regression":
+        {
+            var videoPath = args.Length > 1
+                ? args[1]
+                : Path.Combine(DatasetPaths.DefaultDataRoot, "talkatoo_all_moons.mp4");
+            var outputDir = args.Length > 2
+                ? args[2]
+                : Path.Combine("Classifier", "Output", "AllMoonsRegressionFailures");
+            AllMoonsVideoRegressionSuite.Run(videoPath, outputDir);
+            break;
+        }
+
+        case "all-moons-frameprocessor-regression":
+        {
+            var videoPath = args.Length > 1
+                ? args[1]
+                : Path.Combine(DatasetPaths.DefaultDataRoot, "talkatoo_all_moons.mp4");
+            AllMoonsFrameProcessorRegressionSuite.Run(videoPath);
+            break;
+        }
+
+        case "frameprocessor-video-regression":
+        {
+            var videoPath = args.Length > 1
+                ? args[1]
+                : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
+            FrameProcessorVideoRegressionSuite.Run(videoPath);
+            break;
+        }
+
+        case "frameprocessor-chronological-regression":
+        {
+            var videoPath = args.Length > 1
+                ? args[1]
+                : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
+            FrameProcessorVideoRegressionSuite.RunChronological(videoPath);
+            break;
+        }
+
+        case "mine-overlay-events":
+        {
+            var videoPath = args.Length > 1
+                ? args[1]
+                : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
+            var outputDir = args.Length > 2 ? args[2] : Path.Combine("Classifier", "Output", "OverlayEvents");
+            var stride = args.Length > 3 && int.TryParse(args[3], out var parsedStride)
+                ? parsedStride
+                : 15;
+            var maxFrames = args.Length > 4 && int.TryParse(args[4], out var parsedMaxFrames)
+                ? parsedMaxFrames
+                : 0;
+            var minGap = args.Length > 5 && int.TryParse(args[5], out var parsedMinGap)
+                ? parsedMinGap
+                : 90;
+            OverlayEventMiner.Mine(videoPath, outputDir, stride, maxFrames, minGap);
+            break;
+        }
+
+        case "overlay-coverage":
+        {
+            var videoPath = args.Length > 1
+                ? args[1]
+                : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
+            var outputDir = args.Length > 2 ? args[2] : Path.Combine("Classifier", "Output", "OverlayCoverage");
+            var stride = args.Length > 3 && int.TryParse(args[3], out var parsedStride)
+                ? parsedStride
+                : 15;
+            var maxFrames = args.Length > 4 && int.TryParse(args[4], out var parsedMaxFrames)
+                ? parsedMaxFrames
+                : 0;
+            var minGap = args.Length > 5 && int.TryParse(args[5], out var parsedMinGap)
+                ? parsedMinGap
+                : 90;
+            var window = args.Length > 6 && int.TryParse(args[6], out var parsedWindow)
+                ? parsedWindow
+                : 150;
+            OverlayEventMiner.AuditCoverage(videoPath, outputDir, stride, maxFrames, minGap, window);
+            break;
+        }
+
         case "story-crops":
         {
             var dataRoot = args.Length > 1 ? args[1] : DatasetPaths.DefaultDataRoot;
@@ -247,6 +449,18 @@ try
             break;
         }
 
+        case "frameprocessor-smoke":
+        {
+            FrameProcessorSmoke.Run();
+            break;
+        }
+
+        case "matcher-smoke":
+        {
+            MatcherSmoke.Run();
+            break;
+        }
+
         default:
             PrintUsage();
             return 1;
@@ -271,6 +485,21 @@ static void PrintUsage()
     Console.WriteLine("  rules [dataRoot] [outputJson] [minimumRecall] [maximumFalsePositiveRate]");
     Console.WriteLine("  train-linear [dataRoot] [outputJson] [minimumRecall] [maximumFalsePositiveRate]");
     Console.WriteLine("  extract <videoPath> <outputDir> [modulo] [full|regions]");
+    Console.WriteLine("  video-info <videoPath>");
+    Console.WriteLine("  sample-video-grid <videoPath> <outputDir> [stepSeconds] [maxSamples]");
+    Console.WriteLine("  extract-video-frames <videoPath> <outputDir> <frame> [frame...]");
+    Console.WriteLine("  mine-video-events <videoPath> <outputDir> <Talkatoo|MoonGet|StoryMoon> <startFrame> <maxFrames> [stride] [maxRuns] [kingdom]");
+    Console.WriteLine("  video-regression [videoPath] [failureOutputDir]");
+    Console.WriteLine("  ocr-probe [videoPath]");
+    Console.WriteLine("  video-ocr-regression [videoPath]");
+    Console.WriteLine("  verify-video-pipeline [videoPath] [outputRoot]");
+    Console.WriteLine("  video-e2e-regression [videoPath] [failureOutputDir]");
+    Console.WriteLine("  all-moons-regression [videoPath] [failureOutputDir]");
+    Console.WriteLine("  all-moons-frameprocessor-regression [videoPath]");
+    Console.WriteLine("  frameprocessor-video-regression [videoPath]");
+    Console.WriteLine("  frameprocessor-chronological-regression [videoPath]");
+    Console.WriteLine("  mine-overlay-events [videoPath] [outputDir] [strideFrames] [maxFrames] [minGapFrames]");
+    Console.WriteLine("  overlay-coverage [videoPath] [outputDir] [strideFrames] [maxFrames] [minGapFrames] [windowFrames]");
     Console.WriteLine("  story-crops [dataRoot] [outputDir]");
     Console.WriteLine("  audit-talkatoo-video [videoPath] [outputDir] [stride] [maxSaved] [maxFrames]");
     Console.WriteLine("  audit-moonget-video [videoPath] [outputDir] [stride] [maxSaved] [maxFrames]");
@@ -283,4 +512,6 @@ static void PrintUsage()
     Console.WriteLine("  inspect-moonget <imagePath> [imagePath...]");
     Console.WriteLine("  storymoon-search [dataRoot]");
     Console.WriteLine("  state-smoke");
+    Console.WriteLine("  frameprocessor-smoke");
+    Console.WriteLine("  matcher-smoke");
 }
