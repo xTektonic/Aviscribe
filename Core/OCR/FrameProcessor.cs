@@ -1,7 +1,6 @@
 ﻿using OpenCvSharp;
 using Aviscribe.Core.Capture;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -26,8 +25,11 @@ namespace Aviscribe.Core.Ocr
         private readonly HashSet<OcrRegionType> _activeRegions = new();
         private readonly Dictionary<OcrRegionType, ulong> _lastHashes = new();
         private long _processedFrameCount;
+        private string _observedKingdom;
+        private long _suppressStoryMoonUntilFrame;
 
-        private readonly ConcurrentQueue<(OcrRegionType Type, Mat Image)> _ocrQueue = new();
+        private readonly object _ocrQueueLock = new();
+        private readonly Queue<OcrWorkItem> _ocrQueue = new();
         private readonly ITextPresenceDetector _textDetector;
 
         private readonly OcrRegion[] _regions;
@@ -44,20 +46,21 @@ namespace Aviscribe.Core.Ocr
             _matcher = matcher;
             _state = state;
             _textDetector = textDetector ?? new HeuristicTextPresenceDetector();
+            _observedKingdom = state.CurrentKingdom;
 
             _regions =
             [
                 //new(OcrRegionType.Talkatoo, new Rect(666, 828, 649, 113), _textDetector), // multiline
-                new(OcrRegionType.Talkatoo, new Rect(666, 862, 649, 48), _textDetector, StableFrameCount: 1, StableImageMaxHammingDistance: 64), // single line
+                new(OcrRegionType.Talkatoo, new Rect(666, 862, 649, 48), _textDetector, StableFrameCount: 2, StableImageMaxHammingDistance: 64), // single line
                 new(
                     OcrRegionType.MoonGet,
                     new Rect(490, 797, 930, 60),
                     _textDetector,
-                    StableFrameCount: 3,
+                    StableFrameCount: 1,
                     StableImageMaxHammingDistance: 64,
                     DetectionBounds: new Rect(320, 600, 1250, 250),
-                    DetectionIntervalFrames: 3),
-                new(OcrRegionType.StoryMoon, new Rect(450, 820, 1100, 150), _textDetector, StableFrameCount: 12, DetectionIntervalFrames: 4)
+                    DetectionIntervalFrames: 5),
+                new(OcrRegionType.StoryMoon, new Rect(450, 820, 1100, 150), _textDetector, StableFrameCount: 2)
             ];
         }
 
@@ -84,6 +87,7 @@ namespace Aviscribe.Core.Ocr
                 .ToArray();
 
             Task.WaitAll(workers, 1500);
+            ClearOcrQueue();
         }
 
         // ----------------------------
@@ -138,6 +142,12 @@ namespace Aviscribe.Core.Ocr
                 return;
 
             _processedFrameCount++;
+            ResetRegionStateIfKingdomChanged();
+
+            var kingdom = _state.CurrentKingdom;
+            var settings = _state.Settings.Clone();
+
+            var frameStates = new List<RegionFrameState>(_regions.Length);
 
             foreach (var region in _regions)
             {
@@ -163,18 +173,49 @@ namespace Aviscribe.Core.Ocr
 
                 //Console.WriteLine($"STABILITY ({region.Type}): {stable}");
 
+                frameStates.Add(new RegionFrameState(region, detected, stable));
+            }
+
+            var storyMoonDetected = frameStates.Any(state =>
+                state.Region.Type == OcrRegionType.StoryMoon &&
+                state.Detected);
+            var storyMoonStable = frameStates.Any(state =>
+                state.Region.Type == OcrRegionType.StoryMoon &&
+                state.Stable);
+            var moonGetStable = frameStates.Any(state =>
+                state.Region.Type == OcrRegionType.MoonGet &&
+                state.Stable);
+
+            if (moonGetStable && !storyMoonDetected)
+            {
+                _suppressStoryMoonUntilFrame = _processedFrameCount + 120;
+            }
+
+            var suppressStoryMoon = !storyMoonStable &&
+                _processedFrameCount <= _suppressStoryMoonUntilFrame;
+
+            foreach (var state in frameStates)
+            {
+                var region = state.Region;
+                var stable = state.Stable &&
+                    !(region.Type == OcrRegionType.StoryMoon && suppressStoryMoon);
+
                 if (stable)
                 {
                     if (!_activeRegions.Contains(region.Type))
                     {
                         using var ocrCrop = mat[region.Bounds];
                         ulong hash = ImageHash.Compute(ocrCrop);
+                        var useHashDedupe = region.Type == OcrRegionType.Talkatoo;
 
-                        if (!_lastHashes.TryGetValue(region.Type, out var lastHash) ||
+                        if (!useHashDedupe ||
+                            !_lastHashes.TryGetValue(region.Type, out var lastHash) ||
                             ImageHash.Hamming(hash, lastHash) > 5)
                         {
-                            _ocrQueue.Enqueue((region.Type, ocrCrop.Clone()));
-                            _lastHashes[region.Type] = hash;
+                            EnqueueOcr(region.Type, ocrCrop.Clone(), kingdom, settings);
+
+                            if (useHashDedupe)
+                                _lastHashes[region.Type] = hash;
 
                             Console.WriteLine($"ENQUEUE OCR ({region.Type})");
                         }
@@ -195,6 +236,8 @@ namespace Aviscribe.Core.Ocr
             }
         }
 
+        private readonly record struct RegionFrameState(OcrRegion Region, bool Detected, bool Stable);
+
         // ----------------------------
         // OCR LOOP (SLOW)
         // ----------------------------
@@ -202,7 +245,7 @@ namespace Aviscribe.Core.Ocr
         {
             while (!_cts!.IsCancellationRequested)
             {
-                if (!_ocrQueue.TryDequeue(out var item))
+                if (!TryDequeueOcr(out var item))
                 {
                     Thread.Sleep(5);
                     continue;
@@ -217,12 +260,25 @@ namespace Aviscribe.Core.Ocr
                     if (string.IsNullOrWhiteSpace(text))
                         continue;
 
+                    if (!string.Equals(item.Kingdom, _state.CurrentKingdom, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Console.WriteLine($"SKIP OCR ({item.Type}): Kingdom changed from {item.Kingdom} to {_state.CurrentKingdom}");
+                        continue;
+                    }
+
                     var result = item.Type == OcrRegionType.Talkatoo
-                        ? _matcher.MatchTalkatooText(text, _state.CurrentKingdom, _state.Settings)
-                        : _matcher.MatchCollectionText(text, _state.CurrentKingdom, _state.Settings);
+                        ? _matcher.MatchTalkatooText(text, item.Kingdom, item.Settings)
+                        : _matcher.MatchCollectionText(text, item.Kingdom, item.Settings);
 
                     if (result.IsAmbiguous)
                     {
+                        if (TryResolveAmbiguousMatch(item.Type, result, out var resolvedMatch))
+                        {
+                            Console.WriteLine($"RESOLVED AMBIGUOUS OCR ({item.Type}): \"{text}\" -> {resolvedMatch.English}");
+                            Handle(item.Type, resolvedMatch);
+                            continue;
+                        }
+
                         Console.WriteLine($"AMBIGUOUS OCR ({item.Type}): \"{text}\"");
                         AmbiguousMatchReceived?.Invoke(
                             this,
@@ -244,6 +300,128 @@ namespace Aviscribe.Core.Ocr
                     item.Image.Dispose();
                 }
             }
+        }
+
+        private bool TryResolveAmbiguousMatch(OcrRegionType type, MatchResult result, out Moon match)
+        {
+            var snapshot = _state.CreateSnapshot();
+            var candidates = result.Candidates
+                .Where(candidate => candidate.score >= _matcher.Threshold)
+                .Select(candidate => candidate.moon)
+                .Distinct()
+                .ToList();
+
+            var resolved = type == OcrRegionType.Talkatoo
+                ? ResolveAmbiguousTalkatoo(candidates, snapshot)
+                : ResolveAmbiguousCollection(candidates, snapshot);
+
+            match = resolved!;
+            return resolved != null;
+        }
+
+        private static Moon? ResolveAmbiguousTalkatoo(
+            IReadOnlyList<Moon> candidates,
+            GameStateSnapshot snapshot)
+        {
+            var eligible = candidates
+                .Where(candidate =>
+                    !snapshot.Pending.Any(moon => moon.Id == candidate.Id) &&
+                    !snapshot.Collected.Any(moon => moon.Id == candidate.Id) &&
+                    !snapshot.UncountedCollected.Any(moon => moon.Id == candidate.Id))
+                .ToList();
+
+            return eligible.Count == 1 ? eligible[0] : null;
+        }
+
+        private static Moon? ResolveAmbiguousCollection(
+            IReadOnlyList<Moon> candidates,
+            GameStateSnapshot snapshot)
+        {
+            var pending = candidates
+                .Where(candidate => snapshot.Pending.Any(moon => moon.Id == candidate.Id))
+                .ToList();
+
+            if (pending.Count == 1)
+                return pending[0];
+
+            var story = candidates
+                .Where(candidate =>
+                    candidate.IsStory &&
+                    !snapshot.Collected.Any(moon => moon.Id == candidate.Id) &&
+                    !snapshot.UncountedCollected.Any(moon => moon.Id == candidate.Id))
+                .ToList();
+
+            return story.Count == 1 ? story[0] : null;
+        }
+
+        private void EnqueueOcr(OcrRegionType type, Mat image, string kingdom, RunSettings settings)
+        {
+            const int maxQueuedPerRegion = 2;
+
+            lock (_ocrQueueLock)
+            {
+                if (_ocrQueue.Count(item => item.Type == type) >= maxQueuedPerRegion)
+                {
+                    var kept = new Queue<OcrWorkItem>(_ocrQueue.Count);
+                    var dropped = false;
+
+                    while (_ocrQueue.Count > 0)
+                    {
+                        var item = _ocrQueue.Dequeue();
+                        if (!dropped && item.Type == type)
+                        {
+                            item.Image.Dispose();
+                            dropped = true;
+                            continue;
+                        }
+
+                        kept.Enqueue(item);
+                    }
+
+                    while (kept.Count > 0)
+                        _ocrQueue.Enqueue(kept.Dequeue());
+                }
+
+                _ocrQueue.Enqueue(new OcrWorkItem(type, image, kingdom, settings.Clone()));
+            }
+        }
+
+        private bool TryDequeueOcr(out OcrWorkItem item)
+        {
+            lock (_ocrQueueLock)
+            {
+                if (_ocrQueue.Count > 0)
+                {
+                    item = _ocrQueue.Dequeue();
+                    return true;
+                }
+            }
+
+            item = default;
+            return false;
+        }
+
+        private void ClearOcrQueue()
+        {
+            lock (_ocrQueueLock)
+            {
+                while (_ocrQueue.Count > 0)
+                    _ocrQueue.Dequeue().Image.Dispose();
+            }
+        }
+
+        private void ResetRegionStateIfKingdomChanged()
+        {
+            var currentKingdom = _state.CurrentKingdom;
+            if (string.Equals(currentKingdom, _observedKingdom, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            _history.Clear();
+            _activeRegions.Clear();
+            _lastHashes.Clear();
+            _suppressStoryMoonUntilFrame = 0;
+            ClearOcrQueue();
+            _observedKingdom = currentKingdom;
         }
 
         // ----------------------------
@@ -286,5 +464,7 @@ namespace Aviscribe.Core.Ocr
                     break;
             }
         }
+
+        private readonly record struct OcrWorkItem(OcrRegionType Type, Mat Image, string Kingdom, RunSettings Settings);
     }
 }

@@ -6,7 +6,7 @@ namespace Aviscribe.Classifier
     internal static class TalkatooVideoAudit
     {
         private static readonly Rect TalkatooBounds = new(666, 862, 649, 48);
-        private const int StableFrameCount = 1;
+        private const int StableFrameCount = 2;
         private const int StableImageMaxHammingDistance = 64;
 
         public static void Run(string videoPath, string outputDir, int stride, int maxSaved, int maxFrames)
