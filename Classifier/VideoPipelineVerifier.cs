@@ -57,7 +57,7 @@ namespace Aviscribe.Classifier
                 new("lost-talkatoo-caged-gold", OcrRegionType.Talkatoo, "Lost", 133_190, 3),
                 new("seaside-talkatoo-valley", OcrRegionType.Talkatoo, "Seaside", 237_596, 45),
                 new("luncheon-talkatoo-fork", OcrRegionType.Talkatoo, "Luncheon", 277_182, 41),
-                new("cascade-moonget-first", OcrRegionType.MoonGet, "Cascade", 10_782, 1),
+                new("cascade-storymoon-first", OcrRegionType.StoryMoon, "Cascade", 10_782, 1),
                 new("sand-moonget-skull-sign", OcrRegionType.MoonGet, "Sand", 32_382, 55),
                 new("sand-moonget-palm-notes", OcrRegionType.MoonGet, "Sand", 57_582, 32),
                 new("lake-moonget-broken-pillar", OcrRegionType.MoonGet, "Lake", 74_138, 7),

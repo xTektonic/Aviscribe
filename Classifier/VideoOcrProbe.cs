@@ -8,6 +8,7 @@ namespace Aviscribe.Classifier
     {
         private static readonly Rect TalkatooOcrBounds = new(666, 862, 649, 48);
         private static readonly Rect MoonGetOcrBounds = new(490, 797, 930, 60);
+        private static readonly Rect StoryMoonBounds = new(450, 820, 1100, 150);
 
         public static void Print(string videoPath, IEnumerable<ProbeRequest> requests)
         {
@@ -41,9 +42,13 @@ namespace Aviscribe.Classifier
                     continue;
                 }
 
-                var bounds = request.RegionType == OcrRegionType.Talkatoo
-                    ? TalkatooOcrBounds
-                    : MoonGetOcrBounds;
+                var bounds = request.RegionType switch
+                {
+                    OcrRegionType.Talkatoo => TalkatooOcrBounds,
+                    OcrRegionType.MoonGet => MoonGetOcrBounds,
+                    OcrRegionType.StoryMoon => StoryMoonBounds,
+                    _ => throw new ArgumentOutOfRangeException(nameof(request.RegionType))
+                };
 
                 using var crop = new Mat(frame, bounds);
                 var text = ocr.ReadText(crop);

@@ -7,6 +7,7 @@ namespace Aviscribe.Classifier
     {
         private static readonly Rect TalkatooBounds = new(666, 862, 649, 48);
         private static readonly Rect MoonGetDetectionBounds = new(320, 600, 1250, 250);
+        private static readonly Rect StoryMoonBounds = new(450, 820, 1100, 150);
 
         private static readonly VideoExpectation[] Expectations =
         [
@@ -23,7 +24,7 @@ namespace Aviscribe.Classifier
             new("seaside-talkatoo-066m", OcrRegionType.Talkatoo, 237_600, TalkatooBounds),
             new("luncheon-talkatoo-077m", OcrRegionType.Talkatoo, 277_200, TalkatooBounds),
 
-            new("cap-moonget-003m", OcrRegionType.MoonGet, 10_800, MoonGetDetectionBounds),
+            new("cap-storymoon-003m", OcrRegionType.StoryMoon, 10_800, StoryMoonBounds),
             new("sand-moonget-009m", OcrRegionType.MoonGet, 32_400, MoonGetDetectionBounds),
             new("sand-moonget-012m", OcrRegionType.MoonGet, 43_200, MoonGetDetectionBounds),
             new("sand-moonget-015m", OcrRegionType.MoonGet, 54_000, MoonGetDetectionBounds),
