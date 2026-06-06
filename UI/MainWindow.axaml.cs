@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -36,6 +37,7 @@ namespace Aviscribe.UI
         private TextBlock? _countedCountText;
         private TextBlock? _actualCountText;
         private TextBlock? _reviewPromptText;
+        private ListBox? _moonList;
         private ListBox? _pendingList;
         private ListBox? _collectedList;
         private ListBox? _uncountedList;
@@ -49,6 +51,13 @@ namespace Aviscribe.UI
         private TextBox? _overlayPathText;
         private bool _processorRunning;
         private bool _writeOverlayEnabled = true;
+        private bool _updatingLists;
+        private bool _dragStarted;
+        private bool _suppressListClick;
+        private Avalonia.Point _dragStartPoint;
+        private ListBox? _dragSourceList;
+        private ManualMoonTarget _dragSourceTarget;
+        private Moon? _dragMoon;
         bool updatePreview = false;
 
         public MainWindow()
@@ -91,6 +100,7 @@ namespace Aviscribe.UI
                 {
                     _state.SetKingdom(kingdom);
                     RefreshMoonSelect();
+                    RefreshMoonList();
                 }
             };
 
@@ -130,6 +140,7 @@ namespace Aviscribe.UI
                     _state.Settings.OutputLanguage = language;
                     _outputWriter.Language = language;
                     RefreshMoonSelect();
+                    RefreshMoonList();
                     _state.NotifySettingsChanged();
                 }
             };
@@ -141,6 +152,7 @@ namespace Aviscribe.UI
                 _state.Settings.IncludePostGameKingdoms = _includePostGameCheck.IsChecked == true;
                 RefreshKingdoms();
                 RefreshMoonSelect();
+                RefreshMoonList();
                 _state.NotifySettingsChanged();
             };
 
@@ -149,6 +161,7 @@ namespace Aviscribe.UI
             _statusText = this.FindControl<TextBlock>("txtStatus");
             _countedCountText = this.FindControl<TextBlock>("txtCountedCount");
             _actualCountText = this.FindControl<TextBlock>("txtActualCount");
+            _moonList = this.FindControl<ListBox>("lstMoonList");
             _pendingList = this.FindControl<ListBox>("lstPending");
             _collectedList = this.FindControl<ListBox>("lstCollected");
             _uncountedList = this.FindControl<ListBox>("lstUncounted");
@@ -182,7 +195,7 @@ namespace Aviscribe.UI
                 };
             }
 
-            WireExclusiveListSelection();
+            WireListInteractions();
 
             this.GetControl<Button>("btnManualPending").Click += (_, _) =>
             {
@@ -230,6 +243,7 @@ namespace Aviscribe.UI
                 _state.SetKingdom(initialKingdom);
 
             RefreshMoonSelect();
+            RefreshMoonList();
         }
 
         private void InitFrameProcessor()
@@ -333,13 +347,28 @@ namespace Aviscribe.UI
                     _actualCountText.Text = snapshot.ActualMoonCount.ToString();
 
                 if (_pendingList != null)
+                {
+                    _updatingLists = true;
                     _pendingList.ItemsSource = snapshot.Pending.Select(CreateListItem).ToList();
+                    _pendingList.SelectedItem = null;
+                    _updatingLists = false;
+                }
 
                 if (_collectedList != null)
+                {
+                    _updatingLists = true;
                     _collectedList.ItemsSource = snapshot.Collected.Select(CreateListItem).ToList();
+                    _collectedList.SelectedItem = null;
+                    _updatingLists = false;
+                }
 
                 if (_uncountedList != null)
+                {
+                    _updatingLists = true;
                     _uncountedList.ItemsSource = snapshot.UncountedCollected.Select(CreateListItem).ToList();
+                    _uncountedList.SelectedItem = null;
+                    _updatingLists = false;
+                }
 
                 WriteOverlayOutput(snapshot);
                 PersistRunState(snapshot);
@@ -370,10 +399,23 @@ namespace Aviscribe.UI
 
             _moonSelect.ItemsSource = _repo
                 .GetCollectionCandidates(_state.CurrentKingdom, _state.Settings)
-                .OrderBy(moon => moon.English)
                 .Select(CreateListItem)
                 .ToList();
             _moonSelect.SelectedIndex = 0;
+        }
+
+        private void RefreshMoonList()
+        {
+            if (_moonList == null || _state.CurrentKingdom.Length == 0)
+                return;
+
+            _updatingLists = true;
+            _moonList.ItemsSource = _repo
+                .GetCollectionCandidates(_state.CurrentKingdom, _state.Settings)
+                .Select(CreateListItem)
+                .ToList();
+            _moonList.SelectedItem = null;
+            _updatingLists = false;
         }
 
         private void LoadSavedRunState()
@@ -534,48 +576,212 @@ namespace Aviscribe.UI
                    (_uncountedList?.SelectedItem as MoonListItem)?.Moon;
         }
 
-        private void WireExclusiveListSelection()
+        private void WireListInteractions()
         {
-            if (_pendingList != null)
+            WireInteractiveList(_moonList, ManualMoonTarget.All);
+            WireInteractiveList(_pendingList, ManualMoonTarget.Pending);
+            WireInteractiveList(_collectedList, ManualMoonTarget.Collected);
+            WireInteractiveList(_uncountedList, ManualMoonTarget.Uncounted);
+        }
+
+        private void WireInteractiveList(ListBox? list, ManualMoonTarget target)
+        {
+            if (list == null)
+                return;
+
+            list.PointerPressed += (_, e) =>
             {
-                _pendingList.SelectionChanged += (_, _) =>
+                _dragMoon = null;
+
+                if (e.Source is Control sourceControl &&
+                    FindAncestor<ListBoxItem>(sourceControl) is { DataContext: MoonListItem item })
                 {
-                    if (_pendingList.SelectedItem != null)
+                    list.SelectedItem = item;
+                    _dragMoon = item.Moon;
+                }
+                else
+                {
+                    list.SelectedItem = null;
+                }
+
+                _dragSourceList = list;
+                _dragSourceTarget = target;
+                _dragStartPoint = e.GetPosition(list);
+                _dragStarted = false;
+                e.Pointer.Capture(list);
+            };
+
+            list.PointerMoved += (_, e) =>
+            {
+                if (_dragSourceList != list || _dragStarted)
+                    return;
+
+                var delta = e.GetPosition(list) - _dragStartPoint;
+                if (Math.Abs(delta.X) < 6 && Math.Abs(delta.Y) < 6)
+                    return;
+
+                if (_dragMoon == null)
+                    return;
+
+                _dragStarted = true;
+                _suppressListClick = true;
+            };
+
+            list.PointerReleased += (_, e) =>
+            {
+                e.Pointer.Capture(null);
+
+                if (_dragStarted && _dragMoon != null)
+                {
+                    if (TryGetDropTarget(e.GetPosition(this), out var dropTarget) &&
+                        dropTarget != ManualMoonTarget.All)
                     {
-                        if (_collectedList != null) _collectedList.SelectedItem = null;
-                        if (_uncountedList != null) _uncountedList.SelectedItem = null;
+                        MoveMoonToTarget(_dragMoon, _dragSourceTarget, dropTarget);
                     }
-                };
+
+                    ClearListPointerState();
+                    return;
+                }
+
+                if (_suppressListClick)
+                {
+                    ClearListPointerState();
+                    return;
+                }
+
+                if (_updatingLists || _dragStarted)
+                {
+                    ClearListPointerState();
+                    return;
+                }
+
+                if (_dragMoon == null)
+                {
+                    ClearListPointerState();
+                    return;
+                }
+
+                HandleListClick(target, _dragMoon);
+                list.SelectedItem = null;
+                ClearListPointerState();
+            };
+        }
+
+        private void ClearListPointerState()
+        {
+            _dragMoon = null;
+            _dragSourceList = null;
+            _dragStarted = false;
+            _suppressListClick = false;
+        }
+
+        private bool TryGetDropTarget(Avalonia.Point point, out ManualMoonTarget target)
+        {
+            object? current = this.InputHitTest(point);
+            while (current != null)
+            {
+                if (ReferenceEquals(current, _moonList))
+                {
+                    target = ManualMoonTarget.All;
+                    return true;
+                }
+
+                if (ReferenceEquals(current, _pendingList))
+                {
+                    target = ManualMoonTarget.Pending;
+                    return true;
+                }
+
+                if (ReferenceEquals(current, _collectedList))
+                {
+                    target = ManualMoonTarget.Collected;
+                    return true;
+                }
+
+                if (ReferenceEquals(current, _uncountedList))
+                {
+                    target = ManualMoonTarget.Uncounted;
+                    return true;
+                }
+
+                current = (current as Control)?.Parent;
             }
 
-            if (_collectedList != null)
+            target = ManualMoonTarget.All;
+            return false;
+        }
+
+        private void HandleListClick(ManualMoonTarget source, Moon moon)
+        {
+            switch (source)
             {
-                _collectedList.SelectionChanged += (_, _) =>
-                {
-                    if (_collectedList.SelectedItem != null)
+                case ManualMoonTarget.All:
+                    _state.MoveToPending(moon);
+                    SetStatus($"Added {FormatMoon(moon)} to pending");
+                    break;
+
+                case ManualMoonTarget.Pending:
+                    _state.MarkCollected(moon);
+                    SetStatus($"Collected {FormatMoon(moon)}");
+                    break;
+
+                case ManualMoonTarget.Collected:
+                case ManualMoonTarget.Uncounted:
+                    _state.MoveToPending(moon);
+                    SetStatus($"Moved {FormatMoon(moon)} to pending");
+                    break;
+            }
+        }
+
+        private void MoveMoonToTarget(Moon moon, ManualMoonTarget source, ManualMoonTarget target)
+        {
+            switch (target)
+            {
+                case ManualMoonTarget.Pending:
+                    _state.MoveToPending(moon);
+                    SetStatus($"Moved {FormatMoon(moon)} to pending");
+                    break;
+
+                case ManualMoonTarget.Collected:
+                    if (source is ManualMoonTarget.All or ManualMoonTarget.Collected or ManualMoonTarget.Uncounted)
                     {
-                        if (_pendingList != null) _pendingList.SelectedItem = null;
-                        if (_uncountedList != null) _uncountedList.SelectedItem = null;
+                        _state.MoveToCollected(moon);
+                        SetStatus($"Moved {FormatMoon(moon)} to collected");
                     }
-                };
+                    else
+                    {
+                        var outcome = _state.MarkCollected(moon);
+                        SetStatus(outcome == CollectionOutcome.Uncounted
+                            ? $"Tracked wrong moon: {FormatMoon(moon)}"
+                            : $"Collected {FormatMoon(moon)}");
+                    }
+                    break;
+
+                case ManualMoonTarget.Uncounted:
+                    _state.MoveToUncounted(moon);
+                    SetStatus($"Moved {FormatMoon(moon)} to wrong moons");
+                    break;
+            }
+        }
+
+        private static T? FindAncestor<T>(Control control)
+            where T : Control
+        {
+            Control? current = control;
+            while (current != null)
+            {
+                if (current is T match)
+                    return match;
+
+                current = current.Parent as Control;
             }
 
-            if (_uncountedList != null)
-            {
-                _uncountedList.SelectionChanged += (_, _) =>
-                {
-                    if (_uncountedList.SelectedItem != null)
-                    {
-                        if (_pendingList != null) _pendingList.SelectedItem = null;
-                        if (_collectedList != null) _collectedList.SelectedItem = null;
-                    }
-                };
-            }
+            return null;
         }
 
         private MoonListItem CreateListItem(Moon moon)
         {
-            return new MoonListItem(moon, FormatMoon(moon));
+            return new MoonListItem(moon, $"{moon.Id}. {FormatMoon(moon)}");
         }
 
         private string FormatMoon(Moon moon)
@@ -600,6 +806,14 @@ namespace Aviscribe.UI
         private sealed record ReviewCandidateItem(OcrMatchCandidate Candidate, string Label)
         {
             public override string ToString() => Label;
+        }
+
+        private enum ManualMoonTarget
+        {
+            All,
+            Pending,
+            Collected,
+            Uncounted
         }
     }
 }

@@ -73,6 +73,60 @@ namespace Aviscribe.Classifier
             Expect(state.Remove(manualWrongMoon), "Manual remove should remove a tracked moon.");
             Expect(!state.UncountedCollected.Contains(manualWrongMoon), "Manual remove should clear uncounted state.");
 
+            var manualMoon = new Moon
+            {
+                Id = 5,
+                Kingdom = "Cascade",
+                English = "Manual UI Moon"
+            };
+
+            Expect(state.MoveToPending(manualMoon), "Manual moon list click should move a moon to pending.");
+            Expect(state.Pending.Contains(manualMoon), "Manual moon should be pending after moon list click.");
+            Expect(state.MoveToCollected(manualMoon), "Dragging pending to collected should move the moon.");
+            Expect(!state.Pending.Contains(manualMoon), "Dragging to collected should remove pending state.");
+            Expect(state.Collected.Contains(manualMoon), "Dragging to collected should track counted state.");
+            Expect(state.MoveToPending(manualMoon), "Clicking collected should move the moon back to pending.");
+            Expect(!state.Collected.Contains(manualMoon), "Move to pending should clear collected state.");
+            Expect(state.Pending.Contains(manualMoon), "Move to pending should restore pending state.");
+            Expect(state.MoveToUncounted(manualMoon), "Dragging pending to wrong moons should move the moon.");
+            Expect(!state.Pending.Contains(manualMoon), "Dragging to wrong moons should clear pending state.");
+            Expect(state.UncountedCollected.Contains(manualMoon), "Dragging to wrong moons should track uncounted state.");
+            Expect(state.MoveToPending(manualMoon), "Clicking wrong moon should move it back to pending.");
+            Expect(!state.UncountedCollected.Contains(manualMoon), "Move to pending should clear uncounted state.");
+            Expect(state.Pending.Contains(manualMoon), "Move to pending from wrong moons should restore pending state.");
+
+            var directCollectedMoon = new Moon
+            {
+                Id = 6,
+                Kingdom = "Cascade",
+                English = "Directly Collected Moon"
+            };
+
+            Expect(
+                state.MarkCollected(directCollectedMoon) == CollectionOutcome.Uncounted,
+                "OCR collecting an unmentioned moon should track it as wrong.");
+            Expect(state.UncountedCollected.Contains(directCollectedMoon), "Direct unmentioned collection should be uncounted.");
+            Expect(state.MoveToCollected(directCollectedMoon), "Dragging a wrong moon to counted should manually correct it.");
+            Expect(!state.UncountedCollected.Contains(directCollectedMoon), "Manual counted correction should clear wrong state.");
+            Expect(state.Collected.Contains(directCollectedMoon), "Manual counted correction should track counted state.");
+
+            var directManualCollectedMoon = new Moon
+            {
+                Id = 7,
+                Kingdom = "Cascade",
+                English = "Direct Manual Collected Moon"
+            };
+
+            Expect(
+                state.MoveToCollected(directManualCollectedMoon),
+                "Dragging from the full moon list directly to collected should move the moon to counted.");
+            Expect(
+                state.Collected.Contains(directManualCollectedMoon),
+                "Direct full-list to collected drag should track counted state.");
+            Expect(
+                !state.UncountedCollected.Contains(directManualCollectedMoon),
+                "Direct full-list to collected drag should not route through wrong moon state.");
+
             state.ResetKingdom();
             Expect(state.Pending.Count == 0, "Reset should clear pending moons.");
             Expect(state.Collected.Count == 0, "Reset should clear counted moons.");
@@ -117,6 +171,18 @@ namespace Aviscribe.Classifier
                 if (File.Exists(statePath))
                     File.Delete(statePath);
             }
+
+            var orderedRepo = new MoonRepository();
+            orderedRepo.Moons.Add(new Moon { Id = 1, Kingdom = "Sand", English = "Sand Moon" });
+            orderedRepo.Moons.Add(new Moon { Id = 1, Kingdom = "Cascade", English = "Cascade Moon" });
+            orderedRepo.Moons.Add(new Moon { Id = 1, Kingdom = "Mushroom", English = "Mushroom Moon" });
+
+            Expect(
+                orderedRepo.GetKingdoms(includePostGameKingdoms: false).SequenceEqual(new[] { "Sand", "Cascade" }),
+                "Kingdom list should preserve source order and hide postgame kingdoms when disabled.");
+            Expect(
+                orderedRepo.GetKingdoms(includePostGameKingdoms: true).SequenceEqual(new[] { "Sand", "Cascade", "Mushroom" }),
+                "Kingdom list should preserve source order when postgame kingdoms are shown.");
 
             Console.WriteLine("State smoke passed.");
         }

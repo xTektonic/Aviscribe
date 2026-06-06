@@ -80,7 +80,12 @@ namespace Aviscribe.Core
 
         public void AddPending(Moon moon)
         {
-            if (moon == null) return;
+            TryAddPending(moon);
+        }
+
+        public bool TryAddPending(Moon moon)
+        {
+            if (moon == null) return false;
 
             var changed = false;
 
@@ -95,6 +100,32 @@ namespace Aviscribe.Core
 
             if (changed)
                 OnChanged();
+
+            return changed;
+        }
+
+        public bool MoveToPending(Moon moon)
+        {
+            if (moon == null) return false;
+
+            var changed = false;
+
+            lock (_sync)
+            {
+                changed = Collected.Remove(moon) || changed;
+                changed = UncountedCollected.Remove(moon) || changed;
+
+                if (!Pending.Contains(moon))
+                {
+                    Pending.Add(moon);
+                    changed = true;
+                }
+            }
+
+            if (changed)
+                OnChanged();
+
+            return changed;
         }
 
         public CollectionOutcome MarkCollected(Moon moon)
@@ -149,6 +180,54 @@ namespace Aviscribe.Core
 
             OnChanged();
             return CollectionOutcome.Uncounted;
+        }
+
+        public bool MoveToCollected(Moon moon)
+        {
+            if (moon == null) return false;
+
+            var changed = false;
+
+            lock (_sync)
+            {
+                changed = Pending.Remove(moon) || changed;
+                changed = UncountedCollected.Remove(moon) || changed;
+
+                if (!Collected.Contains(moon))
+                {
+                    Collected.Add(moon);
+                    changed = true;
+                }
+            }
+
+            if (changed)
+                OnChanged();
+
+            return changed;
+        }
+
+        public bool MoveToUncounted(Moon moon)
+        {
+            if (moon == null) return false;
+
+            var changed = false;
+
+            lock (_sync)
+            {
+                changed = Pending.Remove(moon) || changed;
+                changed = Collected.Remove(moon) || changed;
+
+                if (!UncountedCollected.Contains(moon))
+                {
+                    UncountedCollected.Add(moon);
+                    changed = true;
+                }
+            }
+
+            if (changed)
+                OnChanged();
+
+            return changed;
         }
 
         public bool Remove(Moon moon)

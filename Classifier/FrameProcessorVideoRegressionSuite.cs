@@ -25,6 +25,7 @@ namespace Aviscribe.Classifier
             new("lake-moonget-broken-pillar", OcrRegionType.MoonGet, "Lake", 74_138, 7),
             new("wooded-moonget-fire-cave", OcrRegionType.MoonGet, "Wooded", 84_476, 19),
             new("wooded-moonget-stretching", OcrRegionType.MoonGet, "Wooded", 94_098, 25),
+            new("metro-moonget-jump-rope-hero", OcrRegionType.MoonGet, "Metro", 170_217, 29),
         ];
 
         public static void Run(

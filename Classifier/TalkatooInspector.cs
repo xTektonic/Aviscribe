@@ -5,6 +5,8 @@ namespace Aviscribe.Classifier
 {
     internal static class TalkatooInspector
     {
+        private static readonly Rect TalkatooBounds = new(666, 862, 649, 48);
+
         public static void Print(IEnumerable<string> paths)
         {
             foreach (var path in paths)
@@ -16,17 +18,43 @@ namespace Aviscribe.Classifier
                     continue;
                 }
 
-                var metrics = Measure(image);
-                Console.WriteLine(Path.GetFileName(path));
-                Console.WriteLine($"  detected: {TextDetection.HasTalkatooText(image)}");
-                Console.WriteLine($"  yellow pixels: {metrics.YellowPixels}, ratio {metrics.YellowRatio:P2}");
-                Console.WriteLine($"  band: y={metrics.BandTop}..{metrics.BandBottom}, rows {metrics.BandRows}, score {metrics.BandScore:0.00}");
-                Console.WriteLine($"  columns: active {metrics.ActiveColumns}, longest run {metrics.LongestColumnRun}, span {metrics.Left}..{metrics.Right}, width {metrics.SpanWidth}");
-                Console.WriteLine($"  row peak/median active: {metrics.PeakRow}/{metrics.MedianActiveRow:0.0}, fragmented columns {metrics.FragmentedColumns}");
-                PrintIconComponents(image);
-                PrintWhiteMarkerComponents(image);
-                PrintWideWhiteOverlay(image);
+                PrintImage(Path.GetFileName(path), image);
             }
+        }
+
+        public static void PrintVideoFrames(string videoPath, IEnumerable<int> frames)
+        {
+            using var capture = new VideoCapture(videoPath);
+            if (!capture.IsOpened())
+                throw new InvalidOperationException($"Could not open video: {videoPath}");
+
+            using var frame = new Mat();
+            foreach (var frameIndex in frames)
+            {
+                capture.Set(VideoCaptureProperties.PosFrames, frameIndex);
+                if (!capture.Read(frame) || frame.Empty())
+                {
+                    Console.WriteLine($"frame {frameIndex}: could not read");
+                    continue;
+                }
+
+                using var crop = new Mat(frame, TalkatooBounds);
+                PrintImage($"frame {frameIndex}", crop);
+            }
+        }
+
+        private static void PrintImage(string label, Mat image)
+        {
+            var metrics = Measure(image);
+            Console.WriteLine(label);
+            Console.WriteLine($"  detected: {TextDetection.HasTalkatooText(image)}");
+            Console.WriteLine($"  yellow pixels: {metrics.YellowPixels}, ratio {metrics.YellowRatio:P2}");
+            Console.WriteLine($"  band: y={metrics.BandTop}..{metrics.BandBottom}, rows {metrics.BandRows}, score {metrics.BandScore:0.00}");
+            Console.WriteLine($"  columns: active {metrics.ActiveColumns}, longest run {metrics.LongestColumnRun}, span {metrics.Left}..{metrics.Right}, width {metrics.SpanWidth}");
+            Console.WriteLine($"  row peak/median active: {metrics.PeakRow}/{metrics.MedianActiveRow:0.0}, fragmented columns {metrics.FragmentedColumns}");
+            PrintIconComponents(image);
+            PrintWhiteMarkerComponents(image);
+            PrintWideWhiteOverlay(image);
         }
 
         private static void PrintWideWhiteOverlay(Mat image)

@@ -160,6 +160,86 @@ try
             break;
         }
 
+        case "suspicious-video-events":
+        {
+            if (args.Length < 6)
+            {
+                Console.Error.WriteLine("Usage: suspicious-video-events <videoPath> <outputDir> <Talkatoo|MoonGet|StoryMoon> <startFrame> <maxFrames> [stride] [maxSaved] [minimumScore] [kingdom]");
+                return 1;
+            }
+
+            if (!Enum.TryParse<OcrRegionType>(args[3], ignoreCase: true, out var regionType))
+            {
+                Console.Error.WriteLine("Region must be Talkatoo, MoonGet, or StoryMoon.");
+                return 1;
+            }
+
+            var startFrame = int.Parse(args[4]);
+            var maxFrames = int.Parse(args[5]);
+            var stride = args.Length > 6 && int.TryParse(args[6], out var parsedStride)
+                ? parsedStride
+                : 2;
+            var maxSaved = args.Length > 7 && int.TryParse(args[7], out var parsedMaxSaved)
+                ? parsedMaxSaved
+                : 40;
+            var minimumScore = args.Length > 8 && double.TryParse(args[8], out var parsedMinimumScore)
+                ? parsedMinimumScore
+                : 0.70;
+            var kingdom = args.Length > 9 ? args[9] : null;
+
+            SuspiciousVideoEventAudit.Run(
+                args[1],
+                args[2],
+                regionType,
+                startFrame,
+                maxFrames,
+                stride,
+                maxSaved,
+                minimumScore,
+                kingdom);
+            break;
+        }
+
+        case "ocr-oracle-video-audit":
+        {
+            if (args.Length < 6)
+            {
+                Console.Error.WriteLine("Usage: ocr-oracle-video-audit <videoPath> <outputDir> <Talkatoo|MoonGet|StoryMoon> <startFrame> <maxFrames> [stride] [maxSaved] [minimumScore] [kingdom]");
+                return 1;
+            }
+
+            if (!Enum.TryParse<OcrRegionType>(args[3], ignoreCase: true, out var regionType))
+            {
+                Console.Error.WriteLine("Region must be Talkatoo, MoonGet, or StoryMoon.");
+                return 1;
+            }
+
+            var startFrame = int.Parse(args[4]);
+            var maxFrames = int.Parse(args[5]);
+            var stride = args.Length > 6 && int.TryParse(args[6], out var parsedStride)
+                ? parsedStride
+                : 3;
+            var maxSaved = args.Length > 7 && int.TryParse(args[7], out var parsedMaxSaved)
+                ? parsedMaxSaved
+                : 80;
+            var minimumScore = args.Length > 8 && double.TryParse(args[8], out var parsedMinimumScore)
+                ? parsedMinimumScore
+                : 0.70;
+            var kingdom = args.Length > 9 ? args[9] : null;
+
+            OcrOracleVideoAudit.Run(
+                args[1],
+                args[2],
+                regionType,
+                startFrame,
+                maxFrames,
+                stride,
+                maxSaved,
+                minimumScore,
+                kingdom);
+            break;
+        }
+
         case "video-regression":
         {
             var videoPath = args.Length > 1
@@ -334,6 +414,9 @@ try
             var maxFrames = args.Length > 5 && int.TryParse(args[5], out var parsedMaxFrames)
                 ? parsedMaxFrames
                 : 0;
+            var startFrame = args.Length > 6 && int.TryParse(args[6], out var parsedStartFrame)
+                ? parsedStartFrame
+                : 0;
             RegionVideoAudit.Run(
                 OcrRegionType.MoonGet,
                 new OpenCvSharp.Rect(320, 600, 1250, 250),
@@ -343,7 +426,8 @@ try
                 outputDir,
                 stride,
                 maxSaved,
-                maxFrames);
+                maxFrames,
+                startFrame);
             break;
         }
 
@@ -362,6 +446,9 @@ try
             var maxFrames = args.Length > 5 && int.TryParse(args[5], out var parsedMaxFrames)
                 ? parsedMaxFrames
                 : 0;
+            var startFrame = args.Length > 6 && int.TryParse(args[6], out var parsedStartFrame)
+                ? parsedStartFrame
+                : 0;
             RegionVideoAudit.Run(
                 OcrRegionType.StoryMoon,
                 new OpenCvSharp.Rect(450, 820, 1100, 150),
@@ -371,7 +458,8 @@ try
                 outputDir,
                 stride,
                 maxSaved,
-                maxFrames);
+                maxFrames,
+                startFrame);
             break;
         }
 
@@ -410,6 +498,18 @@ try
             break;
         }
 
+        case "inspect-talkatoo-video":
+        {
+            if (args.Length < 3)
+            {
+                Console.Error.WriteLine("Usage: inspect-talkatoo-video <videoPath> <frame> [frame...]");
+                return 1;
+            }
+
+            TalkatooInspector.PrintVideoFrames(args[1], args.Skip(2).Select(int.Parse));
+            break;
+        }
+
         case "talkatoo-projection-search":
         {
             var dataRoot = args.Length > 1 ? args[1] : DatasetPaths.DefaultDataRoot;
@@ -433,6 +533,18 @@ try
             }
 
             MoonGetInspector.Print(args.Skip(1));
+            break;
+        }
+
+        case "inspect-moonget-video":
+        {
+            if (args.Length < 3)
+            {
+                Console.Error.WriteLine("Usage: inspect-moonget-video <videoPath> <frame> [frame...]");
+                return 1;
+            }
+
+            MoonGetInspector.PrintVideoFrames(args[1], args.Skip(2).Select(int.Parse));
             break;
         }
 
@@ -489,6 +601,8 @@ static void PrintUsage()
     Console.WriteLine("  sample-video-grid <videoPath> <outputDir> [stepSeconds] [maxSamples]");
     Console.WriteLine("  extract-video-frames <videoPath> <outputDir> <frame> [frame...]");
     Console.WriteLine("  mine-video-events <videoPath> <outputDir> <Talkatoo|MoonGet|StoryMoon> <startFrame> <maxFrames> [stride] [maxRuns] [kingdom]");
+    Console.WriteLine("  suspicious-video-events <videoPath> <outputDir> <Talkatoo|MoonGet|StoryMoon> <startFrame> <maxFrames> [stride] [maxSaved] [minimumScore] [kingdom]");
+    Console.WriteLine("  ocr-oracle-video-audit <videoPath> <outputDir> <Talkatoo|MoonGet|StoryMoon> <startFrame> <maxFrames> [stride] [maxSaved] [minimumScore] [kingdom]");
     Console.WriteLine("  video-regression [videoPath] [failureOutputDir]");
     Console.WriteLine("  ocr-probe [videoPath]");
     Console.WriteLine("  video-ocr-regression [videoPath]");
@@ -502,14 +616,16 @@ static void PrintUsage()
     Console.WriteLine("  overlay-coverage [videoPath] [outputDir] [strideFrames] [maxFrames] [minGapFrames] [windowFrames]");
     Console.WriteLine("  story-crops [dataRoot] [outputDir]");
     Console.WriteLine("  audit-talkatoo-video [videoPath] [outputDir] [stride] [maxSaved] [maxFrames]");
-    Console.WriteLine("  audit-moonget-video [videoPath] [outputDir] [stride] [maxSaved] [maxFrames]");
-    Console.WriteLine("  audit-storymoon-video [videoPath] [outputDir] [stride] [maxSaved] [maxFrames]");
+    Console.WriteLine("  audit-moonget-video [videoPath] [outputDir] [stride] [maxSaved] [maxFrames] [startFrame]");
+    Console.WriteLine("  audit-storymoon-video [videoPath] [outputDir] [stride] [maxSaved] [maxFrames] [startFrame]");
     Console.WriteLine("  audit-talkatoo-dataset [dataRoot] [outputDir] [maxPerBucket]");
     Console.WriteLine("  audit-detector-failures [dataRoot] [Talkatoo|MoonGet] [outputDir] [maxSaved]");
     Console.WriteLine("  inspect-talkatoo <imagePath> [imagePath...]");
+    Console.WriteLine("  inspect-talkatoo-video <videoPath> <frame> [frame...]");
     Console.WriteLine("  talkatoo-projection-search [dataRoot]");
     Console.WriteLine("  moonget-search [dataRoot]");
     Console.WriteLine("  inspect-moonget <imagePath> [imagePath...]");
+    Console.WriteLine("  inspect-moonget-video <videoPath> <frame> [frame...]");
     Console.WriteLine("  storymoon-search [dataRoot]");
     Console.WriteLine("  state-smoke");
     Console.WriteLine("  frameprocessor-smoke");

@@ -22,8 +22,63 @@ namespace Aviscribe.Core.Ocr
             using var mask = CreateYellowGlyphMask(image);
             var metrics = MeasureYellowText(mask);
             var hasWhiteMarker = HasWhiteTalkatooMoonMarker(image);
+            var hasMarker = hasWhiteMarker || HasTalkatooMoonMarker(image);
             var whiteSupport = MeasureTextWhiteSupport(image);
             var yellowPixels = Cv2.CountNonZero(mask);
+            var yellowRatio = yellowPixels / (double)Math.Max(1, image.Width * image.Height);
+
+            if (IsSolidYellowBackground(metrics, yellowRatio))
+                return false;
+
+            if (IsTopAlignedPaintedSurface(metrics, yellowRatio))
+                return false;
+
+            if (IsSmoothResultOverlay(metrics, yellowPixels, yellowRatio, whiteSupport))
+                return false;
+
+            if (IsSolidMenuSwatch(metrics, yellowPixels, yellowRatio, whiteSupport))
+                return false;
+
+            if (IsLowFragmentPaintedSurface(metrics, yellowPixels, whiteSupport))
+                return false;
+
+            if (!hasWhiteMarker && IsCompactBrightPaintedSurface(metrics, yellowPixels, whiteSupport))
+                return false;
+
+            if (!hasWhiteMarker && IsNoMarkerBroadPaintedPatch(metrics, yellowPixels, yellowRatio, whiteSupport))
+                return false;
+
+            if (IsWideLowRunPaintedSurface(metrics, yellowPixels, yellowRatio, whiteSupport))
+                return false;
+
+            if (!hasWhiteMarker && IsCompactDiagonalPaintedTrim(metrics, yellowPixels, whiteSupport))
+                return false;
+
+            if (!hasMarker && IsNoMarkerSmoothPaintedSurface(metrics, yellowPixels, whiteSupport))
+                return false;
+
+            if (!hasMarker && IsNoMarkerCompactYellowObject(metrics, yellowPixels, whiteSupport))
+                return false;
+
+            if (hasWhiteMarker && IsFalseWhiteMarkerRoundObject(metrics, yellowPixels, whiteSupport))
+                return false;
+
+            if (hasWhiteMarker && IsFalseWhiteMarkerSmallRoundObject(metrics, yellowPixels, whiteSupport))
+                return false;
+
+            if (hasWhiteMarker && IsPatternedYellowWall(metrics, yellowPixels, whiteSupport))
+                return false;
+
+            if (IsYellowBackgroundTalkatooText(metrics, yellowPixels, whiteSupport, hasWhiteMarker))
+                return true;
+
+            if (!hasMarker &&
+                yellowPixels < 2200 &&
+                whiteSupport.Pixels < 250 &&
+                metrics.FragmentedColumns < 50)
+            {
+                return false;
+            }
 
             if (hasWhiteMarker && (metrics.HasTextBand || metrics.HasWhiteMarkerTextBand))
                 return true;
@@ -48,6 +103,216 @@ namespace Aviscribe.Core.Ocr
                 whiteSupport.ActiveColumns >= 20 &&
                 metrics.LongestColumnRun <= 220 &&
                 HasTalkatooText_v3(image);
+        }
+
+        private static bool IsSolidYellowBackground(YellowTextMetrics metrics, double yellowRatio)
+        {
+            return
+                yellowRatio >= 0.60 &&
+                metrics.SpanWidth >= 500 &&
+                metrics.LongestColumnRun >= 480 &&
+                metrics.FragmentedColumns <= 12;
+        }
+
+        private static bool IsTopAlignedPaintedSurface(YellowTextMetrics metrics, double yellowRatio)
+        {
+            return
+                yellowRatio >= 0.55 &&
+                metrics.BandTop <= 2 &&
+                metrics.LongestColumnRun >= 360 &&
+                metrics.FragmentedColumns <= 12;
+        }
+
+        private static bool IsSmoothResultOverlay(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            double yellowRatio,
+            WhiteSupportMetrics whiteSupport)
+        {
+            return
+                metrics.FragmentedColumns <= 12 &&
+                whiteSupport.Pixels >= 900 &&
+                yellowPixels >= 5000 &&
+                metrics.LongestColumnRun >= 70 &&
+                (yellowRatio >= 0.16 || metrics.SpanWidth >= 340) &&
+                whiteSupport.ActiveColumns <= 110;
+        }
+
+        private static bool IsSolidMenuSwatch(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            double yellowRatio,
+            WhiteSupportMetrics whiteSupport)
+        {
+            return
+                yellowPixels >= 3200 &&
+                yellowPixels <= 5600 &&
+                yellowRatio >= 0.10 &&
+                yellowRatio <= 0.20 &&
+                metrics.BandTop <= 2 &&
+                metrics.SpanWidth >= 110 &&
+                metrics.SpanWidth <= 230 &&
+                metrics.LongestColumnRun >= metrics.SpanWidth - 4 &&
+                metrics.FragmentedColumns <= 3 &&
+                whiteSupport.Pixels >= 700 &&
+                whiteSupport.ActiveColumns <= 70;
+        }
+
+        private static bool IsLowFragmentPaintedSurface(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            WhiteSupportMetrics whiteSupport)
+        {
+            return
+                (yellowPixels >= 2500 &&
+                 whiteSupport.Pixels < 900 &&
+                 metrics.FragmentedColumns < 25) ||
+                (yellowPixels >= 2500 &&
+                 whiteSupport.Pixels < 450 &&
+                 metrics.FragmentedColumns < 32 &&
+                 metrics.LongestColumnRun >= 150) ||
+                (yellowPixels >= 2500 &&
+                 whiteSupport.Pixels < 450 &&
+                 metrics.SpanWidth < 320 &&
+                 metrics.FragmentedColumns < 36 &&
+                 metrics.LongestColumnRun >= 150);
+        }
+
+        private static bool IsCompactBrightPaintedSurface(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            WhiteSupportMetrics whiteSupport)
+        {
+            return
+                yellowPixels >= 8000 &&
+                whiteSupport.Pixels >= 800 &&
+                whiteSupport.ActiveColumns >= 80 &&
+                metrics.FragmentedColumns < 45 &&
+                metrics.LongestColumnRun < 160;
+        }
+
+        private static bool IsNoMarkerBroadPaintedPatch(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            double yellowRatio,
+            WhiteSupportMetrics whiteSupport)
+        {
+            return
+                yellowPixels >= 8000 &&
+                yellowRatio < 0.45 &&
+                whiteSupport.Pixels < 800 &&
+                metrics.SpanWidth >= 420 &&
+                metrics.LongestColumnRun >= 250 &&
+                metrics.FragmentedColumns < 55;
+        }
+
+        private static bool IsWideLowRunPaintedSurface(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            double yellowRatio,
+            WhiteSupportMetrics whiteSupport)
+        {
+            return
+                yellowPixels >= 4000 &&
+                yellowRatio < 0.25 &&
+                whiteSupport.Pixels < 850 &&
+                metrics.SpanWidth >= 520 &&
+                metrics.LongestColumnRun <= 140;
+        }
+
+        private static bool IsNoMarkerCompactYellowObject(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            WhiteSupportMetrics whiteSupport)
+        {
+            return
+                yellowPixels >= 9000 &&
+                whiteSupport.Pixels < 1100 &&
+                metrics.SpanWidth < 360 &&
+                metrics.LongestColumnRun >= 240 &&
+                metrics.FragmentedColumns < 55;
+        }
+
+        private static bool IsCompactDiagonalPaintedTrim(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            WhiteSupportMetrics whiteSupport)
+        {
+            return
+                yellowPixels >= 1800 &&
+                yellowPixels < 3000 &&
+                whiteSupport.Pixels < 260 &&
+                metrics.SpanWidth < 190 &&
+                metrics.LongestColumnRun >= 120 &&
+                metrics.FragmentedColumns < 45;
+        }
+
+        private static bool IsNoMarkerSmoothPaintedSurface(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            WhiteSupportMetrics whiteSupport)
+        {
+            return
+                yellowPixels >= 6500 &&
+                whiteSupport.Pixels < 1000 &&
+                metrics.SpanWidth >= 450 &&
+                metrics.FragmentedColumns < 25;
+        }
+
+        private static bool IsFalseWhiteMarkerRoundObject(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            WhiteSupportMetrics whiteSupport)
+        {
+            return
+                yellowPixels >= 4000 &&
+                whiteSupport.Pixels < 80 &&
+                metrics.SpanWidth < 190 &&
+                metrics.FragmentedColumns < 70;
+        }
+
+        private static bool IsFalseWhiteMarkerSmallRoundObject(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            WhiteSupportMetrics whiteSupport)
+        {
+            return
+                yellowPixels >= 1800 &&
+                yellowPixels < 3000 &&
+                whiteSupport.Pixels < 900 &&
+                metrics.SpanWidth < 160 &&
+                metrics.LongestColumnRun >= 120;
+        }
+
+        private static bool IsPatternedYellowWall(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            WhiteSupportMetrics whiteSupport)
+        {
+            return
+                yellowPixels >= 6000 &&
+                yellowPixels < 9000 &&
+                whiteSupport.Pixels >= 700 &&
+                whiteSupport.Pixels < 1000 &&
+                metrics.SpanWidth >= 480 &&
+                metrics.LongestColumnRun <= 150 &&
+                metrics.FragmentedColumns < 65;
+        }
+
+        private static bool IsYellowBackgroundTalkatooText(
+            YellowTextMetrics metrics,
+            int yellowPixels,
+            WhiteSupportMetrics whiteSupport,
+            bool hasWhiteMarker)
+        {
+            return
+                yellowPixels >= 8000 &&
+                whiteSupport.Pixels >= 250 &&
+                (hasWhiteMarker || whiteSupport.Pixels >= 900) &&
+                metrics.SpanWidth >= 450 &&
+                metrics.SpanWidth <= 575 &&
+                metrics.LongestColumnRun >= 300 &&
+                metrics.FragmentedColumns >= 25;
         }
 
         private static YellowTextMetrics MeasureYellowText(Mat mask)
@@ -201,6 +466,7 @@ namespace Aviscribe.Core.Ocr
                 hasMarkerSupportedTextBand,
                 hasOutlinedTextBand,
                 hasStrongOutlinedTextBand,
+                bandTop,
                 left == mask.Width ? 0 : left,
                 spanWidth,
                 longestColumnRun,
@@ -887,6 +1153,7 @@ namespace Aviscribe.Core.Ocr
             bool HasMarkerSupportedTextBand,
             bool HasOutlinedTextBand,
             bool HasStrongOutlinedTextBand,
+            int BandTop,
             int Left,
             int SpanWidth,
             int LongestColumnRun,
@@ -901,14 +1168,7 @@ namespace Aviscribe.Core.Ocr
 
             if (image.Height > 100)
             {
-                if (HasMoonGetSeparatorLayout(image))
-                    return true;
-
-                if (!HasLargeMoonGetCelebrationMass(image))
-                    return false;
-
-                return HasLargeMoonGetCelebrationText(MeasureMoonGetText(image)) &&
-                    HasMoonGetBannerText(image);
+                return HasMoonGetSeparatorLayout(image);
             }
 
             var metrics = MeasureMoonGetText(image);
@@ -1082,16 +1342,23 @@ namespace Aviscribe.Core.Ocr
 
         private static bool HasMoonGetSeparatorLayout(Mat image)
         {
+            return AnalyzeMoonGetSeparatorLayout(image).Detected;
+        }
+
+        public static MoonGetSeparatorMetrics AnalyzeMoonGetSeparatorLayout(Mat image)
+        {
             const int step = 2;
             var sampledWidth = (image.Width + step - 1) / step;
             var sampledHeight = (image.Height + step - 1) / step;
             var rowCounts = new int[sampledHeight];
+            var strongWhiteRowCounts = new int[sampledHeight];
             var activeColumnsAboveLine = new bool[sampledWidth];
 
             for (var y = 0; y < image.Height; y += step)
             {
                 var sampledY = y / step;
                 var rowCount = 0;
+                var strongWhiteRowCount = 0;
 
                 for (var x = 0; x < image.Width; x += step)
                 {
@@ -1104,23 +1371,36 @@ namespace Aviscribe.Core.Ocr
                         continue;
 
                     rowCount++;
+
+                    if (IsStrongMoonGetWhitePixel(r, g, b))
+                        strongWhiteRowCount++;
                 }
 
                 rowCounts[sampledY] = rowCount;
+                strongWhiteRowCounts[sampledY] = strongWhiteRowCount;
             }
 
             var minLineRow = (int)(sampledHeight * 0.48);
             var maxLineRow = (int)(sampledHeight * 0.82);
-            var lineThreshold = sampledWidth * 0.72;
+            var fullPaleRows = rowCounts.Count(count => count >= sampledWidth * 0.96);
+            var averagePaleRow = rowCounts.Average();
+            var useStrongWhiteLayout = fullPaleRows > 24 || averagePaleRow >= sampledWidth * 0.42;
+            var separatorRows = useStrongWhiteLayout
+                ? strongWhiteRowCounts
+                : rowCounts;
+            var lineThreshold = sampledWidth * (useStrongWhiteLayout ? 0.54 : 0.72);
+
             var bestLineStart = -1;
             var bestLineEnd = -1;
             var bestLineScore = 0;
+            var bestLineAverage = 0.0;
+            var bestSurroundingAverage = 0.0;
             var runStart = -1;
             var runScore = 0;
 
             for (var y = minLineRow; y < maxLineRow; y++)
             {
-                if (rowCounts[y] >= lineThreshold)
+                if (separatorRows[y] >= lineThreshold)
                 {
                     if (runStart < 0)
                     {
@@ -1128,7 +1408,7 @@ namespace Aviscribe.Core.Ocr
                         runScore = 0;
                     }
 
-                    runScore += rowCounts[y];
+                    runScore += separatorRows[y];
                     continue;
                 }
 
@@ -1138,27 +1418,85 @@ namespace Aviscribe.Core.Ocr
             CommitLineRun(maxLineRow);
 
             if (bestLineStart < 0)
-                return false;
+            {
+                return new MoonGetSeparatorMetrics(
+                    false,
+                    sampledWidth,
+                    sampledHeight,
+                    -1,
+                    -1,
+                    0,
+                    0,
+                    0,
+                    fullPaleRows,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0);
+            }
 
             var lineRows = bestLineEnd - bestLineStart;
             if (lineRows < 2 || lineRows > 24)
-                return false;
+            {
+                return new MoonGetSeparatorMetrics(
+                    false,
+                    sampledWidth,
+                    sampledHeight,
+                    bestLineStart,
+                    bestLineEnd,
+                    lineRows,
+                    bestLineAverage,
+                    bestSurroundingAverage,
+                    fullPaleRows,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0);
+            }
 
             var titleRows = 0;
             var titleBottom = Math.Max(0, bestLineStart - 4);
-            var titleRowThreshold = sampledWidth * 0.09;
-            var titleStrongRowThreshold = sampledWidth * 0.16;
+            var titleRowThreshold = sampledWidth * (useStrongWhiteLayout ? 0.045 : 0.09);
+            var titleStrongRowThreshold = sampledWidth * (useStrongWhiteLayout ? 0.075 : 0.16);
+            var bannerWhiteRowThreshold = sampledWidth * 0.28;
+            var fadedBannerRowThreshold = sampledWidth * (useStrongWhiteLayout ? 0.16 : 0.32);
+            var topPanelRowThreshold = sampledWidth * (useStrongWhiteLayout ? 0.72 : 0.55);
             var strongTitleRows = 0;
+            var strongBannerRows = 0;
+            var fadedBannerRows = 0;
+            var topPanelRows = 0;
+            var topPanelBottom = Math.Min(titleBottom, Math.Max(1, (int)(sampledHeight * 0.18)));
 
             for (var y = 0; y < titleBottom; y++)
             {
-                if (rowCounts[y] >= titleRowThreshold)
+                var layoutRowCount = useStrongWhiteLayout
+                    ? strongWhiteRowCounts[y]
+                    : rowCounts[y];
+
+                if (layoutRowCount >= titleRowThreshold)
                     titleRows++;
 
-                if (rowCounts[y] >= titleStrongRowThreshold)
+                if (layoutRowCount >= titleStrongRowThreshold)
                     strongTitleRows++;
 
-                if (rowCounts[y] < titleRowThreshold)
+                if (strongWhiteRowCounts[y] >= bannerWhiteRowThreshold)
+                    strongBannerRows++;
+
+                if (layoutRowCount >= fadedBannerRowThreshold)
+                    fadedBannerRows++;
+
+                if (y < topPanelBottom && layoutRowCount >= topPanelRowThreshold)
+                    topPanelRows++;
+
+                if (layoutRowCount < titleRowThreshold)
                     continue;
 
                 var sourceY = y * step;
@@ -1169,26 +1507,63 @@ namespace Aviscribe.Core.Ocr
                     var g = pixel.Item1;
                     var r = pixel.Item2;
 
-                    if (IsMoonGetTextPixel(r, g, b))
+                    var activeTitlePixel = useStrongWhiteLayout
+                        ? IsStrongMoonGetWhitePixel(r, g, b)
+                        : IsMoonGetTextPixel(r, g, b);
+
+                    if (activeTitlePixel)
                         activeColumnsAboveLine[x / step] = true;
                 }
             }
 
             var titleColumnSpan = MeasureBooleanSpan(activeColumnsAboveLine);
             var nameRows = 0;
-            var nameRowThreshold = sampledWidth * 0.06;
+            var nameRowThreshold = sampledWidth * (useStrongWhiteLayout ? 0.035 : 0.06);
+            var hasMoonGetBanner = (strongBannerRows >= 10 && topPanelRows <= 12) ||
+                (fadedBannerRows >= (useStrongWhiteLayout ? 10 : 18) && topPanelRows <= (useStrongWhiteLayout ? 12 : 6));
+            var sceneryTitleRows = rowCounts
+                .Take(titleBottom)
+                .Select((count, y) => useStrongWhiteLayout ? strongWhiteRowCounts[y] : count)
+                .Count(count => count >= sampledWidth * (useStrongWhiteLayout ? 0.36 : 0.48));
 
             for (var y = bestLineEnd + 3; y < sampledHeight; y++)
             {
-                if (rowCounts[y] >= nameRowThreshold)
+                var layoutRowCount = useStrongWhiteLayout
+                    ? strongWhiteRowCounts[y]
+                    : rowCounts[y];
+
+                if (layoutRowCount >= nameRowThreshold)
                     nameRows++;
             }
 
-            return
+            var detected =
+                lineRows >= 6 &&
+                (!useStrongWhiteLayout || bestLineAverage >= sampledWidth * 0.82) &&
                 titleRows >= 5 &&
                 strongTitleRows >= 2 &&
-                titleColumnSpan >= sampledWidth * 0.32 &&
+                hasMoonGetBanner &&
+                sceneryTitleRows <= Math.Max(useStrongWhiteLayout ? 14 : 10, strongTitleRows + 8) &&
+                titleColumnSpan >= sampledWidth * (useStrongWhiteLayout ? 0.78 : 0.32) &&
                 nameRows >= 1;
+
+            return new MoonGetSeparatorMetrics(
+                detected,
+                sampledWidth,
+                sampledHeight,
+                bestLineStart,
+                bestLineEnd,
+                lineRows,
+                bestLineAverage,
+                bestSurroundingAverage,
+                fullPaleRows,
+                titleRows,
+                strongTitleRows,
+                strongBannerRows,
+                fadedBannerRows,
+                topPanelRows,
+                sceneryTitleRows,
+                titleColumnSpan,
+                nameRows);
 
             void CommitLineRun(int end)
             {
@@ -1196,25 +1571,28 @@ namespace Aviscribe.Core.Ocr
                     return;
 
                 var runLength = end - runStart;
+                var contrast = MeasureSeparatorLineContrast(runStart, end);
                 if (runLength >= 2 &&
                     runLength <= 24 &&
-                    HasSeparatorLineContrast(runStart, end) &&
+                    contrast.Passed &&
                     runScore > bestLineScore)
                 {
                     bestLineStart = runStart;
                     bestLineEnd = end;
                     bestLineScore = runScore;
+                    bestLineAverage = contrast.LineAverage;
+                    bestSurroundingAverage = contrast.SurroundingAverage;
                 }
 
                 runStart = -1;
                 runScore = 0;
             }
 
-            bool HasSeparatorLineContrast(int start, int end)
+            (bool Passed, double LineAverage, double SurroundingAverage) MeasureSeparatorLineContrast(int start, int end)
             {
                 var lineAverage = 0.0;
                 for (var y = start; y < end; y++)
-                    lineAverage += rowCounts[y];
+                    lineAverage += separatorRows[y];
 
                 lineAverage /= Math.Max(1, end - start);
 
@@ -1222,13 +1600,13 @@ namespace Aviscribe.Core.Ocr
                 var surroundingRows = 0;
                 for (var y = Math.Max(0, start - 10); y < Math.Max(0, start - 2); y++)
                 {
-                    surroundingTotal += rowCounts[y];
+                    surroundingTotal += separatorRows[y];
                     surroundingRows++;
                 }
 
                 for (var y = Math.Min(sampledHeight, end + 2); y < Math.Min(sampledHeight, end + 10); y++)
                 {
-                    surroundingTotal += rowCounts[y];
+                    surroundingTotal += separatorRows[y];
                     surroundingRows++;
                 }
 
@@ -1236,10 +1614,13 @@ namespace Aviscribe.Core.Ocr
                     ? 0
                     : surroundingTotal / (double)surroundingRows;
 
-                return
-                    lineAverage >= sampledWidth * 0.72 &&
+                var passed =
+                    lineAverage >= lineThreshold &&
+                    surroundingAverage <= sampledWidth * (useStrongWhiteLayout ? 0.34 : 0.45) &&
                     lineAverage >= surroundingAverage * 1.25 &&
-                    lineAverage - surroundingAverage >= sampledWidth * 0.12;
+                    lineAverage - surroundingAverage >= sampledWidth * (useStrongWhiteLayout ? 0.10 : 0.12);
+
+                return (passed, lineAverage, surroundingAverage);
             }
         }
 
@@ -1468,6 +1849,13 @@ namespace Aviscribe.Core.Ocr
             return max >= 145 && min >= 115 && max - min <= 75;
         }
 
+        private static bool IsStrongMoonGetWhitePixel(int r, int g, int b)
+        {
+            var max = Math.Max(r, Math.Max(g, b));
+            var min = Math.Min(r, Math.Min(g, b));
+            return max >= 225 && min >= 205 && max - min <= 40;
+        }
+
         private readonly record struct MoonGetTextMetrics(
             int WhitePixels,
             double WhiteRatio,
@@ -1481,6 +1869,25 @@ namespace Aviscribe.Core.Ocr
             int TextComponentSpan,
             int OutlinedPixels,
             int OutlinedColumns);
+
+        public readonly record struct MoonGetSeparatorMetrics(
+            bool Detected,
+            int SampledWidth,
+            int SampledHeight,
+            int LineStart,
+            int LineEnd,
+            int LineRows,
+            double LineAverage,
+            double SurroundingAverage,
+            int FullPaleRows,
+            int TitleRows,
+            int StrongTitleRows,
+            int StrongBannerRows,
+            int FadedBannerRows,
+            int TopPanelRows,
+            int SceneryTitleRows,
+            int TitleColumnSpan,
+            int NameRows);
 
         private readonly record struct BrightYellowTextMetrics(
             int BrightPixels,

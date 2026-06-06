@@ -14,7 +14,8 @@ namespace Aviscribe.Classifier
             string outputDir,
             int stride,
             int maxSaved,
-            int maxFrames)
+            int maxFrames,
+            int startFrame = 0)
         {
             Directory.CreateDirectory(outputDir);
 
@@ -22,9 +23,12 @@ namespace Aviscribe.Classifier
             if (!capture.IsOpened())
                 throw new InvalidOperationException($"Could not open video: {videoPath}");
 
+            if (startFrame > 0)
+                capture.Set(VideoCaptureProperties.PosFrames, startFrame);
+
             var detector = new HeuristicTextPresenceDetector();
             using var frame = new Mat();
-            var frameIndex = 0;
+            var frameIndex = Math.Max(0, startFrame);
             var positiveCount = 0;
             var savedCount = 0;
             var previousPositive = false;
@@ -38,12 +42,14 @@ namespace Aviscribe.Classifier
 
             while (capture.Read(frame) && !frame.Empty())
             {
-                frameIndex++;
-                if (maxFrames > 0 && frameIndex > maxFrames)
+                if (maxFrames > 0 && frameIndex >= startFrame + maxFrames)
                     break;
 
                 if (frameIndex % stride != 0)
+                {
+                    frameIndex++;
                     continue;
+                }
 
                 using var crop = new Mat(frame, bounds);
                 var result = detector.Detect(regionType, crop);
@@ -92,10 +98,11 @@ namespace Aviscribe.Classifier
 
                 previousStable = stable;
                 previousPositive = result.Present;
+                frameIndex++;
             }
 
             Console.WriteLine(
-                $"Scanned {frameIndex} frames, positives {positiveCount}, longest run {longestPositiveRun}, " +
+                $"Scanned frames {startFrame}..{frameIndex}, positives {positiveCount}, longest run {longestPositiveRun}, " +
                 $"stable windows {stableWindows}, stable runs {stableRuns}, saved {savedCount} samples to {outputDir}");
         }
 
