@@ -29,6 +29,9 @@ namespace Aviscribe.Classifier
             new("sand-moonget-012m", OcrRegionType.MoonGet, 43_200, MoonGetDetectionBounds),
             new("sand-moonget-015m", OcrRegionType.MoonGet, 54_000, MoonGetDetectionBounds),
             new("lake-moonget-016m", OcrRegionType.MoonGet, 57_600, MoonGetDetectionBounds),
+            new("lake-moonget-dorrie-rider-018m", OcrRegionType.MoonGet, 67_776, MoonGetDetectionBounds),
+            new("lake-moonget-spiky-waterway-019m", OcrRegionType.MoonGet, 68_868, MoonGetDetectionBounds),
+            new("lake-moonget-secret-room-020m", OcrRegionType.MoonGet, 72_632, MoonGetDetectionBounds),
             new("lake-moonget-broken-pillar-020m", OcrRegionType.MoonGet, 74_138, MoonGetDetectionBounds),
             new("wooded-moonget-fire-cave-023m", OcrRegionType.MoonGet, 84_476, MoonGetDetectionBounds),
             new("wooded-moonget-stretching-026m", OcrRegionType.MoonGet, 94_098, MoonGetDetectionBounds),
@@ -42,6 +45,8 @@ namespace Aviscribe.Classifier
         private static readonly VideoExpectation[] NegativeExpectations =
         [
             new("cascade-background-after-fast-talkatoo", OcrRegionType.Talkatoo, 18_989, TalkatooBounds),
+            new("sand-stair-highlight-not-moonget", OcrRegionType.MoonGet, 42_393, MoonGetDetectionBounds),
+            new("snow-pale-railing-not-moonget", OcrRegionType.MoonGet, 96_924, MoonGetDetectionBounds),
         ];
 
         public static void Run(string videoPath, string outputDir, int windowFrames = 18, int stepFrames = 2)

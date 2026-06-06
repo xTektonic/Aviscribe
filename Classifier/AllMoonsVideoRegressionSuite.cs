@@ -55,7 +55,25 @@ namespace Aviscribe.Classifier
         private static readonly NegativeExpectation[] NegativeExpectations =
         [
             new("sand-platform-after-lone-pillar-not-moonget", OcrRegionType.MoonGet, 68_624),
+            new("snow-map-screen-not-moonget", OcrRegionType.MoonGet, 794_715),
+            new("mushroom-note-rail-not-moonget", OcrRegionType.MoonGet, 1_206_375),
+            new("mushroom-light-platform-not-moonget", OcrRegionType.MoonGet, 1_209_415),
             new("sand-yellow-platform-not-talkatoo", OcrRegionType.Talkatoo, 217_178),
+            new("sand-yellow-wall-pattern-not-talkatoo", OcrRegionType.Talkatoo, 223_938),
+            new("cascade-grass-particles-not-talkatoo", OcrRegionType.Talkatoo, 40_068),
+            new("sand-rooftop-yellow-wall-not-talkatoo", OcrRegionType.Talkatoo, 66_282),
+            new("sand-stone-platform-not-talkatoo", OcrRegionType.Talkatoo, 76_539),
+            new("sand-blue-edge-yellow-trim-not-talkatoo", OcrRegionType.Talkatoo, 80_286),
+            new("sand-diagonal-painted-trim-not-talkatoo", OcrRegionType.Talkatoo, 80_295),
+            new("sand-bright-paint-patch-not-talkatoo", OcrRegionType.Talkatoo, 80_670),
+            new("sand-painted-ornament-not-talkatoo", OcrRegionType.Talkatoo, 80_676),
+            new("sand-smooth-painted-surface-not-talkatoo", OcrRegionType.Talkatoo, 80_685),
+            new("sand-round-jaxi-object-not-talkatoo", OcrRegionType.Talkatoo, 85_116),
+            new("sand-small-round-jaxi-object-not-talkatoo", OcrRegionType.Talkatoo, 85_122),
+            new("sand-top-yellow-strip-not-talkatoo", OcrRegionType.Talkatoo, 88_341),
+            new("sand-wall-zigzag-not-talkatoo", OcrRegionType.Talkatoo, 88_560),
+            new("sand-wall-zigzag-late-not-talkatoo", OcrRegionType.Talkatoo, 88_605),
+            new("sand-wall-zigzag-stable-not-talkatoo", OcrRegionType.Talkatoo, 88_611),
         ];
 
         public static void Run(string videoPath, string outputDir, int windowFrames = 30, int stepFrames = 2)

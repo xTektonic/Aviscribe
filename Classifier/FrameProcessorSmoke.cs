@@ -11,11 +11,18 @@ namespace Aviscribe.Classifier
         {
             StaleOcrDoesNotMutateNewKingdom();
             AmbiguousTalkatooUsesOnlyUnseenCandidate();
+            AmbiguousResolvedTalkatooQuietsSamePrompt();
             AmbiguousMoonGetUsesPendingCandidate();
+            WeakMoonGetUsesPendingCandidate();
+            WeakMoonGetStaysQuietWithoutSinglePendingCandidate();
             AmbiguousTalkatooStillAsksWhenUnresolved();
             TalkatooBacklogKeepsRapidDistinctReads();
             TalkatooRefreshesChangedTextWithoutAbsentGap();
+            TalkatooQuietsSamePromptAfterResolvedRead();
+            TalkatooQuietsLongHeldSamePromptAfterResolvedRead();
+            TalkatooSkipsQueuedDuplicateAfterSlowResolvedRead();
             FalseTalkatooEnqueuesDoNotCrowdOutLatestRealRead();
+            CollectionTextSuppressesTalkatooFalseRead();
             MoonGetSurvivesOverlappingStoryMoon();
             Console.WriteLine("FrameProcessor smoke passed.");
         }
@@ -123,6 +130,48 @@ namespace Aviscribe.Classifier
             }
         }
 
+        private static void AmbiguousResolvedTalkatooQuietsSamePrompt()
+        {
+            var moon1 = new Moon { Id = 1, Kingdom = "Cascade", English = "Cascade Timer Challenge 1" };
+            var moon2 = new Moon { Id = 2, Kingdom = "Cascade", English = "Cascade Timer Challenge 2" };
+            var repo = CreateRepo(moon1, moon2);
+            var state = CreateEnglishState("Cascade");
+            state.AddPending(moon1);
+            state.MarkCollected(moon1);
+
+            using var ocr = new CountingOcrService("Cascade Timer Challenge");
+            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
+            var ambiguousEvents = 0;
+            processor.AmbiguousMatchReceived += (_, _) => ambiguousEvents++;
+
+            processor.Start();
+            try
+            {
+                PushPatternFrame(processor, 30, 0);
+                WaitFor(() => state.CreateSnapshot().Pending.Any(moon => moon.Id == moon2.Id), "Ambiguous Talkatoo did not resolve to the unseen candidate.");
+                var readsAfterResolve = ocr.ReadCount;
+
+                for (var i = 0; i < 30; i++)
+                {
+                    PushPatternFrame(processor, 30, 0);
+                    Thread.Sleep(5);
+                }
+
+                Thread.Sleep(250);
+
+                if (ambiguousEvents != 0)
+                    throw new InvalidOperationException("Resolved ambiguous Talkatoo read raised a review event.");
+
+                if (ocr.ReadCount > readsAfterResolve + 1)
+                    throw new InvalidOperationException($"Resolved ambiguous Talkatoo prompt kept refreshing OCR: {readsAfterResolve} -> {ocr.ReadCount} reads.");
+            }
+            finally
+            {
+                processor.Stop();
+            }
+        }
+
         private static void AmbiguousMoonGetUsesPendingCandidate()
         {
             var moon1 = new Moon { Id = 1, Kingdom = "Cascade", English = "Cascade Timer Challenge 1" };
@@ -145,6 +194,91 @@ namespace Aviscribe.Classifier
                 WaitFor(() => state.CreateSnapshot().Collected.Any(moon => moon.Id == moon2.Id), "Ambiguous MoonGet did not resolve to the pending candidate.");
                 if (ambiguousEvents != 0)
                     throw new InvalidOperationException("Resolved ambiguous MoonGet read still raised a review event.");
+            }
+            finally
+            {
+                processor.Stop();
+            }
+        }
+
+        private static void WeakMoonGetUsesPendingCandidate()
+        {
+            var hero = new Moon
+            {
+                Id = 29,
+                Kingdom = "Metro",
+                English = "Jump-Rope Hero",
+                ChineseTraditional = "跳繩高手"
+            };
+            var genius = new Moon
+            {
+                Id = 30,
+                Kingdom = "Metro",
+                English = "Jump-Rope Genius",
+                ChineseTraditional = "跳繩大師"
+            };
+            var repo = CreateRepo(hero, genius);
+            var state = CreateChineseState("Metro");
+            state.AddPending(hero);
+
+            using var ocr = new StaticOcrService("跳繩");
+            var matcher = new MoonMatcher(repo, GameLanguage.ChineseTraditional, GameLanguage.English);
+            var processor = new FrameProcessor(ocr, matcher, state, new RegionOnlyDetector(OcrRegionType.MoonGet));
+            var ambiguousEvents = 0;
+            processor.AmbiguousMatchReceived += (_, _) => ambiguousEvents++;
+
+            processor.Start();
+            try
+            {
+                PushBlankFrame(processor);
+
+                WaitFor(() => state.CreateSnapshot().Collected.Any(moon => moon.Id == hero.Id), "Weak MoonGet OCR did not resolve to the pending candidate.");
+                if (ambiguousEvents != 0)
+                    throw new InvalidOperationException("Resolved weak MoonGet read raised a review event.");
+            }
+            finally
+            {
+                processor.Stop();
+            }
+        }
+
+        private static void WeakMoonGetStaysQuietWithoutSinglePendingCandidate()
+        {
+            var hero = new Moon
+            {
+                Id = 29,
+                Kingdom = "Metro",
+                English = "Jump-Rope Hero",
+                ChineseTraditional = "跳繩高手"
+            };
+            var genius = new Moon
+            {
+                Id = 30,
+                Kingdom = "Metro",
+                English = "Jump-Rope Genius",
+                ChineseTraditional = "跳繩大師"
+            };
+            var repo = CreateRepo(hero, genius);
+            var state = CreateChineseState("Metro");
+
+            using var ocr = new StaticOcrService("跳繩");
+            var matcher = new MoonMatcher(repo, GameLanguage.ChineseTraditional, GameLanguage.English);
+            var processor = new FrameProcessor(ocr, matcher, state, new RegionOnlyDetector(OcrRegionType.MoonGet));
+            var ambiguousEvents = 0;
+            processor.AmbiguousMatchReceived += (_, _) => ambiguousEvents++;
+
+            processor.Start();
+            try
+            {
+                PushBlankFrame(processor);
+                Thread.Sleep(300);
+
+                var snapshot = state.CreateSnapshot();
+                if (snapshot.Collected.Count != 0 || snapshot.UncountedCollected.Count != 0)
+                    throw new InvalidOperationException("Weak MoonGet OCR changed state without a single pending candidate.");
+
+                if (ambiguousEvents != 0)
+                    throw new InvalidOperationException("Weak unresolved MoonGet OCR should stay quiet instead of asking the user.");
             }
             finally
             {
@@ -248,6 +382,108 @@ namespace Aviscribe.Classifier
             }
         }
 
+        private static void TalkatooQuietsSamePromptAfterResolvedRead()
+        {
+            var moon = new Moon { Id = 1, Kingdom = "Cascade", English = "Old Real Moon" };
+            var repo = CreateRepo(moon);
+            var state = CreateEnglishState("Cascade");
+            using var ocr = new CountingOcrService("Old Real Moon");
+            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
+
+            processor.Start();
+            try
+            {
+                PushPatternFrame(processor, 30, 0);
+                WaitFor(() => state.CreateSnapshot().Pending.Any(pending => pending.Id == moon.Id), "Initial Talkatoo prompt did not resolve.");
+                var readsAfterResolve = ocr.ReadCount;
+
+                for (var i = 0; i < 12; i++)
+                {
+                    PushPatternFrame(processor, 30, 0);
+                    Thread.Sleep(15);
+                }
+
+                Thread.Sleep(200);
+
+                if (ocr.ReadCount > readsAfterResolve + 1)
+                    throw new InvalidOperationException($"Same resolved Talkatoo prompt kept refreshing OCR: {readsAfterResolve} -> {ocr.ReadCount} reads.");
+            }
+            finally
+            {
+                processor.Stop();
+            }
+        }
+
+        private static void TalkatooSkipsQueuedDuplicateAfterSlowResolvedRead()
+        {
+            var moon = new Moon { Id = 1, Kingdom = "Cascade", English = "Old Real Moon" };
+            var repo = CreateRepo(moon);
+            var state = CreateEnglishState("Cascade");
+            using var ocr = new BlockingCountingOcrService("Old Real Moon");
+            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
+
+            processor.Start();
+            try
+            {
+                PushPatternFrame(processor, 30, 0);
+                if (!ocr.Started.Wait(TimeSpan.FromSeconds(3)))
+                    throw new InvalidOperationException("OCR did not start during slow duplicate Talkatoo smoke test.");
+
+                for (var i = 0; i < 8; i++)
+                {
+                    PushPatternFrame(processor, 30, 0);
+                    Thread.Sleep(20);
+                }
+
+                ocr.Release();
+                WaitFor(() => state.CreateSnapshot().Pending.Any(pending => pending.Id == moon.Id), "Slow Talkatoo prompt did not resolve.");
+                Thread.Sleep(300);
+
+                if (ocr.ReadCount > 2)
+                    throw new InvalidOperationException($"Queued duplicate Talkatoo work was not skipped after resolve; OCR read {ocr.ReadCount} times.");
+            }
+            finally
+            {
+                ocr.Release();
+                processor.Stop();
+            }
+        }
+
+        private static void TalkatooQuietsLongHeldSamePromptAfterResolvedRead()
+        {
+            var moon = new Moon { Id = 1, Kingdom = "Cascade", English = "Old Real Moon" };
+            var repo = CreateRepo(moon);
+            var state = CreateEnglishState("Cascade");
+            using var ocr = new CountingOcrService("Old Real Moon");
+            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
+
+            processor.Start();
+            try
+            {
+                PushPatternFrame(processor, 30, 0);
+                WaitFor(() => state.CreateSnapshot().Pending.Any(pending => pending.Id == moon.Id), "Initial Talkatoo prompt did not resolve.");
+                var readsAfterResolve = ocr.ReadCount;
+
+                for (var i = 0; i < 90; i++)
+                {
+                    PushPatternFrame(processor, 30, 0);
+                    Thread.Sleep(2);
+                }
+
+                Thread.Sleep(300);
+
+                if (ocr.ReadCount > readsAfterResolve + 1)
+                    throw new InvalidOperationException($"Long-held resolved Talkatoo prompt refreshed OCR: {readsAfterResolve} -> {ocr.ReadCount} reads.");
+            }
+            finally
+            {
+                processor.Stop();
+            }
+        }
+
         private static void FalseTalkatooEnqueuesDoNotCrowdOutLatestRealRead()
         {
             var realMoon = new Moon { Id = 1, Kingdom = "Cascade", English = "Latest Real Moon" };
@@ -285,6 +521,35 @@ namespace Aviscribe.Classifier
             finally
             {
                 ocr.Release();
+                processor.Stop();
+            }
+        }
+
+        private static void CollectionTextSuppressesTalkatooFalseRead()
+        {
+            var collectionMoon = new Moon { Id = 1, Kingdom = "Cascade", English = "Collected Moon" };
+            var falseTalkatooMoon = new Moon { Id = 2, Kingdom = "Cascade", English = "False Talkatoo Moon" };
+            var repo = CreateRepo(collectionMoon, falseTalkatooMoon);
+            var state = CreateEnglishState("Cascade");
+            state.AddPending(collectionMoon);
+            using var ocr = new RegionSizedOcrService("False Talkatoo Moon", "Collected Moon");
+            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var processor = new FrameProcessor(ocr, matcher, state, new MoonGetAndTalkatooDetector());
+
+            processor.Start();
+            try
+            {
+                PushBlankFrame(processor);
+
+                WaitFor(() => state.CreateSnapshot().Collected.Any(collected => collected.Id == collectionMoon.Id), "MoonGet did not collect while Talkatoo was also detected.");
+                Thread.Sleep(250);
+
+                var snapshot = state.CreateSnapshot();
+                if (snapshot.Pending.Any(pending => pending.Id == falseTalkatooMoon.Id))
+                    throw new InvalidOperationException("Talkatoo false read was not suppressed during MoonGet collection text.");
+            }
+            finally
+            {
                 processor.Stop();
             }
         }
@@ -344,6 +609,15 @@ namespace Aviscribe.Classifier
             return state;
         }
 
+        private static GameState CreateChineseState(string kingdom)
+        {
+            var state = new GameState();
+            state.Settings.InputLanguage = GameLanguage.ChineseTraditional;
+            state.Settings.OutputLanguage = GameLanguage.English;
+            state.SetKingdom(kingdom);
+            return state;
+        }
+
         private static void WaitFor(Func<bool> condition, string failureMessage)
         {
             var deadline = DateTime.UtcNow.AddSeconds(3);
@@ -372,6 +646,39 @@ namespace Aviscribe.Classifier
 
             public string ReadText(Mat frame)
             {
+                Started.Set();
+                _release.Wait(TimeSpan.FromSeconds(5));
+                return _text;
+            }
+
+            public void Release()
+            {
+                _release.Set();
+            }
+
+            public void Dispose()
+            {
+                Started.Dispose();
+                _release.Dispose();
+            }
+        }
+
+        private sealed class BlockingCountingOcrService : IOcrService, IDisposable
+        {
+            private readonly ManualResetEventSlim _release = new(false);
+            private readonly string _text;
+
+            public BlockingCountingOcrService(string text)
+            {
+                _text = text;
+            }
+
+            public ManualResetEventSlim Started { get; } = new(false);
+            public int ReadCount { get; private set; }
+
+            public string ReadText(Mat frame)
+            {
+                ReadCount++;
                 Started.Set();
                 _release.Wait(TimeSpan.FromSeconds(5));
                 return _text;
@@ -552,6 +859,27 @@ namespace Aviscribe.Classifier
             }
         }
 
+        private sealed class RegionSizedOcrService : IOcrService, IDisposable
+        {
+            private readonly string _talkatooText;
+            private readonly string _collectionText;
+
+            public RegionSizedOcrService(string talkatooText, string collectionText)
+            {
+                _talkatooText = talkatooText;
+                _collectionText = collectionText;
+            }
+
+            public string ReadText(Mat frame)
+            {
+                return frame.Width <= 700 ? _talkatooText : _collectionText;
+            }
+
+            public void Dispose()
+            {
+            }
+        }
+
         private sealed class MoonGetAndStoryDetector : ITextPresenceDetector
         {
             public TextPresenceResult Detect(OcrRegionType regionType, Mat image)
@@ -559,6 +887,16 @@ namespace Aviscribe.Classifier
                 return regionType is OcrRegionType.MoonGet or OcrRegionType.StoryMoon
                     ? TextPresenceResult.PresentResult(nameof(MoonGetAndStoryDetector))
                     : TextPresenceResult.Absent(nameof(MoonGetAndStoryDetector));
+            }
+        }
+
+        private sealed class MoonGetAndTalkatooDetector : ITextPresenceDetector
+        {
+            public TextPresenceResult Detect(OcrRegionType regionType, Mat image)
+            {
+                return regionType is OcrRegionType.MoonGet or OcrRegionType.Talkatoo
+                    ? TextPresenceResult.PresentResult(nameof(MoonGetAndTalkatooDetector))
+                    : TextPresenceResult.Absent(nameof(MoonGetAndTalkatooDetector));
             }
         }
     }

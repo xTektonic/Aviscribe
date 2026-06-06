@@ -50,7 +50,6 @@ namespace Aviscribe.Core
                 .Select(moon => moon.Kingdom)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Where(kingdom => includePostGameKingdoms || !IsPostGameKingdom(kingdom))
-                .OrderBy(kingdom => kingdom)
                 .ToList();
         }
 
