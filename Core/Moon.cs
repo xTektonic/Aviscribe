@@ -5,36 +5,57 @@ namespace Aviscribe.Core
     public class Moon
     {
         public int Id { get; set; }
-        public string Kingdom { get; set; }
+        public string Kingdom { get; set; } = string.Empty;
 
-        public string English { get; set; }
+        [JsonPropertyName("collection_kingdom")]
+        public string? CollectionKingdom { get; set; }
+
+        [JsonPropertyName("is_story")]
+        public bool IsStory { get; set; }
+
+        [JsonPropertyName("is_multi")]
+        public bool IsMulti { get; set; }
+
+        [JsonIgnore]
+        public bool IsHintArt => !string.IsNullOrWhiteSpace(CollectionKingdom);
+
+        [JsonIgnore]
+        public int MoonCountValue => IsMulti ? 3 : 1;
+
+        public string English { get; set; } = string.Empty;
 
         [JsonPropertyName("chinese_traditional")]
-        public string ChineseTraditional { get; set; }
+        public string ChineseTraditional { get; set; } = string.Empty;
 
         [JsonPropertyName("chinese_simplified")]
-        public string ChineseSimplified { get; set; }
+        public string ChineseSimplified { get; set; } = string.Empty;
 
-        public string Japanese { get; set; }
-        public string Korean { get; set; }
-        public string Dutch { get; set; }
+        public string Japanese { get; set; } = string.Empty;
+        public string Korean { get; set; } = string.Empty;
+        public string Dutch { get; set; } = string.Empty;
 
         [JsonPropertyName("french_canada")]
-        public string FrenchCanada { get; set; }
+        public string FrenchCanada { get; set; } = string.Empty;
 
         [JsonPropertyName("french_france")]
-        public string FrenchFrance { get; set; }
+        public string FrenchFrance { get; set; } = string.Empty;
 
-        public string German { get; set; }
-        public string Italian { get; set; }
+        public string German { get; set; } = string.Empty;
+        public string Italian { get; set; } = string.Empty;
 
         [JsonPropertyName("spanish_spain")]
-        public string SpanishSpain { get; set; }
+        public string SpanishSpain { get; set; } = string.Empty;
 
         [JsonPropertyName("spanish_latin_america")]
-        public string SpanishLatinAmerica { get; set; }
+        public string SpanishLatinAmerica { get; set; } = string.Empty;
 
-        public string Russian { get; set; }
+        public string Russian { get; set; } = string.Empty;
+
+        public bool IsCollectedInKingdom(string kingdom)
+        {
+            return Kingdom.Equals(kingdom, StringComparison.OrdinalIgnoreCase) ||
+                   (CollectionKingdom?.Equals(kingdom, StringComparison.OrdinalIgnoreCase) ?? false);
+        }
 
         public string GetName(GameLanguage lang)
         {

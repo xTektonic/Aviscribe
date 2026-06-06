@@ -1,17 +1,21 @@
 ﻿using OpenCvSharp;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Core.OCR
+namespace Aviscribe.Core.Ocr
 {
     public enum OcrRegionType
     {
-        AddMoon,
-        RemoveMoon
+        Talkatoo,
+        MoonGet,
+        StoryMoon
     }
 
-    public record OcrRegion(OcrRegionType Type, Rect Bounds);
+    public record OcrRegion(
+        OcrRegionType Type,
+        Rect Bounds,
+        ITextPresenceDetector Detector,
+        int StableFrameCount = 10,
+        int StableImageMaxHammingDistance = 12,
+        Rect? DetectionBounds = null,
+        int DetectionIntervalFrames = 1
+    );
 }

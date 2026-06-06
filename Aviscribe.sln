@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Windows.Capture", "Windows.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core.Capture", "Core.Capture\Core.Capture.csproj", "{4BF5709E-2DA1-4074-AD9E-D23E7F440DF2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aviscribe.Classifier", "Classifier\Aviscribe.Classifier.csproj", "{AB415E62-7FA0-4F76-956F-89921ED4AB58}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,6 +41,10 @@ Global
 		{4BF5709E-2DA1-4074-AD9E-D23E7F440DF2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4BF5709E-2DA1-4074-AD9E-D23E7F440DF2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4BF5709E-2DA1-4074-AD9E-D23E7F440DF2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AB415E62-7FA0-4F76-956F-89921ED4AB58}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AB415E62-7FA0-4F76-956F-89921ED4AB58}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AB415E62-7FA0-4F76-956F-89921ED4AB58}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AB415E62-7FA0-4F76-956F-89921ED4AB58}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
