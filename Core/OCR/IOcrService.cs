@@ -1,5 +1,4 @@
-﻿using Aviscribe.Core.Capture;
-using OpenCvSharp;
+﻿using OpenCvSharp;
 
 namespace Aviscribe.Core.Ocr
 {

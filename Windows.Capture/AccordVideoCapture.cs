@@ -6,13 +6,14 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using OpenCvSharp.Extensions;
+using Accord.IO;
 
 namespace Aviscribe.Windows.Capture
 {
     public class AccordVideoCapture : IVideoCapture
     {
-        private string _moniker;
-        private VideoCaptureDevice? _video;
+        private readonly string _moniker;
+        private readonly VideoCaptureDevice _video;
 
         public event Action<VideoFrame>? FrameReceived;
 
@@ -33,6 +34,7 @@ namespace Aviscribe.Windows.Capture
 
         public void Stop()
         {
+            _video.NewFrame -= OnNewFrame;
             _video.SignalToStop();
             _video.WaitForStop();
         }
@@ -42,6 +44,8 @@ namespace Aviscribe.Windows.Capture
             using var bitmap = (Bitmap)eventArgs.Frame.Clone();
             VideoFrame frame = new VideoFrame(BitmapConverter.ToMat(bitmap), DateTime.UtcNow);
             FrameReceived?.Invoke(frame);
+
+            //bitmap.Save("C:\\Users\\[removed]\\Downloads\\moon_get.png");
         }
     }
 }
