@@ -76,11 +76,24 @@
 					</Grid>
 				</Border>
 
-				<Grid Grid.Row="1" ColumnDefinitions="1.05*,1.05*,1.4*" ColumnSpacing="8">
+				<Grid Grid.Row="1" ColumnDefinitions="1.7*,0.9*,1.1*" ColumnSpacing="8">
 					<Border Classes="panel" BorderBrush="#D89B28">
 						<Grid RowDefinitions="Auto,*" RowSpacing="8">
 							<TextBlock Classes="sectionTitle" Text="Pending"/>
-							<ListBox Name="lstPending" Grid.Row="1" Classes="runList"/>
+							<ListBox Name="lstPending" Grid.Row="1" Classes="runList">
+								<ListBox.ItemTemplate>
+									<DataTemplate x:CompileBindings="False">
+										<StackPanel Orientation="Horizontal" Spacing="10">
+											<Border Width="250" Height="141" CornerRadius="4" ClipToBounds="True"
+													IsVisible="{Binding HasImage}" Background="Black">
+												<Image Source="{Binding Image}" Stretch="UniformToFill"/>
+											</Border>
+											<TextBlock Text="{Binding Label}" TextWrapping="Wrap"
+													   VerticalAlignment="Center" MaxWidth="280"/>
+										</StackPanel>
+									</DataTemplate>
+								</ListBox.ItemTemplate>
+							</ListBox>
 						</Grid>
 					</Border>
 
@@ -147,6 +160,7 @@
 								<TextBlock Text="Category"/>
 								<ComboBox Name="cbCategorySelect"/>
 								<CheckBox Name="chkIncludePostGame" Content="Include postgame kingdoms"/>
+								<CheckBox Name="chkShowPendingImages" Content="Show images for pending moons"/>
 							</StackPanel>
 						</Border>
 

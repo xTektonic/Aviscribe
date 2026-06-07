@@ -27,6 +27,7 @@ namespace Aviscribe.UI
         private readonly RunOutputWriter _outputWriter = new();
         private readonly Queue<AmbiguousOcrResult> _reviewQueue = new();
         private readonly HashSet<string> _reviewSignatures = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Bitmap> _moonImageCache = new(StringComparer.OrdinalIgnoreCase);
 
         private FrameProcessor? _processor;
         private AmbiguousOcrResult? _activeReview;
@@ -187,6 +188,14 @@ namespace Aviscribe.UI
             {
                 _state.Settings.SeasideBeforeSnow = seasideBeforeSnowCheck.IsChecked == true;
                 RefreshKingdoms();
+                _state.NotifySettingsChanged();
+            };
+
+            var showPendingImagesCheck = this.GetControl<CheckBox>("chkShowPendingImages");
+            showPendingImagesCheck.IsChecked = _state.Settings.ShowPendingMoonImages;
+            showPendingImagesCheck.IsCheckedChanged += (_, _) =>
+            {
+                _state.Settings.ShowPendingMoonImages = showPendingImagesCheck.IsChecked == true;
                 _state.NotifySettingsChanged();
             };
 
@@ -413,7 +422,7 @@ namespace Aviscribe.UI
                 if (_pendingList != null)
                 {
                     _updatingLists = true;
-                    _pendingList.ItemsSource = snapshot.Pending.Select(CreateListItem).ToList();
+                    _pendingList.ItemsSource = snapshot.Pending.Select(CreatePendingListItem).ToList();
                     _pendingList.SelectedItem = null;
                     _updatingLists = false;
                 }
@@ -1081,6 +1090,34 @@ namespace Aviscribe.UI
             return new MoonListItem(moon, $"{moon.Id}. {FormatMoon(moon)}");
         }
 
+        private MoonListItem CreatePendingListItem(Moon moon)
+        {
+            return new MoonListItem(
+                moon,
+                $"{moon.Id}. {FormatMoon(moon)}",
+                _state.Settings.ShowPendingMoonImages ? GetMoonImage(moon) : null);
+        }
+
+        private Bitmap? GetMoonImage(Moon moon)
+        {
+            var key = $"{moon.Kingdom}/{moon.Id}.png";
+            if (_moonImageCache.TryGetValue(key, out var cached))
+                return cached;
+
+            try
+            {
+                var uri = new Uri($"avares://UI/Assets/moons/{key}");
+                using var stream = AssetLoader.Open(uri);
+                var image = new Bitmap(stream);
+                _moonImageCache[key] = image;
+                return image;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private string FormatMoon(Moon moon)
         {
             return MoonDisplay.Format(moon, _state.Settings.OutputLanguage);
@@ -1100,8 +1137,10 @@ namespace Aviscribe.UI
             });
         }
 
-        private sealed record MoonListItem(Moon Moon, string Label)
+        private sealed record MoonListItem(Moon Moon, string Label, Bitmap? Image = null)
         {
+            public bool HasImage => Image != null;
+
             public override string ToString() => Label;
         }
 
