@@ -46,6 +46,7 @@ namespace Aviscribe.Core
                     OutputLanguage = snapshot.OutputLanguage,
                     WoodedBeforeLake = snapshot.WoodedBeforeLake,
                     SeasideBeforeSnow = snapshot.SeasideBeforeSnow,
+                    ShowPendingMoonImages = snapshot.ShowPendingMoonImages,
                     FocusMoonNumberHotkey = snapshot.FocusMoonNumberHotkey,
                     MoveToPendingHotkey = snapshot.MoveToPendingHotkey,
                     MoveToCountedHotkey = snapshot.MoveToCountedHotkey,
