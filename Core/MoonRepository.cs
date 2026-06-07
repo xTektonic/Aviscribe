@@ -53,6 +53,16 @@ namespace Aviscribe.Core
                 .ToList();
         }
 
+        public List<string> GetKingdoms(RunSettings settings)
+        {
+            var kingdoms = GetKingdoms(settings.IncludePostGameKingdoms);
+
+            if (!settings.IncludePostGameKingdoms)
+                kingdoms = kingdoms.Where(kingdom => KingdomRoute.GetRequirement(kingdom) > 0).ToList();
+
+            return KingdomRoute.Order(kingdoms, settings).ToList();
+        }
+
         public List<Moon> GetByKingdom(string kingdom)
         {
             return Moons

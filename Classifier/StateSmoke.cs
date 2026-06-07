@@ -95,6 +95,12 @@ namespace Aviscribe.Classifier
             Expect(!state.UncountedCollected.Contains(manualMoon), "Move to pending should clear uncounted state.");
             Expect(state.Pending.Contains(manualMoon), "Move to pending from wrong moons should restore pending state.");
 
+            state.MoveToCollected(manualMoon);
+            state.MoveToUncounted(manualMoon);
+            Expect(!state.Pending.Contains(manualMoon), "Exclusive state should clear pending when moved to wrong.");
+            Expect(!state.Collected.Contains(manualMoon), "Exclusive state should clear counted when moved to wrong.");
+            Expect(state.UncountedCollected.Contains(manualMoon), "Exclusive state should leave the moon in exactly one list.");
+
             var directCollectedMoon = new Moon
             {
                 Id = 6,
