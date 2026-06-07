@@ -91,7 +91,9 @@ namespace Aviscribe.Core
 
             lock (_sync)
             {
-                if (!Pending.Contains(moon) && !Collected.Contains(moon) && !UncountedCollected.Contains(moon))
+                if (!ContainsMoon(Pending, moon) &&
+                    !ContainsMoon(Collected, moon) &&
+                    !ContainsMoon(UncountedCollected, moon))
                 {
                     Pending.Add(moon);
                     changed = true;
@@ -112,14 +114,11 @@ namespace Aviscribe.Core
 
             lock (_sync)
             {
-                changed = Collected.Remove(moon) || changed;
-                changed = UncountedCollected.Remove(moon) || changed;
-
-                if (!Pending.Contains(moon))
-                {
-                    Pending.Add(moon);
-                    changed = true;
-                }
+                changed = RemoveMoon(Pending, moon) || changed;
+                changed = RemoveMoon(Collected, moon) || changed;
+                changed = RemoveMoon(UncountedCollected, moon) || changed;
+                Pending.Add(moon);
+                changed = true;
             }
 
             if (changed)
@@ -136,16 +135,19 @@ namespace Aviscribe.Core
 
             lock (_sync)
             {
-                if (Collected.Contains(moon))
+                if (ContainsMoon(Collected, moon))
                     return CollectionOutcome.AlreadyCounted;
 
-                if (UncountedCollected.Contains(moon))
+                if (ContainsMoon(UncountedCollected, moon))
                     return CollectionOutcome.AlreadyUncounted;
 
                 var countsForRules = moon.IsStory
                     ? Settings.AllowsStoryMoons
-                    : Pending.Remove(moon);
+                    : ContainsMoon(Pending, moon);
 
+                RemoveMoon(Pending, moon);
+                RemoveMoon(Collected, moon);
+                RemoveMoon(UncountedCollected, moon);
                 if (countsForRules)
                 {
                     Collected.Add(moon);
@@ -168,13 +170,12 @@ namespace Aviscribe.Core
 
             lock (_sync)
             {
-                if (Collected.Contains(moon))
-                    return CollectionOutcome.AlreadyCounted;
-
-                if (UncountedCollected.Contains(moon))
+                if (ContainsMoon(UncountedCollected, moon))
                     return CollectionOutcome.AlreadyUncounted;
 
-                Pending.Remove(moon);
+                RemoveMoon(Pending, moon);
+                RemoveMoon(Collected, moon);
+                RemoveMoon(UncountedCollected, moon);
                 UncountedCollected.Add(moon);
             }
 
@@ -190,14 +191,11 @@ namespace Aviscribe.Core
 
             lock (_sync)
             {
-                changed = Pending.Remove(moon) || changed;
-                changed = UncountedCollected.Remove(moon) || changed;
-
-                if (!Collected.Contains(moon))
-                {
-                    Collected.Add(moon);
-                    changed = true;
-                }
+                changed = RemoveMoon(Pending, moon) || changed;
+                changed = RemoveMoon(Collected, moon) || changed;
+                changed = RemoveMoon(UncountedCollected, moon) || changed;
+                Collected.Add(moon);
+                changed = true;
             }
 
             if (changed)
@@ -214,14 +212,11 @@ namespace Aviscribe.Core
 
             lock (_sync)
             {
-                changed = Pending.Remove(moon) || changed;
-                changed = Collected.Remove(moon) || changed;
-
-                if (!UncountedCollected.Contains(moon))
-                {
-                    UncountedCollected.Add(moon);
-                    changed = true;
-                }
+                changed = RemoveMoon(Pending, moon) || changed;
+                changed = RemoveMoon(Collected, moon) || changed;
+                changed = RemoveMoon(UncountedCollected, moon) || changed;
+                UncountedCollected.Add(moon);
+                changed = true;
             }
 
             if (changed)
@@ -238,9 +233,9 @@ namespace Aviscribe.Core
 
             lock (_sync)
             {
-                changed = Pending.Remove(moon);
-                changed = Collected.Remove(moon) || changed;
-                changed = UncountedCollected.Remove(moon) || changed;
+                changed = RemoveMoon(Pending, moon);
+                changed = RemoveMoon(Collected, moon) || changed;
+                changed = RemoveMoon(UncountedCollected, moon) || changed;
             }
 
             if (changed)
@@ -260,9 +255,15 @@ namespace Aviscribe.Core
             {
                 CurrentKingdom = kingdom;
                 Settings.CopyFrom(settings);
-                Pending = pending.Distinct().ToList();
-                Collected = collected.Distinct().ToList();
-                UncountedCollected = uncountedCollected.Distinct().ToList();
+                Collected = DistinctMoons(collected);
+                UncountedCollected = DistinctMoons(uncountedCollected)
+                    .Where(moon => !ContainsMoon(Collected, moon))
+                    .ToList();
+                Pending = DistinctMoons(pending)
+                    .Where(moon =>
+                        !ContainsMoon(Collected, moon) &&
+                        !ContainsMoon(UncountedCollected, moon))
+                    .ToList();
             }
 
             OnChanged();
@@ -278,6 +279,13 @@ namespace Aviscribe.Core
                     Settings.IncludePostGameKingdoms,
                     Settings.InputLanguage,
                     Settings.OutputLanguage,
+                    Settings.WoodedBeforeLake,
+                    Settings.SeasideBeforeSnow,
+                    Settings.FocusMoonNumberHotkey,
+                    Settings.MoveToPendingHotkey,
+                    Settings.MoveToCountedHotkey,
+                    Settings.MoveToWrongHotkey,
+                    Settings.RemoveMoonHotkey,
                     Pending.ToList(),
                     Collected.ToList(),
                     UncountedCollected.ToList(),
@@ -295,6 +303,30 @@ namespace Aviscribe.Core
         {
             Changed?.Invoke(this, EventArgs.Empty);
         }
+
+        private static bool ContainsMoon(IEnumerable<Moon> moons, Moon moon)
+        {
+            return moons.Any(candidate => SameMoon(candidate, moon));
+        }
+
+        private static bool RemoveMoon(List<Moon> moons, Moon moon)
+        {
+            return moons.RemoveAll(candidate => SameMoon(candidate, moon)) > 0;
+        }
+
+        private static List<Moon> DistinctMoons(IEnumerable<Moon> moons)
+        {
+            return moons
+                .GroupBy(moon => $"{moon.Kingdom}\0{moon.Id}", StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToList();
+        }
+
+        private static bool SameMoon(Moon left, Moon right)
+        {
+            return left.Id == right.Id &&
+                left.Kingdom.Equals(right.Kingdom, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     public sealed record GameStateSnapshot(
@@ -303,6 +335,13 @@ namespace Aviscribe.Core
         bool IncludePostGameKingdoms,
         GameLanguage InputLanguage,
         GameLanguage OutputLanguage,
+        bool WoodedBeforeLake,
+        bool SeasideBeforeSnow,
+        string FocusMoonNumberHotkey,
+        string MoveToPendingHotkey,
+        string MoveToCountedHotkey,
+        string MoveToWrongHotkey,
+        string RemoveMoonHotkey,
         IReadOnlyList<Moon> Pending,
         IReadOnlyList<Moon> Collected,
         IReadOnlyList<Moon> UncountedCollected,

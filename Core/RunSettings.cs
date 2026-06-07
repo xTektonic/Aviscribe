@@ -6,6 +6,13 @@ namespace Aviscribe.Core
         public bool IncludePostGameKingdoms { get; set; }
         public GameLanguage InputLanguage { get; set; } = GameLanguage.ChineseTraditional;
         public GameLanguage OutputLanguage { get; set; } = GameLanguage.English;
+        public bool WoodedBeforeLake { get; set; } = true;
+        public bool SeasideBeforeSnow { get; set; } = true;
+        public string FocusMoonNumberHotkey { get; set; } = "M";
+        public string MoveToPendingHotkey { get; set; } = "P";
+        public string MoveToCountedHotkey { get; set; } = "C";
+        public string MoveToWrongHotkey { get; set; } = "W";
+        public string RemoveMoonHotkey { get; set; } = "X";
 
         public bool AllowsStoryMoons => Category != RunCategory.Hardcore;
 
@@ -16,7 +23,14 @@ namespace Aviscribe.Core
                 Category = Category,
                 IncludePostGameKingdoms = IncludePostGameKingdoms,
                 InputLanguage = InputLanguage,
-                OutputLanguage = OutputLanguage
+                OutputLanguage = OutputLanguage,
+                WoodedBeforeLake = WoodedBeforeLake,
+                SeasideBeforeSnow = SeasideBeforeSnow,
+                FocusMoonNumberHotkey = FocusMoonNumberHotkey,
+                MoveToPendingHotkey = MoveToPendingHotkey,
+                MoveToCountedHotkey = MoveToCountedHotkey,
+                MoveToWrongHotkey = MoveToWrongHotkey,
+                RemoveMoonHotkey = RemoveMoonHotkey
             };
         }
 
@@ -26,6 +40,13 @@ namespace Aviscribe.Core
             IncludePostGameKingdoms = settings.IncludePostGameKingdoms;
             InputLanguage = settings.InputLanguage;
             OutputLanguage = settings.OutputLanguage;
+            WoodedBeforeLake = settings.WoodedBeforeLake;
+            SeasideBeforeSnow = settings.SeasideBeforeSnow;
+            FocusMoonNumberHotkey = settings.FocusMoonNumberHotkey;
+            MoveToPendingHotkey = settings.MoveToPendingHotkey;
+            MoveToCountedHotkey = settings.MoveToCountedHotkey;
+            MoveToWrongHotkey = settings.MoveToWrongHotkey;
+            RemoveMoonHotkey = settings.RemoveMoonHotkey;
         }
     }
 }
