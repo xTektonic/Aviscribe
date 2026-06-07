@@ -8,6 +8,7 @@ namespace Aviscribe.Core
         public GameLanguage OutputLanguage { get; set; } = GameLanguage.English;
         public bool WoodedBeforeLake { get; set; } = true;
         public bool SeasideBeforeSnow { get; set; } = true;
+        public bool ShowPendingMoonImages { get; set; }
         public string FocusMoonNumberHotkey { get; set; } = "M";
         public string MoveToPendingHotkey { get; set; } = "P";
         public string MoveToCountedHotkey { get; set; } = "C";
@@ -26,6 +27,7 @@ namespace Aviscribe.Core
                 OutputLanguage = OutputLanguage,
                 WoodedBeforeLake = WoodedBeforeLake,
                 SeasideBeforeSnow = SeasideBeforeSnow,
+                ShowPendingMoonImages = ShowPendingMoonImages,
                 FocusMoonNumberHotkey = FocusMoonNumberHotkey,
                 MoveToPendingHotkey = MoveToPendingHotkey,
                 MoveToCountedHotkey = MoveToCountedHotkey,
@@ -42,6 +44,7 @@ namespace Aviscribe.Core
             OutputLanguage = settings.OutputLanguage;
             WoodedBeforeLake = settings.WoodedBeforeLake;
             SeasideBeforeSnow = settings.SeasideBeforeSnow;
+            ShowPendingMoonImages = settings.ShowPendingMoonImages;
             FocusMoonNumberHotkey = settings.FocusMoonNumberHotkey;
             MoveToPendingHotkey = settings.MoveToPendingHotkey;
             MoveToCountedHotkey = settings.MoveToCountedHotkey;
