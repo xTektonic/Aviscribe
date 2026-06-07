@@ -8,6 +8,7 @@ namespace Aviscribe.Core
         public RunSettings Settings { get; set; } = new();
         public bool WriteOverlay { get; set; } = true;
         public string OverlayOutputPath { get; set; } = AppPaths.PendingOutputPath;
+        public string CaptureDeviceId { get; set; } = string.Empty;
         public List<int> PendingMoonIds { get; set; } = new();
         public List<int> CollectedMoonIds { get; set; } = new();
         public List<int> UncountedCollectedMoonIds { get; set; } = new();
