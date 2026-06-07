@@ -28,7 +28,12 @@ namespace Aviscribe.Core
             return JsonSerializer.Deserialize<SavedRunState>(json, JsonOptions);
         }
 
-        public void Save(string path, GameStateSnapshot snapshot, bool writeOverlay, string overlayOutputPath)
+        public void Save(
+            string path,
+            GameStateSnapshot snapshot,
+            bool writeOverlay,
+            string overlayOutputPath,
+            string captureDeviceId = "")
         {
             var state = new SavedRunState
             {
@@ -38,10 +43,18 @@ namespace Aviscribe.Core
                     Category = snapshot.Category,
                     IncludePostGameKingdoms = snapshot.IncludePostGameKingdoms,
                     InputLanguage = snapshot.InputLanguage,
-                    OutputLanguage = snapshot.OutputLanguage
+                    OutputLanguage = snapshot.OutputLanguage,
+                    WoodedBeforeLake = snapshot.WoodedBeforeLake,
+                    SeasideBeforeSnow = snapshot.SeasideBeforeSnow,
+                    FocusMoonNumberHotkey = snapshot.FocusMoonNumberHotkey,
+                    MoveToPendingHotkey = snapshot.MoveToPendingHotkey,
+                    MoveToCountedHotkey = snapshot.MoveToCountedHotkey,
+                    MoveToWrongHotkey = snapshot.MoveToWrongHotkey,
+                    RemoveMoonHotkey = snapshot.RemoveMoonHotkey
                 },
                 WriteOverlay = writeOverlay,
                 OverlayOutputPath = overlayOutputPath,
+                CaptureDeviceId = captureDeviceId,
                 PendingMoonIds = snapshot.Pending.Select(moon => moon.Id).ToList(),
                 CollectedMoonIds = snapshot.Collected.Select(moon => moon.Id).ToList(),
                 UncountedCollectedMoonIds = snapshot.UncountedCollected.Select(moon => moon.Id).ToList()
@@ -58,7 +71,10 @@ namespace Aviscribe.Core
 
         public void Restore(GameState gameState, SavedRunState savedState)
         {
-            var byId = _repository.Moons.ToDictionary(moon => moon.Id);
+            var byId = _repository
+                .GetCollectionCandidates(savedState.CurrentKingdom, savedState.Settings)
+                .GroupBy(moon => moon.Id)
+                .ToDictionary(group => group.Key, group => group.First());
 
             gameState.Restore(
                 savedState.CurrentKingdom,
