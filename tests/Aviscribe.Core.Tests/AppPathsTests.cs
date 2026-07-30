@@ -19,6 +19,12 @@ public sealed class AppPathsTests
                 AppPlatform.Windows,
                 @"C:\Users\runner",
                 @"C:\Users\runner\AppData\Local"));
+        Assert.Equal(
+            @"C:\Users\runner\AppData\Local\Aviscribe",
+            AppPaths.ResolveUserDataFolder(
+                AppPlatform.Windows,
+                @"C:\Users\runner",
+                ""));
     }
 
     [Fact]
@@ -61,5 +67,11 @@ public sealed class AppPathsTests
                 "/home/runner",
                 "",
                 "/var/state"));
+        Assert.Equal(
+            "/home/Zoë/.config/aviscribe",
+            AppPaths.ResolveUserDataFolder(
+                AppPlatform.Linux,
+                "/home/Zoë",
+                ""));
     }
 }

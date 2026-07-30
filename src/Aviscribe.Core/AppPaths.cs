@@ -69,7 +69,11 @@ public static class AppPaths
     {
         return platform switch
         {
-            AppPlatform.Windows => CombineWindows(localAppData, "Aviscribe"),
+            AppPlatform.Windows => CombineWindows(
+                string.IsNullOrWhiteSpace(localAppData)
+                    ? CombineWindows(homeFolder, "AppData", "Local")
+                    : localAppData,
+                "Aviscribe"),
             AppPlatform.MacOS => CombineUnix(
                 homeFolder,
                 "Library",
@@ -93,7 +97,9 @@ public static class AppPaths
         return platform switch
         {
             AppPlatform.Windows => CombineWindows(
-                localAppData,
+                string.IsNullOrWhiteSpace(localAppData)
+                    ? CombineWindows(homeFolder, "AppData", "Local")
+                    : localAppData,
                 "Aviscribe",
                 "logs"),
             AppPlatform.MacOS => CombineUnix(
@@ -113,7 +119,17 @@ public static class AppPaths
 
     private static string CombineWindows(params string[] parts)
     {
-        return Path.Combine(parts);
+        var result = parts[0]
+            .Replace('/', '\\')
+            .TrimEnd('\\');
+        foreach (var part in parts.Skip(1))
+        {
+            var segment = part.Trim('/', '\\');
+            if (segment.Length > 0)
+                result = $"{result}\\{segment}";
+        }
+
+        return result;
     }
 
     private static string CombineUnix(params string[] parts)
