@@ -34,6 +34,7 @@ namespace Aviscribe.Core.Ocr
         private readonly Queue<OcrWorkItem> _ocrQueue = new();
         private readonly HashSet<ConfirmationKey> _queuedOrInFlightConfirmations = new();
         private readonly ITextPresenceDetector _textDetector;
+        private readonly CaptureCropSettings _cropSettings;
 
         private readonly OcrRegion[] _regions;
 
@@ -43,12 +44,14 @@ namespace Aviscribe.Core.Ocr
             IOcrService ocr,
             MoonMatcher matcher,
             GameState state,
-            ITextPresenceDetector? textDetector = null)
+            ITextPresenceDetector? textDetector = null,
+            CaptureCropSettings? cropSettings = null)
         {
             _ocr = ocr;
             _matcher = matcher;
             _state = state;
             _textDetector = textDetector ?? new HeuristicTextPresenceDetector();
+            _cropSettings = (cropSettings ?? CaptureCropSettings.Default).Clone();
             _observedKingdom = state.CurrentKingdom;
 
             _regions =
@@ -56,11 +59,11 @@ namespace Aviscribe.Core.Ocr
                 //new(OcrRegionType.Talkatoo, new Rect(666, 828, 649, 113), _textDetector), // multiline
                 new(
                     OcrRegionType.Talkatoo,
-                    new Rect(666, 862, 649, 48),
+                    OcrReferenceLayout.Talkatoo.OcrBounds,
                     _textDetector,
                     StableFrameCount: TalkatooConfirmationTracker.RequiredStableFrames,
                     StableImageMaxHammingDistance: 64,
-                    DetectionBounds: new Rect(600, 862, 715, 48),
+                    DetectionBounds: OcrReferenceLayout.Talkatoo.DetectionBounds,
                     DetectionIntervalFrames: TalkatooConfirmationTracker.IdleDetectionIntervalFrames), // single line
                 new(
                     OcrRegionType.MoonGet,
@@ -151,11 +154,41 @@ namespace Aviscribe.Core.Ocr
 
         private void ProcessFrame(VideoFrame frame)
         {
-            var mat = frame.Frame;
-
-            if (mat.Empty())
+            var source = frame.Frame;
+            if (source.Empty())
                 return;
 
+            var crop = _cropSettings.Resolve(source.Width, source.Height);
+            if (crop.X == 0 &&
+                crop.Y == 0 &&
+                crop.Width == OcrReferenceLayout.Width &&
+                crop.Height == OcrReferenceLayout.Height &&
+                source.Width == OcrReferenceLayout.Width &&
+                source.Height == OcrReferenceLayout.Height)
+            {
+                ProcessReferenceFrame(source);
+                return;
+            }
+
+            using var cropped = new Mat(source, crop);
+            if (cropped.Width == OcrReferenceLayout.Width &&
+                cropped.Height == OcrReferenceLayout.Height)
+            {
+                ProcessReferenceFrame(cropped);
+                return;
+            }
+
+            using var normalized = new Mat();
+            Cv2.Resize(
+                cropped,
+                normalized,
+                new Size(OcrReferenceLayout.Width, OcrReferenceLayout.Height),
+                interpolation: InterpolationFlags.Linear);
+            ProcessReferenceFrame(normalized);
+        }
+
+        private void ProcessReferenceFrame(Mat mat)
+        {
             _processedFrameCount++;
             ResetRegionStateIfKingdomChanged();
 

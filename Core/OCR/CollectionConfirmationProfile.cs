@@ -13,8 +13,8 @@ namespace Aviscribe.Core.Ocr
     {
         internal static CollectionConfirmationProfile MoonGet { get; } = new(
             OcrRegionType.MoonGet,
-            new Rect(490, 797, 930, 60),
-            new Rect(320, 600, 1250, 250),
+            OcrReferenceLayout.MoonGet.OcrBounds,
+            OcrReferenceLayout.MoonGet.DetectionBounds,
             DetectionIntervalFrames: 5,
             RequiredPresentObservations: 1,
             // Named videos contain gaps up to 24 sampled absences within one overlay;
@@ -24,8 +24,8 @@ namespace Aviscribe.Core.Ocr
 
         internal static CollectionConfirmationProfile StoryMoon { get; } = new(
             OcrRegionType.StoryMoon,
-            new Rect(450, 820, 1100, 150),
-            new Rect(450, 820, 1100, 150),
+            OcrReferenceLayout.StoryMoon.OcrBounds,
+            OcrReferenceLayout.StoryMoon.DetectionBounds,
             DetectionIntervalFrames: 1,
             RequiredPresentObservations: 2,
             // Named videos contain gaps up to four observations within one overlay.
