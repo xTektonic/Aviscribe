@@ -1,0 +1,12 @@
+Package: aviscribe
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: amd64
+Installed-Size: @INSTALLED_SIZE@
+Maintainer: xTektonic
+Depends: libc6 (>= 2.35), libx11-6, libice6, libsm6, libfontconfig1
+Homepage: https://github.com/xTektonic/Aviscribe
+Description: Talkatoo run assistant for Super Mario Odyssey
+ Aviscribe watches a selected capture source, recognizes gameplay text,
+ and maintains Talkatoo run state.
