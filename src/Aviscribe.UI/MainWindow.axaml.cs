@@ -35,14 +35,13 @@ namespace Aviscribe.UI
         private readonly Dictionary<string, CaptureCropSettings> _captureCropsByDevice =
             new(StringComparer.Ordinal);
         private readonly object _captureConfigurationLock = new();
-        private readonly object _snapshotRequestLock = new();
+        private readonly RawFrameSnapshotBroker _snapshotBroker = new();
         private readonly SemaphoreSlim _captureLifecycleGate = new(1, 1);
         private readonly CancellationTokenSource _closingCancellation = new();
 
         private FrameProcessor? _processor;
         private string _processorCaptureDeviceId = string.Empty;
         private AmbiguousOcrResult? _activeReview;
-        private TaskCompletionSource<Mat>? _pendingSnapshotRequest;
         private Bitmap? _previewBitmap;
 
         private Image? _previewImage;
@@ -445,15 +444,7 @@ namespace Aviscribe.UI
                 Volatile.Write(ref _sourceWidth, frame.Frame.Width);
                 Volatile.Write(ref _sourceHeight, frame.Frame.Height);
 
-                TaskCompletionSource<Mat>? snapshotRequest;
-                lock (_snapshotRequestLock)
-                {
-                    snapshotRequest = _pendingSnapshotRequest;
-                    _pendingSnapshotRequest = null;
-                }
-
-                if (snapshotRequest != null)
-                    snapshotRequest.TrySetResult(frame.Frame.Clone());
+                _snapshotBroker.Offer(frame);
 
                 if (Interlocked.Exchange(ref _previewRequested, 0) != 0)
                 {
@@ -600,7 +591,7 @@ namespace Aviscribe.UI
             string reason,
             CancellationToken cancellationToken)
         {
-            CancelPendingSnapshot(new OperationCanceledException(reason));
+            _snapshotBroker.Cancel(new OperationCanceledException(reason));
             _diagnostics.Debug($"Stopping capture: {reason}.");
 
             var capture = _video;
@@ -636,7 +627,7 @@ namespace Aviscribe.UI
             object? sender,
             CaptureErrorEventArgs args)
         {
-            CancelPendingSnapshot(
+            _snapshotBroker.Cancel(
                 args.Exception ?? new IOException(args.Message));
             _diagnostics.Error(
                 args.DeviceDisconnected
@@ -716,49 +707,13 @@ namespace Aviscribe.UI
             if (_inputSelect?.SelectedItem is not VideoDevice selected)
                 return null;
 
-            var request = new TaskCompletionSource<Mat>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
-            lock (_snapshotRequestLock)
-            {
-                _pendingSnapshotRequest?.TrySetCanceled();
-                _pendingSnapshotRequest = request;
-            }
-
-            using var registration = cancellationToken.Register(() =>
-                request.TrySetCanceled(cancellationToken));
-            try
-            {
-                await EnsureCaptureStartedAsync(selected, cancellationToken);
-                using var snapshot = await request.Task.WaitAsync(
-                    TimeSpan.FromSeconds(5),
-                    cancellationToken);
-                Cv2.ImEncode(".png", snapshot, out var buffer);
-                using var stream = new MemoryStream(buffer);
-                return new Bitmap(stream);
-            }
-            finally
-            {
-                lock (_snapshotRequestLock)
-                {
-                    if (ReferenceEquals(_pendingSnapshotRequest, request))
-                        _pendingSnapshotRequest = null;
-                }
-            }
-        }
-
-        private void CancelPendingSnapshot(Exception reason)
-        {
-            TaskCompletionSource<Mat>? request;
-            lock (_snapshotRequestLock)
-            {
-                request = _pendingSnapshotRequest;
-                _pendingSnapshotRequest = null;
-            }
-
-            if (reason is OperationCanceledException)
-                request?.TrySetCanceled();
-            else
-                request?.TrySetException(reason);
+            await EnsureCaptureStartedAsync(selected, cancellationToken);
+            using var snapshot = await _snapshotBroker.RequestAsync(
+                TimeSpan.FromSeconds(5),
+                cancellationToken);
+            Cv2.ImEncode(".png", snapshot.Frame, out var buffer);
+            using var stream = new MemoryStream(buffer);
+            return new Bitmap(stream);
         }
 
         private CaptureCropSettings GetCropForDevice(string deviceId)
@@ -1585,7 +1540,7 @@ namespace Aviscribe.UI
         {
             _diagnostics.Information("Aviscribe is shutting down.");
             _closingCancellation.Cancel();
-            CancelPendingSnapshot(
+            _snapshotBroker.Cancel(
                 new OperationCanceledException("The application was closed."));
             try
             {
@@ -1598,6 +1553,7 @@ namespace Aviscribe.UI
             }
 
             _processor?.Dispose();
+            _snapshotBroker.Dispose();
             _previewBitmap?.Dispose();
             foreach (var bitmap in _moonImageCache.Values)
                 bitmap.Dispose();

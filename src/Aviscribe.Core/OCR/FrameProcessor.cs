@@ -211,32 +211,17 @@ namespace Aviscribe.Core.Ocr
                 return;
 
             var cropSettings = Volatile.Read(ref _cropSettings);
-            var crop = cropSettings.Resolve(source.Width, source.Height);
-            if (crop.X == 0 &&
-                crop.Y == 0 &&
-                crop.Width == OcrReferenceLayout.Width &&
-                crop.Height == OcrReferenceLayout.Height &&
-                source.Width == OcrReferenceLayout.Width &&
-                source.Height == OcrReferenceLayout.Height)
+            if (GameplayFrameNormalizer.IsAlreadyNormalized(
+                    source,
+                    cropSettings))
             {
                 ProcessReferenceFrame(source);
                 return;
             }
 
-            using var cropped = new Mat(source, crop);
-            if (cropped.Width == OcrReferenceLayout.Width &&
-                cropped.Height == OcrReferenceLayout.Height)
-            {
-                ProcessReferenceFrame(cropped);
-                return;
-            }
-
-            using var normalized = new Mat();
-            Cv2.Resize(
-                cropped,
-                normalized,
-                new Size(OcrReferenceLayout.Width, OcrReferenceLayout.Height),
-                interpolation: InterpolationFlags.Linear);
+            using var normalized = GameplayFrameNormalizer.Normalize(
+                source,
+                cropSettings);
             ProcessReferenceFrame(normalized);
         }
 
