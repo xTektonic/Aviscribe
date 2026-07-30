@@ -337,7 +337,6 @@ namespace Aviscribe.UI
                 _state.Settings.OutputLanguage
             );
 
-            //var ocr = new TesseractOcrService("chi_tra");
             var ocr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
             var detector = LoadTextPresenceDetector();
 
