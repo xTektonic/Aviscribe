@@ -22,16 +22,17 @@ Longer categories:
 
 ## Project Boundaries
 
-Shared projects should stay platform-neutral:
+Maintained projects stay portable and map directly to their namespaces:
 
-- `Core`: moon data, run state, OCR abstractions, matching, frame processing, classifier interfaces.
-- `src/Aviscribe.Core.Capture`: capture interfaces only.
-- `UI`: platform-neutral Avalonia UI.
+- `src/Aviscribe.Core`: moon data, run state, OCR, matching, and frame processing
+- `src/Aviscribe.Core.Capture`: capture contracts, owned frames, and crop models
+- `src/Aviscribe.Capture`: shared FlashCap capture for DirectShow, AVFoundation, and V4L2
+- `src/Aviscribe.UI`: platform-neutral Avalonia views and controls
+- `src/Aviscribe.Desktop`: the single cross-platform GUI entry point
 
-OS-specific capture belongs in OS-specific projects:
-
-- `src/Aviscribe.Windows.Capture`: temporary Windows camera capture while the shared backend is established. OBS Virtual Camera compatibility requires DirectShow support.
-- Future Linux/macOS capture providers should live in their own projects and implement `IVideoProvider` / `IVideoCapture`.
+The old Windows application and Accord capture projects remain outside the
+solution only as temporary parity references. They are not a runtime or release
+dependency.
 
 ## Detection Pipeline
 
@@ -54,11 +55,9 @@ Text regions:
 
 ## Classifier Workflow
 
-The tracked classifier workspace is `tools/Aviscribe.Classifier/`. It reads local data from:
-
-```text
-C:\Users\amaho\Desktop\AviscribeClassifierData
-```
+The tracked classifier workspace is `tools/Aviscribe.Classifier/`. Pass local
+dataset and video paths explicitly; large private training inputs are not stored
+in the repository.
 
 The first goal is not training; it is measurement:
 
