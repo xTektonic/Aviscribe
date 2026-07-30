@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace Aviscribe.UI
 {
@@ -28,9 +29,16 @@ namespace Aviscribe.UI
         private readonly Queue<AmbiguousOcrResult> _reviewQueue = new();
         private readonly HashSet<string> _reviewSignatures = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Bitmap> _moonImageCache = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, CaptureCropSettings> _captureCropsByDevice =
+            new(StringComparer.Ordinal);
+        private readonly object _captureConfigurationLock = new();
+        private readonly object _snapshotRequestLock = new();
 
         private FrameProcessor? _processor;
+        private string _processorCaptureDeviceId = string.Empty;
         private AmbiguousOcrResult? _activeReview;
+        private TaskCompletionSource<Mat>? _pendingSnapshotRequest;
+        private Bitmap? _previewBitmap;
 
         private Image? _previewImage;
         private VideoDevice? _currentDevice;
@@ -53,6 +61,7 @@ namespace Aviscribe.UI
         private CheckBox? _writeOverlayCheck;
         private TextBox? _overlayPathText;
         private TextBox? _moonNumberText;
+        private TextBlock? _cropSummaryText;
         private TabControl? _mainTabs;
         private bool _processorRunning;
         private bool _writeOverlayEnabled = true;
@@ -65,7 +74,7 @@ namespace Aviscribe.UI
         private ManualMoonTarget _dragSourceTarget;
         private Moon? _dragMoon;
         private ListBoxItem? _dragVisualItem;
-        bool updatePreview = false;
+        private bool _updatePreview;
 
         public MainWindow()
             : this(new DesignVideoProvider())
@@ -101,6 +110,7 @@ namespace Aviscribe.UI
                 if (inputSelect.SelectedItem is VideoDevice device)
                 {
                     _captureDeviceId = device.Id;
+                    UpdateCropSummary();
                     PersistRunState(_state.CreateSnapshot());
                 }
             };
@@ -109,6 +119,7 @@ namespace Aviscribe.UI
             Button updatePreview = this.GetControl<Button>("btnUpdatePreview");
             updatePreview.Click += StartPreview;
             this.GetControl<Button>("btnSettingsUpdatePreview").Click += StartPreview;
+            this.GetControl<Button>("btnCropGameplay").Click += OpenCropWindow;
 
             _kingdomSelect = this.GetControl<ComboBox>("cbKingdomSelect");
             _kingdomSelect.SelectionChanged += (_, _) =>
@@ -237,7 +248,9 @@ namespace Aviscribe.UI
             _writeOverlayCheck = this.FindControl<CheckBox>("chkWriteOverlay");
             _overlayPathText = this.FindControl<TextBox>("txtOverlayPath");
             _moonNumberText = this.FindControl<TextBox>("txtMoonNumber");
+            _cropSummaryText = this.FindControl<TextBlock>("txtCropSummary");
             _mainTabs = this.FindControl<TabControl>("tabMain");
+            UpdateCropSummary();
 
             if (_overlayPathText != null)
             {
@@ -328,7 +341,13 @@ namespace Aviscribe.UI
             var ocr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
             var detector = LoadTextPresenceDetector();
 
-            _processor = new FrameProcessor(ocr, matcher, _state, detector);
+            _processor = new FrameProcessor(
+                ocr,
+                matcher,
+                _state,
+                detector,
+                GetCropForDevice(_captureDeviceId));
+            _processorCaptureDeviceId = _captureDeviceId;
             _processor.AmbiguousMatchReceived += (_, result) => EnqueueReview(result);
         }
 
@@ -350,59 +369,195 @@ namespace Aviscribe.UI
 
         private void OnFrame(VideoFrame frame)
         {
-            //frame.Frame.SaveImage("C:\\users\\amaho\\Downloads\\current.png");
-            _processor!.PushFrame(frame);
-
-            if (updatePreview)
+            TaskCompletionSource<Mat>? snapshotRequest;
+            lock (_snapshotRequestLock)
             {
-                UpdatePreview(frame.Frame);
-                updatePreview = false;
+                snapshotRequest = _pendingSnapshotRequest;
+                _pendingSnapshotRequest = null;
             }
 
-            //frame.Frame.Dispose();
+            if (snapshotRequest != null)
+                snapshotRequest.TrySetResult(frame.Frame.Clone());
+
+            if (_updatePreview)
+            {
+                try
+                {
+                    UpdatePreview(frame.Frame);
+                }
+                catch (Exception ex)
+                {
+                    SetStatus($"Could not update preview: {ex.Message}");
+                }
+                _updatePreview = false;
+            }
+
+            if (_processor != null)
+                _processor.PushFrame(frame);
+            else
+                frame.Dispose();
         }
 
         private void StartPreview(object? sender, RoutedEventArgs args)
         {
             ComboBox inputSelect = this.GetControl<ComboBox>("cbInputSelect");
-            VideoDevice? selected = inputSelect.SelectedItem as VideoDevice;
-            if (selected == null) return;
+            if (inputSelect.SelectedItem is not VideoDevice selected)
+                return;
 
-            updatePreview = true;
-            if (_currentDevice == null || _currentDevice.Id != selected.Id)
+            _updatePreview = true;
+            EnsureCaptureStarted(selected);
+        }
+
+        private void EnsureCaptureStarted(VideoDevice selected)
+        {
+            if (_currentDevice?.Id == selected.Id && _processorRunning)
+                return;
+
+            _processor?.Stop();
+            _processorRunning = false;
+            if (_video != null)
             {
-                _processor?.Stop();
-                _video?.Stop();
-                _processorRunning = false;
+                _video.FrameReceived -= OnFrame;
+                _video.Stop();
+            }
 
             _currentDevice = selected;
             _captureDeviceId = selected.Id;
-            _video = _videoProvider.GetVideoCapture(selected.Id);
-                _video.FrameReceived += OnFrame;
-
-                _video.Start();
-                _processor?.Start();
-                _processorRunning = true;
-                SetStatus($"Watching {selected.Name}");
+            if (_processor == null ||
+                !string.Equals(
+                    _processorCaptureDeviceId,
+                    selected.Id,
+                    StringComparison.Ordinal))
+            {
+                InitFrameProcessor();
             }
+            _video = _videoProvider.GetVideoCapture(selected.Id);
+            _video.FrameReceived += OnFrame;
+            _video.Start();
+            _processor?.Start();
+            _processorRunning = true;
+            UpdateCropSummary();
+            PersistRunState(_state.CreateSnapshot());
+            SetStatus($"Watching {selected.Name}");
         }
 
-        private void UpdatePreview(Mat frame)
+        private void UpdatePreview(Mat source)
         {
-            if (frame.Empty())
+            if (source.Empty())
                 return;
 
-            // Encode Mat once (fast + safe for UI)
-            Cv2.ImEncode(".png", frame, out var buffer);
+            var crop = GetCropForDevice(_captureDeviceId).Resolve(source.Width, source.Height);
+            using var cropped = new Mat(source, crop);
+            Cv2.ImEncode(".png", cropped, out var buffer);
 
             using var stream = new MemoryStream(buffer);
-
             var bitmap = new Bitmap(stream);
 
             Dispatcher.UIThread.Post(() =>
             {
+                var oldBitmap = _previewBitmap;
+                _previewBitmap = bitmap;
                 _previewImage!.Source = bitmap;
+                oldBitmap?.Dispose();
             });
+        }
+
+        private async void OpenCropWindow(object? sender, RoutedEventArgs args)
+        {
+            var inputSelect = this.GetControl<ComboBox>("cbInputSelect");
+            if (inputSelect.SelectedItem is not VideoDevice selected)
+            {
+                SetStatus("Select a capture source before cropping gameplay");
+                return;
+            }
+
+            var window = new GameplayCropWindow(
+                GetCropForDevice(selected.Id),
+                RequestRawSnapshotAsync);
+            var result = await window.ShowDialog<CaptureCropSettings?>(this);
+            if (result == null)
+                return;
+
+            lock (_captureConfigurationLock)
+                _captureCropsByDevice[selected.Id] = result.Clone();
+
+            _captureDeviceId = selected.Id;
+            UpdateCropSummary();
+            PersistRunState(_state.CreateSnapshot());
+            if (_currentDevice?.Id == selected.Id && _processorRunning)
+                RecreateFrameProcessor();
+
+            _updatePreview = true;
+            SetStatus("Gameplay crop applied");
+        }
+
+        private async Task<Bitmap?> RequestRawSnapshotAsync()
+        {
+            var inputSelect = this.GetControl<ComboBox>("cbInputSelect");
+            if (inputSelect.SelectedItem is not VideoDevice selected)
+                return null;
+
+            var request = new TaskCompletionSource<Mat>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            lock (_snapshotRequestLock)
+            {
+                _pendingSnapshotRequest?.TrySetException(
+                    new InvalidOperationException("A newer snapshot was requested."));
+                _pendingSnapshotRequest = request;
+            }
+
+            try
+            {
+                EnsureCaptureStarted(selected);
+                using var snapshot = await request.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Cv2.ImEncode(".png", snapshot, out var buffer);
+                using var stream = new MemoryStream(buffer);
+                return new Bitmap(stream);
+            }
+            catch
+            {
+                lock (_snapshotRequestLock)
+                {
+                    if (ReferenceEquals(_pendingSnapshotRequest, request))
+                        _pendingSnapshotRequest = null;
+                }
+                throw;
+            }
+        }
+
+        private CaptureCropSettings GetCropForDevice(string deviceId)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId))
+                return CaptureCropSettings.Default;
+
+            lock (_captureConfigurationLock)
+            {
+                return _captureCropsByDevice.TryGetValue(deviceId, out var crop)
+                    ? crop.Clone()
+                    : CaptureCropSettings.Default;
+            }
+        }
+
+        private IReadOnlyDictionary<string, CaptureCropSettings> GetCaptureCropSnapshot()
+        {
+            lock (_captureConfigurationLock)
+            {
+                return _captureCropsByDevice.ToDictionary(
+                    item => item.Key,
+                    item => item.Value.Clone(),
+                    StringComparer.Ordinal);
+            }
+        }
+
+        private void UpdateCropSummary()
+        {
+            if (_cropSummaryText == null)
+                return;
+
+            var crop = GetCropForDevice(_captureDeviceId);
+            _cropSummaryText.Text =
+                $"Crop: X {crop.X}, Y {crop.Y}, {crop.Width} × {crop.Height} " +
+                $"(source {crop.SourceWidth} × {crop.SourceHeight})";
         }
 
         private void UpdateRunState()
@@ -546,6 +701,16 @@ namespace Aviscribe.UI
                 _stateStore.Restore(_state, savedState);
                 _writeOverlayEnabled = savedState.WriteOverlay;
                 _captureDeviceId = savedState.CaptureDeviceId;
+                lock (_captureConfigurationLock)
+                {
+                    _captureCropsByDevice.Clear();
+                    foreach (var item in savedState.CaptureCropsByDevice ??
+                        new Dictionary<string, CaptureCropSettings>())
+                    {
+                        if (item.Value != null)
+                            _captureCropsByDevice[item.Key] = item.Value.Clone();
+                    }
+                }
                 _outputWriter.OutputPath = string.IsNullOrWhiteSpace(savedState.OverlayOutputPath)
                     ? AppPaths.PendingOutputPath
                     : savedState.OverlayOutputPath;
@@ -566,7 +731,8 @@ namespace Aviscribe.UI
                     snapshot,
                     _writeOverlayEnabled,
                     _outputWriter.OutputPath,
-                    _captureDeviceId);
+                    _captureDeviceId,
+                    GetCaptureCropSnapshot());
             }
             catch (Exception ex)
             {
@@ -1135,6 +1301,28 @@ namespace Aviscribe.UI
             {
                 SetCommandFeedback(text);
             });
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            lock (_snapshotRequestLock)
+            {
+                _pendingSnapshotRequest?.TrySetException(
+                    new InvalidOperationException("The application was closed."));
+                _pendingSnapshotRequest = null;
+            }
+
+            _processor?.Stop();
+            if (_video != null)
+            {
+                _video.FrameReceived -= OnFrame;
+                _video.Stop();
+            }
+            _previewBitmap?.Dispose();
+            foreach (var bitmap in _moonImageCache.Values)
+                bitmap.Dispose();
+
+            base.OnClosed(e);
         }
 
         private sealed record MoonListItem(Moon Moon, string Label, Bitmap? Image = null)
