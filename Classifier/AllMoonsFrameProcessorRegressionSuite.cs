@@ -281,7 +281,8 @@ namespace Aviscribe.Classifier
             if (expectation.Counted)
                 state.AddPending(expectedMoon);
 
-            using var ocr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
+            using var innerOcr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
+            var ocr = new OcrAttemptCountingProxy(innerOcr);
             var matcher = new MoonMatcher(repo, state.Settings.InputLanguage, state.Settings.OutputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state);
 
@@ -295,14 +296,24 @@ namespace Aviscribe.Classifier
                     expectation.Frame + windowFrames,
                     frameDelayMilliseconds);
 
-                if (WaitForExpectedMoon(state, expectedMoon, expectation.Counted, settleMilliseconds))
+                var resolved = WaitForExpectedMoon(
+                    state,
+                    expectedMoon,
+                    expectation.Counted,
+                    settleMilliseconds);
+                if (resolved)
+                    Thread.Sleep(250);
+
+                var attempts = ocr.Snapshot();
+                if (resolved && attempts.TotalCollectionAttempts == 1)
                 {
                     var snapshot = state.CreateSnapshot();
                     Console.WriteLine(
                         $"PASS {expectation.Name}: counted {snapshot.CountedMoonCount}, actual {snapshot.ActualMoonCount}, " +
                         $"pending [{string.Join(", ", snapshot.Pending.Select(moon => moon.Id))}], " +
                         $"collected [{string.Join(", ", snapshot.Collected.Select(moon => moon.Id))}], " +
-                        $"uncounted [{string.Join(", ", snapshot.UncountedCollected.Select(moon => moon.Id))}]");
+                        $"uncounted [{string.Join(", ", snapshot.UncountedCollected.Select(moon => moon.Id))}]" +
+                        CollectionAttemptReport(expectedMoon, snapshot, attempts));
                     return true;
                 }
 
@@ -311,7 +322,8 @@ namespace Aviscribe.Classifier
                     $"FAIL {expectation.Name}: counted {finalSnapshot.CountedMoonCount}, actual {finalSnapshot.ActualMoonCount}, " +
                     $"pending [{string.Join(", ", finalSnapshot.Pending.Select(moon => moon.Id))}], " +
                     $"collected [{string.Join(", ", finalSnapshot.Collected.Select(moon => moon.Id))}], " +
-                    $"uncounted [{string.Join(", ", finalSnapshot.UncountedCollected.Select(moon => moon.Id))}]");
+                    $"uncounted [{string.Join(", ", finalSnapshot.UncountedCollected.Select(moon => moon.Id))}]" +
+                    CollectionAttemptReport(expectedMoon, finalSnapshot, attempts));
                 return false;
             }
             finally
@@ -336,7 +348,8 @@ namespace Aviscribe.Classifier
             state.Settings.Category = expectation.Category;
             state.Settings.IncludePostGameKingdoms = true;
 
-            using var ocr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
+            using var innerOcr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
+            var ocr = new OcrAttemptCountingProxy(innerOcr);
             var matcher = new MoonMatcher(repo, state.Settings.InputLanguage, state.Settings.OutputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state);
 
@@ -350,13 +363,23 @@ namespace Aviscribe.Classifier
                     expectation.Frame + windowFrames,
                     frameDelayMilliseconds);
 
-                if (WaitForExpectedMoon(state, expectedMoon, expectation.Counted, settleMilliseconds))
+                var resolved = WaitForExpectedMoon(
+                    state,
+                    expectedMoon,
+                    expectation.Counted,
+                    settleMilliseconds);
+                if (resolved)
+                    Thread.Sleep(250);
+
+                var attempts = ocr.Snapshot();
+                if (resolved && attempts.TotalCollectionAttempts == 1)
                 {
                     var snapshot = state.CreateSnapshot();
                     Console.WriteLine(
                         $"PASS {expectation.Name}: counted {snapshot.CountedMoonCount}, actual {snapshot.ActualMoonCount}, " +
                         $"collected [{string.Join(", ", snapshot.Collected.Select(moon => moon.Id))}], " +
-                        $"uncounted [{string.Join(", ", snapshot.UncountedCollected.Select(moon => moon.Id))}]");
+                        $"uncounted [{string.Join(", ", snapshot.UncountedCollected.Select(moon => moon.Id))}]" +
+                        CollectionAttemptReport(expectedMoon, snapshot, attempts));
                     return true;
                 }
 
@@ -364,7 +387,8 @@ namespace Aviscribe.Classifier
                 Console.WriteLine(
                     $"FAIL {expectation.Name}: counted {finalSnapshot.CountedMoonCount}, actual {finalSnapshot.ActualMoonCount}, " +
                     $"collected [{string.Join(", ", finalSnapshot.Collected.Select(moon => moon.Id))}], " +
-                    $"uncounted [{string.Join(", ", finalSnapshot.UncountedCollected.Select(moon => moon.Id))}]");
+                    $"uncounted [{string.Join(", ", finalSnapshot.UncountedCollected.Select(moon => moon.Id))}]" +
+                    CollectionAttemptReport(expectedMoon, finalSnapshot, attempts));
                 return false;
             }
             finally
@@ -437,6 +461,26 @@ namespace Aviscribe.Classifier
             }
 
             return false;
+        }
+
+        private static string CollectionAttemptReport(
+            Moon expectedMoon,
+            GameStateSnapshot snapshot,
+            OcrAttemptSnapshot attempts)
+        {
+            var outcome = snapshot.Collected.Any(moon => moon.Id == expectedMoon.Id)
+                ? "counted"
+                : snapshot.UncountedCollected.Any(moon => moon.Id == expectedMoon.Id)
+                    ? "uncounted"
+                    : snapshot.Pending.Any(moon => moon.Id == expectedMoon.Id)
+                        ? "pending"
+                        : "missing";
+            var resolved = outcome is "counted" or "uncounted";
+            return
+                $", MoonGet attempts {attempts.MoonGetAttempts}, " +
+                $"StoryMoon attempts {attempts.StoryMoonAttempts}, " +
+                $"total collection attempts {attempts.TotalCollectionAttempts}, " +
+                $"resolved moon {resolved}, final outcome {outcome}";
         }
 
         private readonly record struct RuntimeStoryExpectation(
