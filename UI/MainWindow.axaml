@@ -207,7 +207,12 @@
 							<StackPanel Spacing="10">
 								<TextBlock Classes="sectionTitle" Text="Capture Source"/>
 								<ComboBox Name="cbInputSelect"/>
-								<Button Name="btnSettingsUpdatePreview" Content="Start / Update Capture"/>
+								<Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+									<Button Name="btnSettingsUpdatePreview" Content="Start / Update Capture"/>
+									<Button Name="btnCropGameplay" Grid.Column="1" Content="Crop Gameplay…"/>
+								</Grid>
+								<TextBlock Name="txtCropSummary" Text="Crop: Full frame (1920 × 1080)"
+										   Opacity="0.7" TextWrapping="Wrap"/>
 								<Border Height="240" Background="Black" CornerRadius="4">
 									<Image Name="imgPreview" Stretch="Uniform"/>
 								</Border>

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using Aviscribe.Core.Capture;
 
 namespace Aviscribe.Core
 {
@@ -33,7 +34,8 @@ namespace Aviscribe.Core
             GameStateSnapshot snapshot,
             bool writeOverlay,
             string overlayOutputPath,
-            string captureDeviceId = "")
+            string captureDeviceId = "",
+            IReadOnlyDictionary<string, CaptureCropSettings>? captureCropsByDevice = null)
         {
             var state = new SavedRunState
             {
@@ -56,6 +58,12 @@ namespace Aviscribe.Core
                 WriteOverlay = writeOverlay,
                 OverlayOutputPath = overlayOutputPath,
                 CaptureDeviceId = captureDeviceId,
+                CaptureCropsByDevice = (captureCropsByDevice ??
+                        new Dictionary<string, CaptureCropSettings>())
+                    .ToDictionary(
+                        item => item.Key,
+                        item => item.Value.Clone(),
+                        StringComparer.Ordinal),
                 PendingMoonIds = snapshot.Pending.Select(moon => moon.Id).ToList(),
                 CollectedMoonIds = snapshot.Collected.Select(moon => moon.Id).ToList(),
                 UncountedCollectedMoonIds = snapshot.UncountedCollected.Select(moon => moon.Id).ToList()
