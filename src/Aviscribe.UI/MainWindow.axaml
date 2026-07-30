@@ -207,9 +207,10 @@
 							<StackPanel Spacing="10">
 								<TextBlock Classes="sectionTitle" Text="Capture Source"/>
 								<ComboBox Name="cbInputSelect"/>
-								<Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+								<Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="8">
 									<Button Name="btnSettingsUpdatePreview" Content="Start / Update Capture"/>
 									<Button Name="btnCropGameplay" Grid.Column="1" Content="Crop Gameplay…"/>
+									<Button Name="btnRefreshCaptureDevices" Grid.Column="2" Content="Refresh"/>
 								</Grid>
 								<TextBlock Name="txtCropSummary" Text="Crop: Full frame (1920 × 1080)"
 										   Opacity="0.7" TextWrapping="Wrap"/>

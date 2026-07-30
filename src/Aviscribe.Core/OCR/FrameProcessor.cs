@@ -8,18 +8,21 @@ using System.Threading.Tasks;
 
 namespace Aviscribe.Core.Ocr
 {
-    public class FrameProcessor
+    public sealed class FrameProcessor : IDisposable
     {
         private readonly IOcrService _ocr;
         private readonly MoonMatcher _matcher;
         private readonly GameState _state;
 
         private readonly object _lock = new();
+        private readonly object _lifecycleLock = new();
         private VideoFrame? _latestFrame;
 
         private CancellationTokenSource? _cts;
         private Task? _frameWorker;
         private Task? _ocrWorker;
+        private volatile bool _acceptingFrames;
+        private bool _disposed;
 
         private readonly TalkatooConfirmationTracker _talkatooConfirmation = new();
         private readonly CollectionConfirmationCoordinator _collectionConfirmation = new();
@@ -34,7 +37,7 @@ namespace Aviscribe.Core.Ocr
         private readonly Queue<OcrWorkItem> _ocrQueue = new();
         private readonly HashSet<ConfirmationKey> _queuedOrInFlightConfirmations = new();
         private readonly ITextPresenceDetector _textDetector;
-        private readonly CaptureCropSettings _cropSettings;
+        private CaptureCropSettings _cropSettings;
 
         private readonly OcrRegion[] _regions;
 
@@ -87,24 +90,55 @@ namespace Aviscribe.Core.Ocr
         // ----------------------------
         public void Start()
         {
-            _cts = new CancellationTokenSource();
+            lock (_lifecycleLock)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (_cts != null)
+                    return;
 
-            _frameWorker = Task.Run(FrameLoop);
-            _ocrWorker = Task.Run(OcrLoop);
+                _cts = new CancellationTokenSource();
+                _acceptingFrames = true;
+                var token = _cts.Token;
+                _frameWorker = Task.Run(() => FrameLoop(token), token);
+                _ocrWorker = Task.Run(() => OcrLoop(token), token);
+            }
         }
 
         public void Stop()
         {
-            if (_frameWorker == null && _ocrWorker == null) // never actually started
-                return;
+            CancellationTokenSource? cancellation;
+            Task[] workers;
+            lock (_lifecycleLock)
+            {
+                if (_cts == null)
+                    return;
 
-            _cts?.Cancel();
-            var workers = new[] { _frameWorker, _ocrWorker }
-                .Where(worker => worker != null)
-                .Cast<Task>()
-                .ToArray();
+                _acceptingFrames = false;
+                cancellation = _cts;
+                _cts = null;
+                workers = new[] { _frameWorker, _ocrWorker }
+                    .Where(worker => worker != null)
+                    .Cast<Task>()
+                    .ToArray();
+                _frameWorker = null;
+                _ocrWorker = null;
+            }
 
-            Task.WaitAll(workers, 1500);
+            cancellation.Cancel();
+            try
+            {
+                Task.WaitAll(workers);
+            }
+            catch (AggregateException ex)
+                when (ex.InnerExceptions.All(item =>
+                    item is OperationCanceledException))
+            {
+            }
+            finally
+            {
+                cancellation.Dispose();
+            }
+
             lock (_lock)
             {
                 _latestFrame?.Dispose();
@@ -118,19 +152,32 @@ namespace Aviscribe.Core.Ocr
         // ----------------------------
         public void PushFrame(VideoFrame frame)
         {
+            ArgumentNullException.ThrowIfNull(frame);
             lock (_lock)
             {
+                if (!_acceptingFrames)
+                {
+                    frame.Dispose();
+                    return;
+                }
+
                 _latestFrame?.Dispose();
                 _latestFrame = frame;
             }
         }
 
+        public void UpdateCrop(CaptureCropSettings cropSettings)
+        {
+            ArgumentNullException.ThrowIfNull(cropSettings);
+            Volatile.Write(ref _cropSettings, cropSettings.Clone());
+        }
+
         // ----------------------------
         // FRAME LOOP (FAST)
         // ----------------------------
-        private void FrameLoop()
+        private void FrameLoop(CancellationToken cancellationToken)
         {
-            while (!_cts!.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 VideoFrame? frame = null;
 
@@ -163,7 +210,8 @@ namespace Aviscribe.Core.Ocr
             if (source.Empty())
                 return;
 
-            var crop = _cropSettings.Resolve(source.Width, source.Height);
+            var cropSettings = Volatile.Read(ref _cropSettings);
+            var crop = cropSettings.Resolve(source.Width, source.Height);
             if (crop.X == 0 &&
                 crop.Y == 0 &&
                 crop.Width == OcrReferenceLayout.Width &&
@@ -306,9 +354,9 @@ namespace Aviscribe.Core.Ocr
         // ----------------------------
         // OCR LOOP (SLOW)
         // ----------------------------
-        private void OcrLoop()
+        private void OcrLoop(CancellationToken cancellationToken)
         {
-            while (!_cts!.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 if (!TryDequeueOcr(out var item))
                 {
@@ -711,6 +759,20 @@ namespace Aviscribe.Core.Ocr
                     }
                     break;
             }
+        }
+
+        public void Dispose()
+        {
+            lock (_lifecycleLock)
+            {
+                if (_disposed)
+                    return;
+                _disposed = true;
+            }
+
+            Stop();
+            if (_ocr is IDisposable disposableOcr)
+                disposableOcr.Dispose();
         }
 
         private readonly record struct OcrWorkItem(

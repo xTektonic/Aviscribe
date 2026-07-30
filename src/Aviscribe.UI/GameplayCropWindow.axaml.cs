@@ -4,6 +4,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Aviscribe.Core.Capture;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using CvRect = OpenCvSharp.Rect;
 
@@ -11,7 +12,7 @@ namespace Aviscribe.UI
 {
     public partial class GameplayCropWindow : Window
     {
-        private readonly Func<Task<Bitmap?>>? _snapshotProvider;
+        private readonly Func<CancellationToken, Task<Bitmap?>>? _snapshotProvider;
         private readonly CaptureCropSettings _initialSelection;
         private CropSelectionControl? _canvas;
         private NumericUpDown? _cropX;
@@ -23,6 +24,7 @@ namespace Aviscribe.UI
         private bool _updatingNumbers;
         private bool _hasFrame;
         private bool _closed;
+        private CancellationTokenSource? _refreshCancellation;
 
         public GameplayCropWindow()
             : this(CaptureCropSettings.Default, null)
@@ -31,7 +33,7 @@ namespace Aviscribe.UI
 
         public GameplayCropWindow(
             CaptureCropSettings initialSelection,
-            Func<Task<Bitmap?>>? snapshotProvider)
+            Func<CancellationToken, Task<Bitmap?>>? snapshotProvider)
         {
             _initialSelection = initialSelection.Clone();
             _snapshotProvider = snapshotProvider;
@@ -72,7 +74,13 @@ namespace Aviscribe.UI
 
             _canvas.KeyDown += OnCanvasKeyDown;
             Opened += async (_, _) => await RefreshFrameAsync();
-            Closed += (_, _) => _closed = true;
+            Closed += (_, _) =>
+            {
+                _closed = true;
+                _refreshCancellation?.Cancel();
+                _refreshCancellation?.Dispose();
+                _refreshCancellation = null;
+            };
         }
 
         private async Task RefreshFrameAsync()
@@ -80,12 +88,18 @@ namespace Aviscribe.UI
             if (_snapshotProvider == null)
                 return;
 
+            var previousCancellation = _refreshCancellation;
+            var refreshCancellation = new CancellationTokenSource();
+            _refreshCancellation = refreshCancellation;
+            previousCancellation?.Cancel();
+            previousCancellation?.Dispose();
+
             var button = this.GetControl<Button>("btnRefreshFrame");
             button.IsEnabled = false;
             _status!.Text = "Waiting for the next camera frame…";
             try
             {
-                var bitmap = await _snapshotProvider();
+                var bitmap = await _snapshotProvider(refreshCancellation.Token);
                 if (bitmap == null)
                 {
                     _status.Text = "No frame was received. Check the selected capture source.";
@@ -108,13 +122,24 @@ namespace Aviscribe.UI
             {
                 _status.Text = "Timed out waiting for a camera frame.";
             }
+            catch (OperationCanceledException)
+            {
+                if (!_closed && ReferenceEquals(_refreshCancellation, refreshCancellation))
+                    _status.Text = "Frame refresh cancelled.";
+            }
             catch (Exception ex)
             {
                 _status.Text = $"Could not refresh the frame: {ex.Message}";
             }
             finally
             {
-                button.IsEnabled = true;
+                if (ReferenceEquals(_refreshCancellation, refreshCancellation))
+                {
+                    _refreshCancellation = null;
+                    refreshCancellation.Dispose();
+                    if (!_closed)
+                        button.IsEnabled = true;
+                }
             }
         }
 

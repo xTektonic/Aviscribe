@@ -11,7 +11,9 @@ namespace Aviscribe.UI
             return Array.Empty<VideoDevice>();
         }
 
-        public IVideoCapture GetVideoCapture(string deviceId)
+        public IVideoCapture GetVideoCapture(
+            string deviceId,
+            string? formatId = null)
         {
             throw new InvalidOperationException("Design-time capture provider cannot create video captures.");
         }

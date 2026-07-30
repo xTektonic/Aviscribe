@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Aviscribe.UI
@@ -33,6 +34,8 @@ namespace Aviscribe.UI
             new(StringComparer.Ordinal);
         private readonly object _captureConfigurationLock = new();
         private readonly object _snapshotRequestLock = new();
+        private readonly SemaphoreSlim _captureLifecycleGate = new(1, 1);
+        private readonly CancellationTokenSource _closingCancellation = new();
 
         private FrameProcessor? _processor;
         private string _processorCaptureDeviceId = string.Empty;
@@ -62,6 +65,7 @@ namespace Aviscribe.UI
         private TextBox? _overlayPathText;
         private TextBox? _moonNumberText;
         private TextBlock? _cropSummaryText;
+        private ComboBox? _inputSelect;
         private TabControl? _mainTabs;
         private bool _processorRunning;
         private bool _writeOverlayEnabled = true;
@@ -74,7 +78,7 @@ namespace Aviscribe.UI
         private ManualMoonTarget _dragSourceTarget;
         private Moon? _dragMoon;
         private ListBoxItem? _dragVisualItem;
-        private bool _updatePreview;
+        private int _previewRequested;
 
         public MainWindow()
             : this(new DesignVideoProvider())
@@ -98,22 +102,21 @@ namespace Aviscribe.UI
 
         private void InitControls()
         {
-            // Get video input devices and add to video select combobox
-            var devices = _videoProvider.GetDevices();
-
-            ComboBox inputSelect = this.GetControl<ComboBox>("cbInputSelect");
-            inputSelect.ItemsSource = devices;
-            inputSelect.DisplayMemberBinding = new Avalonia.Data.Binding("Name");
-            inputSelect.SelectedItem = devices.FirstOrDefault(device => device.Id == _captureDeviceId);
-            inputSelect.SelectionChanged += (_, _) =>
+            _inputSelect = this.GetControl<ComboBox>("cbInputSelect");
+            _inputSelect.DisplayMemberBinding =
+                new Avalonia.Data.Binding(nameof(VideoDevice.Name));
+            _inputSelect.SelectionChanged += (_, _) =>
             {
-                if (inputSelect.SelectedItem is VideoDevice device)
+                if (_inputSelect.SelectedItem is VideoDevice device)
                 {
                     _captureDeviceId = device.Id;
                     UpdateCropSummary();
                     PersistRunState(_state.CreateSnapshot());
                 }
             };
+            ApplyCaptureDevices(_videoProvider.GetDevices());
+            this.GetControl<Button>("btnRefreshCaptureDevices").Click +=
+                async (_, _) => await RefreshCaptureDevicesAsync();
 
             // Update Preview button
             Button updatePreview = this.GetControl<Button>("btnUpdatePreview");
@@ -329,6 +332,41 @@ namespace Aviscribe.UI
             RefreshMoonList();
         }
 
+        private async Task RefreshCaptureDevicesAsync()
+        {
+            try
+            {
+                var devices = await _videoProvider.RefreshAsync(
+                    _closingCancellation.Token);
+                ApplyCaptureDevices(devices);
+                SetStatus(devices.Count == 0
+                    ? "No compatible capture devices found"
+                    : $"Found {devices.Count} capture device(s)");
+            }
+            catch (OperationCanceledException)
+                when (_closingCancellation.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                SetStatus($"Could not refresh capture devices: {ex.Message}");
+            }
+        }
+
+        private void ApplyCaptureDevices(IReadOnlyList<VideoDevice> devices)
+        {
+            if (_inputSelect == null)
+                return;
+
+            var selectedId = (_inputSelect.SelectedItem as VideoDevice)?.Id;
+            if (string.IsNullOrWhiteSpace(selectedId))
+                selectedId = _captureDeviceId;
+
+            _inputSelect.ItemsSource = devices;
+            _inputSelect.SelectedItem = devices.FirstOrDefault(device =>
+                string.Equals(device.Id, selectedId, StringComparison.Ordinal));
+        }
+
         private void InitFrameProcessor()
         {
             var matcher = new MoonMatcher(
@@ -353,12 +391,15 @@ namespace Aviscribe.UI
         private void RecreateFrameProcessor()
         {
             var wasRunning = _processorRunning;
+            var previous = _processor;
 
-            _processor?.Stop();
+            previous?.Stop();
             InitFrameProcessor();
 
             if (wasRunning)
                 _processor?.Start();
+
+            previous?.Dispose();
         }
 
         private ITextPresenceDetector LoadTextPresenceDetector()
@@ -368,76 +409,209 @@ namespace Aviscribe.UI
 
         private void OnFrame(VideoFrame frame)
         {
-            TaskCompletionSource<Mat>? snapshotRequest;
-            lock (_snapshotRequestLock)
+            VideoFrame? ownedFrame = frame;
+            try
             {
-                snapshotRequest = _pendingSnapshotRequest;
-                _pendingSnapshotRequest = null;
+                TaskCompletionSource<Mat>? snapshotRequest;
+                lock (_snapshotRequestLock)
+                {
+                    snapshotRequest = _pendingSnapshotRequest;
+                    _pendingSnapshotRequest = null;
+                }
+
+                if (snapshotRequest != null)
+                    snapshotRequest.TrySetResult(frame.Frame.Clone());
+
+                if (Interlocked.Exchange(ref _previewRequested, 0) != 0)
+                {
+                    try
+                    {
+                        UpdatePreview(frame.Frame);
+                    }
+                    catch (Exception ex)
+                    {
+                        SetStatus($"Could not update preview: {ex.Message}");
+                    }
+                }
+
+                var processor = _processor;
+                if (processor != null)
+                {
+                    processor.PushFrame(frame);
+                    ownedFrame = null;
+                }
+            }
+            finally
+            {
+                ownedFrame?.Dispose();
+            }
+        }
+
+        private async void StartPreview(object? sender, RoutedEventArgs args)
+        {
+            if (_inputSelect?.SelectedItem is not VideoDevice selected)
+            {
+                SetStatus("Select a capture source first");
+                return;
             }
 
-            if (snapshotRequest != null)
-                snapshotRequest.TrySetResult(frame.Frame.Clone());
-
-            if (_updatePreview)
+            Interlocked.Exchange(ref _previewRequested, 1);
+            try
             {
+                await EnsureCaptureStartedAsync(
+                    selected,
+                    _closingCancellation.Token);
+            }
+            catch (OperationCanceledException)
+                when (_closingCancellation.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                SetStatus($"Could not start capture: {ex.Message}");
+            }
+        }
+
+        private async Task EnsureCaptureStartedAsync(
+            VideoDevice selected,
+            CancellationToken cancellationToken)
+        {
+            await _captureLifecycleGate
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(true);
+            try
+            {
+                if (_currentDevice?.Id == selected.Id &&
+                    _video?.State == CaptureState.Running &&
+                    _processorRunning)
+                {
+                    return;
+                }
+
+                await StopCaptureCoreAsync(
+                    "Capture source changed",
+                    cancellationToken);
+
+                _currentDevice = selected;
+                _captureDeviceId = selected.Id;
+                if (_processor == null ||
+                    !string.Equals(
+                        _processorCaptureDeviceId,
+                        selected.Id,
+                        StringComparison.Ordinal))
+                {
+                    RecreateFrameProcessor();
+                }
+                else
+                {
+                    _processor.UpdateCrop(GetCropForDevice(selected.Id));
+                }
+
+                var capture = await _videoProvider.OpenCaptureAsync(
+                    selected.Id,
+                    cancellationToken: cancellationToken);
+                _video = capture;
+                capture.FrameReceived += OnFrame;
+                capture.CaptureFailed += OnCaptureFailed;
+                capture.StateChanged += OnCaptureStateChanged;
+
+                _processor?.Start();
+                _processorRunning = true;
                 try
                 {
-                    UpdatePreview(frame.Frame);
+                    await capture
+                        .StartAsync(cancellationToken)
+                        .ConfigureAwait(true);
                 }
-                catch (Exception ex)
+                catch
                 {
-                    SetStatus($"Could not update preview: {ex.Message}");
+                    await StopCaptureCoreAsync(
+                        "Capture failed to start",
+                        CancellationToken.None);
+                    throw;
                 }
-                _updatePreview = false;
-            }
 
-            if (_processor != null)
-                _processor.PushFrame(frame);
-            else
-                frame.Dispose();
+                UpdateCropSummary();
+                PersistRunState(_state.CreateSnapshot());
+                SetStatus(
+                    $"Watching {selected.Name} at {capture.SelectedFormat}");
+            }
+            finally
+            {
+                _captureLifecycleGate.Release();
+            }
         }
 
-        private void StartPreview(object? sender, RoutedEventArgs args)
+        private async Task StopCaptureAsync(
+            string reason,
+            CancellationToken cancellationToken = default)
         {
-            ComboBox inputSelect = this.GetControl<ComboBox>("cbInputSelect");
-            if (inputSelect.SelectedItem is not VideoDevice selected)
-                return;
-
-            _updatePreview = true;
-            EnsureCaptureStarted(selected);
+            await _captureLifecycleGate
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            try
+            {
+                await StopCaptureCoreAsync(reason, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                _captureLifecycleGate.Release();
+            }
         }
 
-        private void EnsureCaptureStarted(VideoDevice selected)
+        private async Task StopCaptureCoreAsync(
+            string reason,
+            CancellationToken cancellationToken)
         {
-            if (_currentDevice?.Id == selected.Id && _processorRunning)
-                return;
+            CancelPendingSnapshot(new OperationCanceledException(reason));
 
-            _processor?.Stop();
-            _processorRunning = false;
-            if (_video != null)
+            var capture = _video;
+            _video = null;
+            try
             {
-                _video.FrameReceived -= OnFrame;
-                _video.Stop();
+                if (capture != null)
+                {
+                    capture.FrameReceived -= OnFrame;
+                    capture.CaptureFailed -= OnCaptureFailed;
+                    capture.StateChanged -= OnCaptureStateChanged;
+                    try
+                    {
+                        await capture
+                            .StopAsync(cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        await capture.DisposeAsync().ConfigureAwait(false);
+                    }
+                }
             }
+            finally
+            {
+                _processor?.Stop();
+                _processorRunning = false;
+                _currentDevice = null;
+            }
+        }
 
-            _currentDevice = selected;
-            _captureDeviceId = selected.Id;
-            if (_processor == null ||
-                !string.Equals(
-                    _processorCaptureDeviceId,
-                    selected.Id,
-                    StringComparison.Ordinal))
-            {
-                InitFrameProcessor();
-            }
-            _video = _videoProvider.GetVideoCapture(selected.Id);
-            _video.FrameReceived += OnFrame;
-            _video.Start();
-            _processor?.Start();
-            _processorRunning = true;
-            UpdateCropSummary();
-            PersistRunState(_state.CreateSnapshot());
-            SetStatus($"Watching {selected.Name}");
+        private void OnCaptureFailed(
+            object? sender,
+            CaptureErrorEventArgs args)
+        {
+            CancelPendingSnapshot(
+                args.Exception ?? new IOException(args.Message));
+            SetStatus(args.DeviceDisconnected
+                ? $"Capture device disconnected: {args.Message}"
+                : args.Message);
+        }
+
+        private void OnCaptureStateChanged(
+            object? sender,
+            CaptureStateChangedEventArgs args)
+        {
+            if (args.Current == CaptureState.Faulted)
+                SetStatus("Capture entered a faulted state");
         }
 
         private void UpdatePreview(Mat source)
@@ -463,8 +637,7 @@ namespace Aviscribe.UI
 
         private async void OpenCropWindow(object? sender, RoutedEventArgs args)
         {
-            var inputSelect = this.GetControl<ComboBox>("cbInputSelect");
-            if (inputSelect.SelectedItem is not VideoDevice selected)
+            if (_inputSelect?.SelectedItem is not VideoDevice selected)
             {
                 SetStatus("Select a capture source before cropping gameplay");
                 return;
@@ -484,44 +657,61 @@ namespace Aviscribe.UI
             UpdateCropSummary();
             PersistRunState(_state.CreateSnapshot());
             if (_currentDevice?.Id == selected.Id && _processorRunning)
-                RecreateFrameProcessor();
+                _processor?.UpdateCrop(result);
 
-            _updatePreview = true;
+            Interlocked.Exchange(ref _previewRequested, 1);
             SetStatus("Gameplay crop applied");
         }
 
-        private async Task<Bitmap?> RequestRawSnapshotAsync()
+        private async Task<Bitmap?> RequestRawSnapshotAsync(
+            CancellationToken cancellationToken)
         {
-            var inputSelect = this.GetControl<ComboBox>("cbInputSelect");
-            if (inputSelect.SelectedItem is not VideoDevice selected)
+            if (_inputSelect?.SelectedItem is not VideoDevice selected)
                 return null;
 
             var request = new TaskCompletionSource<Mat>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             lock (_snapshotRequestLock)
             {
-                _pendingSnapshotRequest?.TrySetException(
-                    new InvalidOperationException("A newer snapshot was requested."));
+                _pendingSnapshotRequest?.TrySetCanceled();
                 _pendingSnapshotRequest = request;
             }
 
+            using var registration = cancellationToken.Register(() =>
+                request.TrySetCanceled(cancellationToken));
             try
             {
-                EnsureCaptureStarted(selected);
-                using var snapshot = await request.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                await EnsureCaptureStartedAsync(selected, cancellationToken);
+                using var snapshot = await request.Task.WaitAsync(
+                    TimeSpan.FromSeconds(5),
+                    cancellationToken);
                 Cv2.ImEncode(".png", snapshot, out var buffer);
                 using var stream = new MemoryStream(buffer);
                 return new Bitmap(stream);
             }
-            catch
+            finally
             {
                 lock (_snapshotRequestLock)
                 {
                     if (ReferenceEquals(_pendingSnapshotRequest, request))
                         _pendingSnapshotRequest = null;
                 }
-                throw;
             }
+        }
+
+        private void CancelPendingSnapshot(Exception reason)
+        {
+            TaskCompletionSource<Mat>? request;
+            lock (_snapshotRequestLock)
+            {
+                request = _pendingSnapshotRequest;
+                _pendingSnapshotRequest = null;
+            }
+
+            if (reason is OperationCanceledException)
+                request?.TrySetCanceled();
+            else
+                request?.TrySetException(reason);
         }
 
         private CaptureCropSettings GetCropForDevice(string deviceId)
@@ -1304,22 +1494,25 @@ namespace Aviscribe.UI
 
         protected override void OnClosed(EventArgs e)
         {
-            lock (_snapshotRequestLock)
+            _closingCancellation.Cancel();
+            CancelPendingSnapshot(
+                new OperationCanceledException("The application was closed."));
+            try
             {
-                _pendingSnapshotRequest?.TrySetException(
-                    new InvalidOperationException("The application was closed."));
-                _pendingSnapshotRequest = null;
+                StopCaptureAsync("The application was closed.")
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch
+            {
             }
 
-            _processor?.Stop();
-            if (_video != null)
-            {
-                _video.FrameReceived -= OnFrame;
-                _video.Stop();
-            }
+            _processor?.Dispose();
             _previewBitmap?.Dispose();
             foreach (var bitmap in _moonImageCache.Values)
                 bitmap.Dispose();
+            _closingCancellation.Dispose();
+            _captureLifecycleGate.Dispose();
 
             base.OnClosed(e);
         }
