@@ -60,6 +60,14 @@ namespace Aviscribe.Classifier
             new("luncheon-moonget-veggies-chest-standard", OcrRegionType.MoonGet, "Luncheon", 1_111_510, 34, RunCategory.Standard, Counted: true),
         ];
 
+        private static readonly RuntimeCollectionNegativeExpectation[] CollectionNegativeExpectations =
+        [
+            new("sand-platform-after-lone-pillar-not-moonget", "Sand", 68_624),
+            new("snow-map-screen-not-moonget", "Snow", 794_715),
+            new("mushroom-note-rail-not-moonget", "Mushroom", 1_206_375),
+            new("mushroom-light-platform-not-moonget", "Mushroom", 1_209_415),
+        ];
+
         private static readonly RuntimeStoryExpectation[] Expectations =
         [
             new("cascade-story-first-power-moon-standard", "Cascade", 16_317, 1, RunCategory.Standard, Counted: true),
@@ -115,6 +123,22 @@ namespace Aviscribe.Classifier
                 failures.Add(expectation.Name);
             }
 
+            foreach (var expectation in CollectionNegativeExpectations)
+            {
+                if (RunCollectionNegativeExpectation(
+                    capture,
+                    repo,
+                    expectation,
+                    windowFrames: 30,
+                    frameDelayMilliseconds: frameDelayMilliseconds,
+                    settleMilliseconds: 500))
+                {
+                    continue;
+                }
+
+                failures.Add(expectation.Name);
+            }
+
             foreach (var expectation in TalkatooNegativeExpectations)
             {
                 if (RunTalkatooNegativeExpectation(
@@ -155,6 +179,7 @@ namespace Aviscribe.Classifier
                 $"{TalkatooExpectations.Length} Talkatoo windows, " +
                 $"{CollectionExpectations.Length} collection windows, and " +
                 $"{Expectations.Length} story windows updated state; " +
+                $"{CollectionNegativeExpectations.Length} collection negative windows and " +
                 $"{TalkatooNegativeExpectations.Length} Talkatoo negative windows stayed at zero OCR.");
         }
 
@@ -332,6 +357,50 @@ namespace Aviscribe.Classifier
             }
         }
 
+        private static bool RunCollectionNegativeExpectation(
+            VideoCapture capture,
+            MoonRepository repo,
+            RuntimeCollectionNegativeExpectation expectation,
+            int windowFrames,
+            int frameDelayMilliseconds,
+            int settleMilliseconds)
+        {
+            var state = new GameState();
+            state.SetKingdom(expectation.Kingdom);
+            state.Settings.IncludePostGameKingdoms = true;
+            var ocr = new OcrAttemptCountingProxy(new EmptyOcrService());
+            var matcher = new MoonMatcher(
+                repo,
+                state.Settings.InputLanguage,
+                state.Settings.OutputLanguage);
+            var processor = new FrameProcessor(ocr, matcher, state);
+
+            processor.Start();
+            try
+            {
+                FeedFrames(
+                    capture,
+                    processor,
+                    expectation.Frame - windowFrames,
+                    expectation.Frame + windowFrames,
+                    frameDelayMilliseconds);
+                Thread.Sleep(settleMilliseconds);
+
+                var attempts = ocr.Snapshot();
+                var passed = attempts.TotalCollectionAttempts == 0;
+                Console.WriteLine(
+                    $"{(passed ? "PASS" : "FAIL")} {expectation.Name}: " +
+                    $"MoonGet attempts {attempts.MoonGetAttempts}, " +
+                    $"StoryMoon attempts {attempts.StoryMoonAttempts}, " +
+                    $"total collection attempts {attempts.TotalCollectionAttempts}");
+                return passed;
+            }
+            finally
+            {
+                processor.Stop();
+            }
+        }
+
         private static bool RunExpectation(
             VideoCapture capture,
             MoonRepository repo,
@@ -500,6 +569,11 @@ namespace Aviscribe.Classifier
             RunCategory Category,
             bool Counted);
 
+        private readonly record struct RuntimeCollectionNegativeExpectation(
+            string Name,
+            string Kingdom,
+            int Frame);
+
         private readonly record struct RuntimeTalkatooExpectation(
             string Name,
             string Kingdom,
@@ -544,6 +618,14 @@ namespace Aviscribe.Classifier
                 if (frame.Width == 649 && frame.Height == 48)
                     TalkatooReadCount++;
 
+                return string.Empty;
+            }
+        }
+
+        private sealed class EmptyOcrService : IOcrService
+        {
+            public string ReadText(Mat frame)
+            {
                 return string.Empty;
             }
         }

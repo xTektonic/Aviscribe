@@ -17,7 +17,9 @@ namespace Aviscribe.Core.Ocr
             new Rect(320, 600, 1250, 250),
             DetectionIntervalFrames: 5,
             RequiredPresentObservations: 1,
-            RequiredAbsentObservations: 3,
+            // Named videos contain gaps up to 24 sampled absences within one overlay;
+            // the shortest verified gap between distinct events is 125.
+            RequiredAbsentObservations: 30,
             RetryPresentObservations: 2);
 
         internal static CollectionConfirmationProfile StoryMoon { get; } = new(
@@ -26,6 +28,7 @@ namespace Aviscribe.Core.Ocr
             new Rect(450, 820, 1100, 150),
             DetectionIntervalFrames: 1,
             RequiredPresentObservations: 2,
+            // Named videos contain gaps up to four observations within one overlay.
             RequiredAbsentObservations: 8,
             RetryPresentObservations: 3);
 

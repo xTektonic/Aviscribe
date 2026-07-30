@@ -30,7 +30,9 @@ namespace Aviscribe.Classifier
 
         private static readonly RuntimeNegativeExpectation[] NegativeExpectations =
         [
-            new("cascade-background-after-fast-talkatoo", "Cascade", 18_989),
+            new("cascade-background-after-fast-talkatoo", OcrRegionType.Talkatoo, "Cascade", 18_989),
+            new("sand-stair-highlight-not-moonget", OcrRegionType.MoonGet, "Sand", 42_393),
+            new("snow-pale-railing-not-moonget", OcrRegionType.MoonGet, "Snow", 96_924),
         ];
 
         public static void Run(
@@ -75,7 +77,7 @@ namespace Aviscribe.Classifier
 
                 failures.Add(new RuntimeExpectation(
                     expectation.Name,
-                    OcrRegionType.Talkatoo,
+                    expectation.RegionType,
                     expectation.Kingdom,
                     expectation.Frame,
                     0));
@@ -86,7 +88,7 @@ namespace Aviscribe.Classifier
 
             Console.WriteLine(
                 $"FrameProcessor video regression passed: {Expectations.Length} expected windows updated state; " +
-                $"{NegativeExpectations.Length} Talkatoo negative window stayed at zero OCR.");
+                $"{NegativeExpectations.Length} negative windows stayed at zero relevant OCR.");
         }
 
         public static void RunChronological(
@@ -124,10 +126,23 @@ namespace Aviscribe.Classifier
                         state.AddPending(expectedMoon);
                     }
 
+                    var leadFrames = windowFrames;
+                    if (expectation.RegionType is
+                        OcrRegionType.MoonGet or OcrRegionType.StoryMoon)
+                    {
+                        var profile = CollectionConfirmationProfile.For(
+                            expectation.RegionType);
+                        leadFrames = Math.Max(
+                            windowFrames,
+                            profile.RequiredAbsentObservations *
+                            profile.DetectionIntervalFrames +
+                            windowFrames);
+                    }
+
                     FeedFrames(
                         capture,
                         processor,
-                        expectation.Frame - windowFrames,
+                        expectation.Frame - leadFrames,
                         expectation.Frame + windowFrames,
                         frameDelayMilliseconds);
 
@@ -244,7 +259,7 @@ namespace Aviscribe.Classifier
         {
             var state = new GameState();
             state.SetKingdom(expectation.Kingdom);
-            var ocr = new EmptyCountingOcrService();
+            var ocr = new OcrAttemptCountingProxy(new EmptyOcrService());
             var matcher = new MoonMatcher(
                 repo,
                 state.Settings.InputLanguage,
@@ -262,10 +277,17 @@ namespace Aviscribe.Classifier
                     frameDelayMilliseconds);
                 Thread.Sleep(settleMilliseconds);
 
+                var attempts = ocr.Snapshot();
+                var relevantAttempts = expectation.RegionType == OcrRegionType.Talkatoo
+                    ? attempts.TalkatooAttempts
+                    : attempts.TotalCollectionAttempts;
                 Console.WriteLine(
-                    $"{(ocr.TalkatooReadCount == 0 ? "PASS" : "FAIL")} {expectation.Name}: " +
-                    $"Talkatoo OCR attempts {ocr.TalkatooReadCount}");
-                return ocr.TalkatooReadCount == 0;
+                    $"{(relevantAttempts == 0 ? "PASS" : "FAIL")} {expectation.Name}: " +
+                    $"Talkatoo attempts {attempts.TalkatooAttempts}, " +
+                    $"MoonGet attempts {attempts.MoonGetAttempts}, " +
+                    $"StoryMoon attempts {attempts.StoryMoonAttempts}, " +
+                    $"total collection attempts {attempts.TotalCollectionAttempts}");
+                return relevantAttempts == 0;
             }
             finally
             {
@@ -367,18 +389,14 @@ namespace Aviscribe.Classifier
 
         private readonly record struct RuntimeNegativeExpectation(
             string Name,
+            OcrRegionType RegionType,
             string Kingdom,
             int Frame);
 
-        private sealed class EmptyCountingOcrService : IOcrService
+        private sealed class EmptyOcrService : IOcrService
         {
-            public int TalkatooReadCount { get; private set; }
-
             public string ReadText(Mat frame)
             {
-                if (frame.Width == 649 && frame.Height == 48)
-                    TalkatooReadCount++;
-
                 return string.Empty;
             }
         }
