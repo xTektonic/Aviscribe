@@ -9,6 +9,8 @@ namespace Aviscribe.Classifier
     {
         public static void Run()
         {
+            TalkatooConfirmationSmoke.Run();
+            TalkatooDetectorSmoke.Run();
             StaleOcrDoesNotMutateNewKingdom();
             AmbiguousTalkatooUsesOnlyUnseenCandidate();
             AmbiguousResolvedTalkatooQuietsSamePrompt();
@@ -16,6 +18,8 @@ namespace Aviscribe.Classifier
             WeakMoonGetUsesPendingCandidate();
             WeakMoonGetStaysQuietWithoutSinglePendingCandidate();
             AmbiguousTalkatooStillAsksWhenUnresolved();
+            TalkatooPartialTypingDoesNotReachOcr();
+            TalkatooUnresolvedPromptRetriesOnlyOnce();
             TalkatooBacklogKeepsRapidDistinctReads();
             TalkatooRefreshesChangedTextWithoutAbsentGap();
             TalkatooQuietsSamePromptAfterResolvedRead();
@@ -40,6 +44,8 @@ namespace Aviscribe.Classifier
             processor.Start();
             try
             {
+                PushBlankFrame(processor);
+                Thread.Sleep(30);
                 PushBlankFrame(processor);
                 Thread.Sleep(30);
                 PushBlankFrame(processor);
@@ -89,12 +95,17 @@ namespace Aviscribe.Classifier
                         2 => (x / 12) % 2 == 0,
                         _ => (x / 12) % 2 != 0
                     };
-                    var value = bright ? (byte)255 : (byte)0;
-                    crop.Set(y, x, new Vec3b(value, value, value));
+                    crop.Set(
+                        y,
+                        x,
+                        bright
+                            ? new Vec3b(20, 220, 240)
+                            : new Vec3b(0, 0, 0));
                 }
             }
 
             crop.Set(0, 0, new Vec3b(marker, marker, marker));
+            image.Set(862, 600, new Vec3b(marker, marker, marker));
             processor.PushFrame(new VideoFrame(image.Clone(), DateTime.UtcNow));
         }
 
@@ -116,6 +127,8 @@ namespace Aviscribe.Classifier
             processor.Start();
             try
             {
+                PushBlankFrame(processor);
+                Thread.Sleep(30);
                 PushBlankFrame(processor);
                 Thread.Sleep(30);
                 PushBlankFrame(processor);
@@ -148,7 +161,7 @@ namespace Aviscribe.Classifier
             processor.Start();
             try
             {
-                PushPatternFrame(processor, 30, 0);
+                PushStablePatternFrames(processor, 30, 0);
                 WaitFor(() => state.CreateSnapshot().Pending.Any(moon => moon.Id == moon2.Id), "Ambiguous Talkatoo did not resolve to the unseen candidate.");
                 var readsAfterResolve = ocr.ReadCount;
 
@@ -305,6 +318,8 @@ namespace Aviscribe.Classifier
                 PushBlankFrame(processor);
                 Thread.Sleep(30);
                 PushBlankFrame(processor);
+                Thread.Sleep(30);
+                PushBlankFrame(processor);
 
                 WaitFor(() => ambiguousEvents > 0, "Unresolved ambiguous Talkatoo read did not raise a review event.");
                 var snapshot = state.CreateSnapshot();
@@ -370,9 +385,9 @@ namespace Aviscribe.Classifier
             processor.Start();
             try
             {
-                PushPatternFrame(processor, 30, 0);
+                PushStablePatternFrames(processor, 30, 0);
                 WaitFor(() => state.CreateSnapshot().Pending.Any(moon => moon.Id == firstMoon.Id), "Talkatoo did not enqueue the first active-region read.");
-                PushPatternFrame(processor, 210, 3);
+                PushStablePatternFrames(processor, 210, 3);
 
                 WaitFor(() => state.CreateSnapshot().Pending.Any(moon => moon.Id == secondMoon.Id), "Talkatoo did not enqueue changed text while the region stayed active.");
             }
@@ -394,7 +409,7 @@ namespace Aviscribe.Classifier
             processor.Start();
             try
             {
-                PushPatternFrame(processor, 30, 0);
+                PushStablePatternFrames(processor, 30, 0);
                 WaitFor(() => state.CreateSnapshot().Pending.Any(pending => pending.Id == moon.Id), "Initial Talkatoo prompt did not resolve.");
                 var readsAfterResolve = ocr.ReadCount;
 
@@ -427,7 +442,7 @@ namespace Aviscribe.Classifier
             processor.Start();
             try
             {
-                PushPatternFrame(processor, 30, 0);
+                PushStablePatternFrames(processor, 30, 0);
                 if (!ocr.Started.Wait(TimeSpan.FromSeconds(3)))
                     throw new InvalidOperationException("OCR did not start during slow duplicate Talkatoo smoke test.");
 
@@ -463,7 +478,7 @@ namespace Aviscribe.Classifier
             processor.Start();
             try
             {
-                PushPatternFrame(processor, 30, 0);
+                PushStablePatternFrames(processor, 30, 0);
                 WaitFor(() => state.CreateSnapshot().Pending.Any(pending => pending.Id == moon.Id), "Initial Talkatoo prompt did not resolve.");
                 var readsAfterResolve = ocr.ReadCount;
 
@@ -587,10 +602,85 @@ namespace Aviscribe.Classifier
         {
             PushBlankFrame(processor);
             Thread.Sleep(30);
-            PushPatternFrame(processor, marker, pattern);
-            Thread.Sleep(30);
-            PushPatternFrame(processor, marker, pattern);
-            Thread.Sleep(30);
+            PushStablePatternFrames(processor, marker, pattern);
+        }
+
+        private static void TalkatooPartialTypingDoesNotReachOcr()
+        {
+            var moon = new Moon { Id = 1, Kingdom = "Cascade", English = "A Real Moon" };
+            var repo = CreateRepo(moon);
+            var state = CreateEnglishState("Cascade");
+            using var ocr = new CountingOcrService("A Real Moon");
+            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
+
+            processor.Start();
+            try
+            {
+                foreach (var pattern in new[] { 0, 1, 2, 3, 0, 2, 1, 3 })
+                {
+                    PushPatternFrame(processor, 30, pattern);
+                    Thread.Sleep(20);
+                }
+
+                Thread.Sleep(250);
+                if (ocr.ReadCount != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Partial Talkatoo typing reached OCR {ocr.ReadCount} time(s).");
+                }
+            }
+            finally
+            {
+                processor.Stop();
+            }
+        }
+
+        private static void TalkatooUnresolvedPromptRetriesOnlyOnce()
+        {
+            var moon = new Moon { Id = 1, Kingdom = "Cascade", English = "A Real Moon" };
+            var repo = CreateRepo(moon);
+            var state = CreateEnglishState("Cascade");
+            using var ocr = new CountingOcrService(string.Empty);
+            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
+
+            processor.Start();
+            try
+            {
+                PushStablePatternFrames(processor, 30, 0);
+                for (var frame = 0; frame < 20; frame++)
+                {
+                    PushPatternFrame(processor, 30, 0);
+                    Thread.Sleep(15);
+                }
+
+                Thread.Sleep(250);
+                if (ocr.ReadCount != 2)
+                {
+                    throw new InvalidOperationException(
+                        $"Unchanged unresolved Talkatoo prompt used {ocr.ReadCount} OCR attempts instead of two.");
+                }
+            }
+            finally
+            {
+                processor.Stop();
+            }
+        }
+
+        private static void PushStablePatternFrames(
+            FrameProcessor processor,
+            byte marker,
+            int pattern)
+        {
+            for (var frame = 0;
+                 frame < TalkatooConfirmationTracker.IdleDetectionIntervalFrames +
+                     TalkatooConfirmationTracker.RequiredStableFrames;
+                 frame++)
+            {
+                PushPatternFrame(processor, marker, pattern);
+                Thread.Sleep(15);
+            }
         }
 
         private static MoonRepository CreateRepo(params Moon[] moons)

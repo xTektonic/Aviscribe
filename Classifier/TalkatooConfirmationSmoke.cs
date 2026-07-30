@@ -7,11 +7,27 @@ namespace Aviscribe.Classifier
     {
         public static void Run()
         {
+            PartialTypingNeverConfirms();
             ConfirmsOnThirdConsecutiveFrame();
+            InstabilityRestartsConfirmation();
             ResetsToChangedLayout();
             AllowsOnlyOneBoundedRetry();
+            PendingOcrIsDeduplicated();
             UsesAllAverageHashCells();
             Console.WriteLine("Talkatoo confirmation smoke passed.");
+        }
+
+        private static void PartialTypingNeverConfirms()
+        {
+            var tracker = new TalkatooConfirmationTracker();
+
+            foreach (var width in new[] { 40, 72, 104, 136, 168 })
+            {
+                using var partial = CreatePrompt(textLeft: 120, textWidth: width);
+                AssertNoEnqueue(
+                    tracker.Observe(true, TalkatooPromptSignature.Capture(partial)),
+                    $"partial typing width {width}");
+            }
         }
 
         private static void ConfirmsOnThirdConsecutiveFrame()
@@ -72,6 +88,33 @@ namespace Aviscribe.Classifier
                     "Talkatoo disappearance did not return the tracker to idle cadence.");
         }
 
+        private static void InstabilityRestartsConfirmation()
+        {
+            var tracker = new TalkatooConfirmationTracker();
+            using var first = CreatePrompt(textLeft: 120, textWidth: 180);
+            using var changed = CreatePrompt(textLeft: 150, textWidth: 140);
+
+            AssertNoEnqueue(
+                tracker.Observe(true, TalkatooPromptSignature.Capture(first)),
+                "first unstable run frame one");
+            AssertNoEnqueue(
+                tracker.Observe(true, TalkatooPromptSignature.Capture(first)),
+                "first unstable run frame two");
+            AssertNoEnqueue(
+                tracker.Observe(true, TalkatooPromptSignature.Capture(changed)),
+                "changed reset frame");
+            AssertNoEnqueue(
+                tracker.Observe(true, TalkatooPromptSignature.Capture(changed)),
+                "changed run frame two");
+
+            var decision = tracker.Observe(
+                true,
+                TalkatooPromptSignature.Capture(changed));
+            if (!decision.ShouldEnqueue)
+                throw new InvalidOperationException(
+                    "Talkatoo instability did not restart a three-frame confirmation run.");
+        }
+
         private static void AllowsOnlyOneBoundedRetry()
         {
             var tracker = new TalkatooConfirmationTracker();
@@ -120,6 +163,25 @@ namespace Aviscribe.Classifier
             {
                 throw new InvalidOperationException(
                     $"Average hash did not use the complete 8x8 image: {hash:X16}.");
+            }
+        }
+
+        private static void PendingOcrIsDeduplicated()
+        {
+            var tracker = new TalkatooConfirmationTracker();
+            using var image = CreatePrompt(textLeft: 120, textWidth: 180);
+
+            tracker.Observe(true, TalkatooPromptSignature.Capture(image));
+            tracker.Observe(true, TalkatooPromptSignature.Capture(image));
+            var first = tracker.Observe(true, TalkatooPromptSignature.Capture(image));
+            if (!tracker.RecordEnqueued(first.Generation, first.Attempt))
+                throw new InvalidOperationException("Could not latch the initial Talkatoo OCR item.");
+
+            for (var frame = 0; frame < 20; frame++)
+            {
+                AssertNoEnqueue(
+                    tracker.Observe(true, TalkatooPromptSignature.Capture(image)),
+                    $"queued duplicate frame {frame + 1}");
             }
         }
 

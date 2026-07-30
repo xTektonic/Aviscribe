@@ -5,7 +5,7 @@ namespace Aviscribe.Classifier
 {
     internal static class TalkatooInspector
     {
-        private static readonly Rect TalkatooBounds = new(666, 862, 649, 48);
+        private static readonly Rect TalkatooBounds = new(600, 862, 715, 48);
 
         public static void Print(IEnumerable<string> paths)
         {
