@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Core.Capture\Core.Capture.csproj" />
+    <ProjectReference Include="..\Aviscribe.Core.Capture\Aviscribe.Core.Capture.csproj" />
   </ItemGroup>
 
   <ItemGroup>

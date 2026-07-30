@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Core\Core.csproj" />
+    <ProjectReference Include="..\..\src\Aviscribe.Core\Aviscribe.Core.csproj" />
   </ItemGroup>
 
 </Project>
