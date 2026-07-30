@@ -22,6 +22,7 @@ namespace Aviscribe.UI
         private TextBlock? _status;
         private bool _updatingNumbers;
         private bool _hasFrame;
+        private bool _closed;
 
         public GameplayCropWindow()
             : this(CaptureCropSettings.Default, null)
@@ -71,6 +72,7 @@ namespace Aviscribe.UI
 
             _canvas.KeyDown += OnCanvasKeyDown;
             Opened += async (_, _) => await RefreshFrameAsync();
+            Closed += (_, _) => _closed = true;
         }
 
         private async Task RefreshFrameAsync()
@@ -87,6 +89,11 @@ namespace Aviscribe.UI
                 if (bitmap == null)
                 {
                     _status.Text = "No frame was received. Check the selected capture source.";
+                    return;
+                }
+                if (_closed)
+                {
+                    bitmap.Dispose();
                     return;
                 }
 
