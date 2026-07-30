@@ -17,9 +17,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Core\Core.csproj" />
-    <ProjectReference Include="..\UI\UI.csproj" />
-    <ProjectReference Include="..\Windows.Capture\Windows.Capture.csproj" />
+    <ProjectReference Include="..\Aviscribe.Core\Aviscribe.Core.csproj" />
+    <ProjectReference Include="..\Aviscribe.UI\Aviscribe.UI.csproj" />
+    <ProjectReference Include="..\Aviscribe.Windows.Capture\Aviscribe.Windows.Capture.csproj" />
   </ItemGroup>
 
 </Project>

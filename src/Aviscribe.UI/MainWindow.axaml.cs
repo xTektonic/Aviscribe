@@ -1272,7 +1272,7 @@ namespace Aviscribe.UI
 
             try
             {
-                var uri = new Uri($"avares://UI/Assets/moons/{key}");
+                var uri = new Uri($"avares://Aviscribe.UI/Assets/moons/{key}");
                 using var stream = AssetLoader.Open(uri);
                 var image = new Bitmap(stream);
                 _moonImageCache[key] = image;

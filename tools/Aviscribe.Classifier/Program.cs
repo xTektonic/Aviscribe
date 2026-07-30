@@ -51,7 +51,7 @@ try
         case "rules":
         {
             var dataRoot = args.Length > 1 ? args[1] : DatasetPaths.DefaultDataRoot;
-            var outputPath = args.Length > 2 ? args[2] : Path.Combine("Core", "Data", "detector-rules.json");
+            var outputPath = args.Length > 2 ? args[2] : Path.Combine("src", "Aviscribe.Core", "Data", "detector-rules.json");
             var minimumRecall = args.Length > 3 && double.TryParse(args[3], out var parsedRecall)
                 ? parsedRecall
                 : 0.995;
@@ -65,7 +65,7 @@ try
         case "train-linear":
         {
             var dataRoot = args.Length > 1 ? args[1] : DatasetPaths.DefaultDataRoot;
-            var outputPath = args.Length > 2 ? args[2] : Path.Combine("Core", "Data", "linear-detector.json");
+            var outputPath = args.Length > 2 ? args[2] : Path.Combine("src", "Aviscribe.Core", "Data", "linear-detector.json");
             var minimumRecall = args.Length > 3 && double.TryParse(args[3], out var parsedRecall)
                 ? parsedRecall
                 : 0.995;
@@ -245,7 +245,7 @@ try
             var videoPath = args.Length > 1
                 ? args[1]
                 : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
-            var outputDir = args.Length > 2 ? args[2] : Path.Combine("Classifier", "Output", "VideoRegressionFailures");
+            var outputDir = args.Length > 2 ? args[2] : Path.Combine("tools", "Aviscribe.Classifier", "Output", "VideoRegressionFailures");
             VideoRegressionSuite.Run(videoPath, outputDir);
             break;
         }
@@ -275,7 +275,7 @@ try
                 : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
             var outputRoot = args.Length > 2
                 ? args[2]
-                : Path.Combine("Classifier", "Output", "VideoPipelineVerification");
+                : Path.Combine("tools", "Aviscribe.Classifier", "Output", "VideoPipelineVerification");
             VideoPipelineVerifier.Run(videoPath, outputRoot);
             break;
         }
@@ -287,7 +287,7 @@ try
                 : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
             var outputDir = args.Length > 2
                 ? args[2]
-                : Path.Combine("Classifier", "Output", "VideoEndToEndFailures");
+                : Path.Combine("tools", "Aviscribe.Classifier", "Output", "VideoEndToEndFailures");
             VideoEndToEndRegressionSuite.Run(videoPath, outputDir);
             break;
         }
@@ -299,7 +299,7 @@ try
                 : Path.Combine(DatasetPaths.DefaultDataRoot, "talkatoo_all_moons.mp4");
             var outputDir = args.Length > 2
                 ? args[2]
-                : Path.Combine("Classifier", "Output", "AllMoonsRegressionFailures");
+                : Path.Combine("tools", "Aviscribe.Classifier", "Output", "AllMoonsRegressionFailures");
             AllMoonsVideoRegressionSuite.Run(videoPath, outputDir);
             break;
         }
@@ -336,7 +336,7 @@ try
             var videoPath = args.Length > 1
                 ? args[1]
                 : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
-            var outputDir = args.Length > 2 ? args[2] : Path.Combine("Classifier", "Output", "OverlayEvents");
+            var outputDir = args.Length > 2 ? args[2] : Path.Combine("tools", "Aviscribe.Classifier", "Output", "OverlayEvents");
             var stride = args.Length > 3 && int.TryParse(args[3], out var parsedStride)
                 ? parsedStride
                 : 15;
@@ -355,7 +355,7 @@ try
             var videoPath = args.Length > 1
                 ? args[1]
                 : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
-            var outputDir = args.Length > 2 ? args[2] : Path.Combine("Classifier", "Output", "OverlayCoverage");
+            var outputDir = args.Length > 2 ? args[2] : Path.Combine("tools", "Aviscribe.Classifier", "Output", "OverlayCoverage");
             var stride = args.Length > 3 && int.TryParse(args[3], out var parsedStride)
                 ? parsedStride
                 : 15;
@@ -375,7 +375,7 @@ try
         case "story-crops":
         {
             var dataRoot = args.Length > 1 ? args[1] : DatasetPaths.DefaultDataRoot;
-            var outputDir = args.Length > 2 ? args[2] : Path.Combine("Classifier", "Data", "StoryMoonCrops");
+            var outputDir = args.Length > 2 ? args[2] : Path.Combine("tools", "Aviscribe.Classifier", "Data", "StoryMoonCrops");
             StoryMoonCropper.Write(dataRoot, outputDir);
             break;
         }
@@ -385,7 +385,7 @@ try
             var videoPath = args.Length > 1
                 ? args[1]
                 : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
-            var outputDir = args.Length > 2 ? args[2] : Path.Combine("Classifier", "Output", "TalkatooAudit");
+            var outputDir = args.Length > 2 ? args[2] : Path.Combine("tools", "Aviscribe.Classifier", "Output", "TalkatooAudit");
             var stride = args.Length > 3 && int.TryParse(args[3], out var parsedStride)
                 ? parsedStride
                 : 1;
@@ -404,7 +404,7 @@ try
             var videoPath = args.Length > 1
                 ? args[1]
                 : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
-            var outputDir = args.Length > 2 ? args[2] : Path.Combine("Classifier", "Output", "MoonGetVideoAudit");
+            var outputDir = args.Length > 2 ? args[2] : Path.Combine("tools", "Aviscribe.Classifier", "Output", "MoonGetVideoAudit");
             var stride = args.Length > 3 && int.TryParse(args[3], out var parsedStride)
                 ? parsedStride
                 : 1;
@@ -433,7 +433,7 @@ try
             var videoPath = args.Length > 1
                 ? args[1]
                 : Path.Combine(DatasetPaths.DefaultDataRoot, "sampling_video.mp4");
-            var outputDir = args.Length > 2 ? args[2] : Path.Combine("Classifier", "Output", "StoryMoonVideoAudit");
+            var outputDir = args.Length > 2 ? args[2] : Path.Combine("tools", "Aviscribe.Classifier", "Output", "StoryMoonVideoAudit");
             var stride = args.Length > 3 && int.TryParse(args[3], out var parsedStride)
                 ? parsedStride
                 : 1;
@@ -460,7 +460,7 @@ try
         case "audit-talkatoo-dataset":
         {
             var dataRoot = args.Length > 1 ? args[1] : DatasetPaths.DefaultDataRoot;
-            var outputDir = args.Length > 2 ? args[2] : Path.Combine("Classifier", "Output", "TalkatooDatasetAudit");
+            var outputDir = args.Length > 2 ? args[2] : Path.Combine("tools", "Aviscribe.Classifier", "Output", "TalkatooDatasetAudit");
             var maxPerBucket = args.Length > 3 && int.TryParse(args[3], out var parsedMax)
                 ? parsedMax
                 : 80;
@@ -472,7 +472,7 @@ try
         {
             var dataRoot = args.Length > 1 ? args[1] : DatasetPaths.DefaultDataRoot;
             var region = args.Length > 2 ? args[2] : "Talkatoo";
-            var outputDir = args.Length > 3 ? args[3] : Path.Combine("Classifier", "Output", $"{region}Failures");
+            var outputDir = args.Length > 3 ? args[3] : Path.Combine("tools", "Aviscribe.Classifier", "Output", $"{region}Failures");
             var maxSaved = args.Length > 4 && int.TryParse(args[4], out var parsedMax)
                 ? parsedMax
                 : 80;
