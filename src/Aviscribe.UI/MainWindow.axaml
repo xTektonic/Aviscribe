@@ -228,6 +228,18 @@
 								<TextBox Name="txtOverlayPath"/>
 							</StackPanel>
 						</Border>
+
+						<Border Classes="panel">
+							<StackPanel Spacing="10">
+								<TextBlock Classes="sectionTitle" Text="Diagnostics"/>
+								<CheckBox Name="chkDebugLogging"
+										  Content="Enable debug logging"
+										  ToolTip.Tip="Adds detailed operational events; captured frames are never saved."/>
+								<Button Name="btnOpenDiagnostics"
+										Content="Open Diagnostics"
+										HorizontalAlignment="Left"/>
+							</StackPanel>
+						</Border>
 					</StackPanel>
 				</Grid>
 			</ScrollViewer>

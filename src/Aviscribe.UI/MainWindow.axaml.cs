@@ -7,6 +7,7 @@ using Avalonia.Platform;
 using Avalonia.Threading;
 using Aviscribe.Core;
 using Aviscribe.Core.Capture;
+using Aviscribe.Core.Diagnostics;
 using Aviscribe.Core.Ocr;
 using OpenCvSharp;
 using System;
@@ -23,6 +24,7 @@ namespace Aviscribe.UI
     {
         private IVideoCapture? _video;
         private readonly IVideoProvider _videoProvider;
+        private readonly IAppDiagnostics _diagnostics;
         private readonly MoonRepository _repo;
         private readonly GameState _state = new();
         private readonly RunStateStore _stateStore;
@@ -79,20 +81,26 @@ namespace Aviscribe.UI
         private Moon? _dragMoon;
         private ListBoxItem? _dragVisualItem;
         private int _previewRequested;
+        private int _sourceWidth;
+        private int _sourceHeight;
 
         public MainWindow()
-            : this(new DesignVideoProvider())
+            : this(new DesignVideoProvider(), NullAppDiagnostics.Instance)
         {
         }
 
-        public MainWindow(IVideoProvider provider)
+        public MainWindow(
+            IVideoProvider provider,
+            IAppDiagnostics? diagnostics = null)
         {
             InitializeComponent();
 
             _videoProvider = provider;
+            _diagnostics = diagnostics ?? NullAppDiagnostics.Instance;
             _repo = MoonRepository.LoadDefault();
             _stateStore = new RunStateStore(_repo);
             LoadSavedRunState();
+            _diagnostics.DebugEnabled = _state.Settings.DebugLogging;
             _outputWriter.Language = _state.Settings.OutputLanguage;
             InitControls();
             InitFrameProcessor();
@@ -212,6 +220,23 @@ namespace Aviscribe.UI
                 _state.Settings.ShowPendingMoonImages = showPendingImagesCheck.IsChecked == true;
                 _state.NotifySettingsChanged();
             };
+
+            var debugLoggingCheck =
+                this.GetControl<CheckBox>("chkDebugLogging");
+            debugLoggingCheck.IsChecked = _state.Settings.DebugLogging;
+            debugLoggingCheck.IsCheckedChanged += (_, _) =>
+            {
+                var enabled = debugLoggingCheck.IsChecked == true;
+                _state.Settings.DebugLogging = enabled;
+                _diagnostics.DebugEnabled = enabled;
+                _diagnostics.Information(
+                    enabled
+                        ? "Debug logging enabled."
+                        : "Debug logging disabled.");
+                _state.NotifySettingsChanged();
+            };
+            this.GetControl<Button>("btnOpenDiagnostics").Click +=
+                OpenDiagnostics;
 
             ConfigureHotkeySelect(
                 "cbFocusMoonHotkey",
@@ -339,6 +364,8 @@ namespace Aviscribe.UI
                 var devices = await _videoProvider.RefreshAsync(
                     _closingCancellation.Token);
                 ApplyCaptureDevices(devices);
+                _diagnostics.Information(
+                    $"Capture device refresh found {devices.Count} device(s).");
                 SetStatus(devices.Count == 0
                     ? "No compatible capture devices found"
                     : $"Found {devices.Count} capture device(s)");
@@ -349,6 +376,9 @@ namespace Aviscribe.UI
             }
             catch (Exception ex)
             {
+                _diagnostics.Error(
+                    "Could not refresh capture devices.",
+                    ex);
                 SetStatus($"Could not refresh capture devices: {ex.Message}");
             }
         }
@@ -412,6 +442,9 @@ namespace Aviscribe.UI
             VideoFrame? ownedFrame = frame;
             try
             {
+                Volatile.Write(ref _sourceWidth, frame.Frame.Width);
+                Volatile.Write(ref _sourceHeight, frame.Frame.Height);
+
                 TaskCompletionSource<Mat>? snapshotRequest;
                 lock (_snapshotRequestLock)
                 {
@@ -535,6 +568,9 @@ namespace Aviscribe.UI
                 PersistRunState(_state.CreateSnapshot());
                 SetStatus(
                     $"Watching {selected.Name} at {capture.SelectedFormat}");
+                _diagnostics.Information(
+                    $"Capture started: {selected.Name}; " +
+                    $"{capture.SelectedFormat}; backend {selected.Backend}.");
             }
             finally
             {
@@ -565,6 +601,7 @@ namespace Aviscribe.UI
             CancellationToken cancellationToken)
         {
             CancelPendingSnapshot(new OperationCanceledException(reason));
+            _diagnostics.Debug($"Stopping capture: {reason}.");
 
             var capture = _video;
             _video = null;
@@ -601,6 +638,11 @@ namespace Aviscribe.UI
         {
             CancelPendingSnapshot(
                 args.Exception ?? new IOException(args.Message));
+            _diagnostics.Error(
+                args.DeviceDisconnected
+                    ? $"Capture device disconnected: {args.Message}"
+                    : args.Message,
+                args.Exception);
             SetStatus(args.DeviceDisconnected
                 ? $"Capture device disconnected: {args.Message}"
                 : args.Message);
@@ -610,6 +652,8 @@ namespace Aviscribe.UI
             object? sender,
             CaptureStateChangedEventArgs args)
         {
+            _diagnostics.Debug(
+                $"Capture state changed from {args.Previous} to {args.Current}.");
             if (args.Current == CaptureState.Faulted)
                 SetStatus("Capture entered a faulted state");
         }
@@ -660,6 +704,9 @@ namespace Aviscribe.UI
                 _processor?.UpdateCrop(result);
 
             Interlocked.Exchange(ref _previewRequested, 1);
+            _diagnostics.Information(
+                $"Gameplay crop updated for {selected.Name}: " +
+                $"{result.X},{result.Y} {result.Width}x{result.Height}.");
             SetStatus("Gameplay crop applied");
         }
 
@@ -925,6 +972,7 @@ namespace Aviscribe.UI
             }
             catch (Exception ex)
             {
+                _diagnostics.Error("Could not save run state.", ex);
                 SetStatus($"Could not save run state: {ex.Message}");
             }
         }
@@ -1484,6 +1532,47 @@ namespace Aviscribe.UI
                 left.Kingdom.Equals(right.Kingdom, StringComparison.OrdinalIgnoreCase);
         }
 
+        private async void OpenDiagnostics(
+            object? sender,
+            RoutedEventArgs args)
+        {
+            var window = new DiagnosticsWindow(
+                _diagnostics,
+                CreateDiagnosticsSnapshot);
+            await window.ShowDialog(this);
+        }
+
+        private DiagnosticsSnapshot CreateDiagnosticsSnapshot()
+        {
+            var capture = _video;
+            var device = _currentDevice ??
+                _inputSelect?.SelectedItem as VideoDevice;
+            var captureDevice = device == null
+                ? "No capture device selected"
+                : $"{device.Name} ({device.Backend})";
+            var captureState = capture == null
+                ? CaptureState.Stopped.ToString()
+                : $"{capture.State}; {capture.SelectedFormat}";
+
+            var width = Volatile.Read(ref _sourceWidth);
+            var height = Volatile.Read(ref _sourceHeight);
+            var sourceAndCrop = "No source frame received";
+            if (width > 0 && height > 0)
+            {
+                var crop = GetCropForDevice(device?.Id ?? _captureDeviceId)
+                    .Resolve(width, height);
+                sourceAndCrop =
+                    $"{width} × {height}; crop " +
+                    $"({crop.X}, {crop.Y}) {crop.Width} × {crop.Height}; " +
+                    "normalized to 1920 × 1080";
+            }
+
+            return new DiagnosticsSnapshot(
+                captureDevice,
+                captureState,
+                sourceAndCrop);
+        }
+
         private void SetStatus(string text)
         {
             Dispatcher.UIThread.Post(() =>
@@ -1494,6 +1583,7 @@ namespace Aviscribe.UI
 
         protected override void OnClosed(EventArgs e)
         {
+            _diagnostics.Information("Aviscribe is shutting down.");
             _closingCancellation.Cancel();
             CancelPendingSnapshot(
                 new OperationCanceledException("The application was closed."));
