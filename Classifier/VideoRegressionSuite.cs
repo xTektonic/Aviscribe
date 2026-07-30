@@ -5,24 +5,24 @@ namespace Aviscribe.Classifier
 {
     internal static class VideoRegressionSuite
     {
-        private static readonly Rect TalkatooBounds = new(666, 862, 649, 48);
+        private static readonly Rect TalkatooDetectionBounds = new(600, 862, 715, 48);
         private static readonly Rect MoonGetDetectionBounds = new(320, 600, 1250, 250);
         private static readonly Rect StoryMoonBounds = new(450, 820, 1100, 150);
 
         private static readonly VideoExpectation[] Expectations =
         [
-            new("cascade-talkatoo-005m", OcrRegionType.Talkatoo, 18_318, TalkatooBounds),
-            new("cascade-talkatoo-behind-waterfall-005m", OcrRegionType.Talkatoo, 18_488, TalkatooBounds),
-            new("cascade-talkatoo-waterfall-basin-005m", OcrRegionType.Talkatoo, 18_656, TalkatooBounds),
-            new("sand-talkatoo-006m", OcrRegionType.Talkatoo, 24_704, TalkatooBounds),
-            new("sand-talkatoo-007m", OcrRegionType.Talkatoo, 27_376, TalkatooBounds),
-            new("lake-talkatoo-secret-room-020m", OcrRegionType.Talkatoo, 72_004, TalkatooBounds),
-            new("lake-talkatoo-broken-pillar-020m", OcrRegionType.Talkatoo, 73_050, TalkatooBounds),
-            new("wooded-talkatoo-elevator-022m", OcrRegionType.Talkatoo, 82_562, TalkatooBounds),
-            new("wooded-talkatoo-032m", OcrRegionType.Talkatoo, 117_420, TalkatooBounds),
-            new("lost-talkatoo-037m", OcrRegionType.Talkatoo, 133_200, TalkatooBounds),
-            new("seaside-talkatoo-066m", OcrRegionType.Talkatoo, 237_600, TalkatooBounds),
-            new("luncheon-talkatoo-077m", OcrRegionType.Talkatoo, 277_200, TalkatooBounds),
+            new("cascade-talkatoo-005m", OcrRegionType.Talkatoo, 18_318, TalkatooDetectionBounds),
+            new("cascade-talkatoo-behind-waterfall-005m", OcrRegionType.Talkatoo, 18_488, TalkatooDetectionBounds),
+            new("cascade-talkatoo-waterfall-basin-005m", OcrRegionType.Talkatoo, 18_656, TalkatooDetectionBounds),
+            new("sand-talkatoo-006m", OcrRegionType.Talkatoo, 24_704, TalkatooDetectionBounds),
+            new("sand-talkatoo-007m", OcrRegionType.Talkatoo, 27_376, TalkatooDetectionBounds),
+            new("lake-talkatoo-secret-room-020m", OcrRegionType.Talkatoo, 72_004, TalkatooDetectionBounds),
+            new("lake-talkatoo-broken-pillar-020m", OcrRegionType.Talkatoo, 73_050, TalkatooDetectionBounds),
+            new("wooded-talkatoo-elevator-022m", OcrRegionType.Talkatoo, 82_562, TalkatooDetectionBounds),
+            new("wooded-talkatoo-032m", OcrRegionType.Talkatoo, 117_420, TalkatooDetectionBounds),
+            new("lost-talkatoo-037m", OcrRegionType.Talkatoo, 133_200, TalkatooDetectionBounds),
+            new("seaside-talkatoo-066m", OcrRegionType.Talkatoo, 237_600, TalkatooDetectionBounds),
+            new("luncheon-talkatoo-077m", OcrRegionType.Talkatoo, 277_200, TalkatooDetectionBounds),
 
             new("cap-storymoon-003m", OcrRegionType.StoryMoon, 10_800, StoryMoonBounds),
             new("sand-moonget-009m", OcrRegionType.MoonGet, 32_400, MoonGetDetectionBounds),
@@ -44,7 +44,7 @@ namespace Aviscribe.Classifier
 
         private static readonly VideoExpectation[] NegativeExpectations =
         [
-            new("cascade-background-after-fast-talkatoo", OcrRegionType.Talkatoo, 18_989, TalkatooBounds),
+            new("cascade-background-after-fast-talkatoo", OcrRegionType.Talkatoo, 18_989, TalkatooDetectionBounds),
             new("sand-stair-highlight-not-moonget", OcrRegionType.MoonGet, 42_393, MoonGetDetectionBounds),
             new("snow-pale-railing-not-moonget", OcrRegionType.MoonGet, 96_924, MoonGetDetectionBounds),
         ];

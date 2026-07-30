@@ -60,6 +60,7 @@ namespace Aviscribe.Core.Ocr
                     _textDetector,
                     StableFrameCount: TalkatooConfirmationTracker.RequiredStableFrames,
                     StableImageMaxHammingDistance: 64,
+                    DetectionBounds: new Rect(600, 862, 715, 48),
                     DetectionIntervalFrames: TalkatooConfirmationTracker.IdleDetectionIntervalFrames), // single line
                 new(
                     OcrRegionType.MoonGet,

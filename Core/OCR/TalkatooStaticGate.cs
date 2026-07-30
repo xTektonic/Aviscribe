@@ -159,56 +159,64 @@ namespace Aviscribe.Core.Ocr
             var bandHeight = Math.Min(TextBandHeight, height);
             var maximumBandTop = Math.Max(0, height - bandHeight);
             TalkatooTextBand best = default;
+            var columnCounts = new int[width];
+            var pixelPrefix = new int[width + 1];
+            var activePrefix = new int[width + 1];
 
             for (var bandTop = 0; bandTop <= maximumBandTop; bandTop++)
             {
                 var bandBottom = bandTop + bandHeight;
-                var yellowPixels = 0;
-                var activeColumns = 0;
-                var left = width;
-                var right = 0;
+                Array.Clear(columnCounts);
 
                 for (var x = Math.Max(0, marker.Right); x < width; x++)
                 {
-                    var columnPixels = 0;
                     for (var y = bandTop; y < bandBottom; y++)
                     {
                         if (yellowMask[y * width + x] != 0)
-                            columnPixels++;
+                            columnCounts[x]++;
                     }
-
-                    if (columnPixels == 0)
-                        continue;
-
-                    yellowPixels += columnPixels;
-                    activeColumns++;
-                    left = Math.Min(left, x);
-                    right = Math.Max(right, x + 1);
                 }
 
-                if (activeColumns == 0)
-                    continue;
+                for (var x = 0; x < width; x++)
+                {
+                    pixelPrefix[x + 1] = pixelPrefix[x] + columnCounts[x];
+                    activePrefix[x + 1] = activePrefix[x] + (columnCounts[x] > 0 ? 1 : 0);
+                }
 
-                var spanWidth = right - left;
-                var gap = left - marker.Right;
-                var occupancy = yellowPixels /
-                    (double)Math.Max(1, spanWidth * bandHeight);
-                var present =
-                    gap is >= 0 and <= 75 &&
-                    yellowPixels >= 500 &&
-                    activeColumns >= 35 &&
-                    spanWidth <= 575 &&
-                    occupancy >= 0.15;
+                var lastCandidateStart = Math.Min(width - 1, marker.Right + 75);
+                for (var left = Math.Max(0, marker.Right);
+                     left <= lastCandidateStart;
+                     left++)
+                {
+                    if (columnCounts[left] == 0)
+                        continue;
 
-                if (!present || yellowPixels <= best.YellowPixels)
-                    continue;
+                    var limit = Math.Min(width, left + 575);
+                    var right = limit;
+                    while (right > left && columnCounts[right - 1] == 0)
+                        right--;
 
-                best = new TalkatooTextBand(
-                    true,
-                    new Rect(left, bandTop, spanWidth, bandHeight),
-                    yellowPixels,
-                    activeColumns,
-                    occupancy);
+                    var spanWidth = right - left;
+                    var yellowPixels = pixelPrefix[right] - pixelPrefix[left];
+                    var activeColumns = activePrefix[right] - activePrefix[left];
+                    var occupancy = yellowPixels /
+                        (double)Math.Max(1, spanWidth * bandHeight);
+                    var present =
+                        yellowPixels >= 500 &&
+                        activeColumns >= 35 &&
+                        spanWidth <= 575 &&
+                        occupancy >= 0.15;
+
+                    if (!present || yellowPixels <= best.YellowPixels)
+                        continue;
+
+                    best = new TalkatooTextBand(
+                        true,
+                        new Rect(left, bandTop, spanWidth, bandHeight),
+                        yellowPixels,
+                        activeColumns,
+                        occupancy);
+                }
             }
 
             return best;

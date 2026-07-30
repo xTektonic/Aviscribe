@@ -6,7 +6,7 @@ namespace Aviscribe.Classifier
 {
     internal static class AllMoonsVideoRegressionSuite
     {
-        private static readonly Rect TalkatooDetectionBounds = new(666, 862, 649, 48);
+        private static readonly Rect TalkatooDetectionBounds = new(600, 862, 715, 48);
         private static readonly Rect TalkatooOcrBounds = new(666, 862, 649, 48);
         private static readonly Rect MoonGetDetectionBounds = new(320, 600, 1250, 250);
         private static readonly Rect MoonGetOcrBounds = new(490, 797, 930, 60);
