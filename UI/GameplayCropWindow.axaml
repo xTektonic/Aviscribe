@@ -1,0 +1,81 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Aviscribe.UI"
+        x:Class="Aviscribe.UI.GameplayCropWindow"
+        Width="1220" Height="820"
+        MinWidth="900" MinHeight="620"
+        Title="Crop Gameplay">
+  <Grid Margin="16" RowDefinitions="Auto,*,Auto" RowSpacing="12">
+    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+      <StackPanel>
+        <TextBlock Text="Gameplay crop" FontSize="20" FontWeight="SemiBold"/>
+        <TextBlock Text="Drag the frame or its handles. The selection stays 16:9 for accurate OCR."
+                   Opacity="0.7"/>
+      </StackPanel>
+      <CheckBox Name="chkShowGuides" Grid.Column="1" Content="Show OCR guides"
+                IsChecked="True" VerticalAlignment="Center"/>
+      <Button Name="btnRefreshFrame" Grid.Column="2" Content="Refresh Frame"
+              VerticalAlignment="Center" MinWidth="120"/>
+    </Grid>
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,260" ColumnSpacing="14">
+      <Border Background="Black" CornerRadius="6" ClipToBounds="True">
+        <local:CropSelectionControl Name="cropCanvas" Focusable="True"/>
+      </Border>
+
+      <Border Grid.Column="1" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+              BorderThickness="1" CornerRadius="6" Padding="14">
+        <StackPanel Spacing="12">
+          <TextBlock Text="Fine tune" FontSize="16" FontWeight="SemiBold"/>
+          <TextBlock Name="txtSourceSize" Text="Waiting for a frame…" Opacity="0.7"/>
+
+          <Grid ColumnDefinitions="70,*" RowDefinitions="Auto,Auto,Auto,Auto"
+                ColumnSpacing="8" RowSpacing="8">
+            <TextBlock Text="X" VerticalAlignment="Center"/>
+            <NumericUpDown Name="numCropX" Grid.Column="1" Minimum="0" Increment="1"
+                           FormatString="0"/>
+            <TextBlock Grid.Row="1" Text="Y" VerticalAlignment="Center"/>
+            <NumericUpDown Name="numCropY" Grid.Row="1" Grid.Column="1" Minimum="0"
+                           Increment="1" FormatString="0"/>
+            <TextBlock Grid.Row="2" Text="Width" VerticalAlignment="Center"/>
+            <NumericUpDown Name="numCropWidth" Grid.Row="2" Grid.Column="1" Minimum="16"
+                           Increment="16" FormatString="0"/>
+            <TextBlock Grid.Row="3" Text="Height" VerticalAlignment="Center"/>
+            <NumericUpDown Name="numCropHeight" Grid.Row="3" Grid.Column="1" Minimum="9"
+                           Increment="9" FormatString="0"/>
+          </Grid>
+
+          <TextBlock Text="Arrow keys move 1 px; hold Shift for 10 px."
+                     TextWrapping="Wrap" Opacity="0.7"/>
+          <Button Name="btnResetCrop" Content="Reset to Full Frame"/>
+
+          <Separator/>
+          <TextBlock Text="Guide colors" FontWeight="SemiBold"/>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Border Width="12" Height="12" Background="#FFBE46" CornerRadius="2"/>
+            <TextBlock Text="Talkatoo"/>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Border Width="12" Height="12" Background="#41CDFF" CornerRadius="2"/>
+            <TextBlock Text="Moon Get"/>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Border Width="12" Height="12" Background="#FF5FBE" CornerRadius="2"/>
+            <TextBlock Text="Story Moon"/>
+          </StackPanel>
+
+          <TextBlock Name="txtCropStatus" Text="Refresh the frame to begin."
+                     TextWrapping="Wrap" Opacity="0.7"/>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+      <TextBlock Text="Changes take effect only when you choose Apply."
+                 VerticalAlignment="Center" Opacity="0.7"/>
+      <Button Name="btnCancel" Grid.Column="1" Content="Cancel" MinWidth="90"/>
+      <Button Name="btnApply" Grid.Column="2" Content="Apply" MinWidth="90"
+              IsDefault="True"/>
+    </Grid>
+  </Grid>
+</Window>
