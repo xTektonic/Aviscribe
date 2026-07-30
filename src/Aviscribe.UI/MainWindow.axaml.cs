@@ -502,7 +502,7 @@ namespace Aviscribe.UI
         {
             await _captureLifecycleGate
                 .WaitAsync(cancellationToken)
-                .ConfigureAwait(true);
+                .ConfigureAwait(false);
             try
             {
                 if (_currentDevice?.Id == selected.Id &&
@@ -514,7 +514,7 @@ namespace Aviscribe.UI
 
                 await StopCaptureCoreAsync(
                     "Capture source changed",
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
 
                 _currentDevice = selected;
                 _captureDeviceId = selected.Id;
@@ -533,7 +533,8 @@ namespace Aviscribe.UI
 
                 var capture = await _videoProvider.OpenCaptureAsync(
                     selected.Id,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
                 _video = capture;
                 capture.FrameReceived += OnFrame;
                 capture.CaptureFailed += OnCaptureFailed;
@@ -545,17 +546,17 @@ namespace Aviscribe.UI
                 {
                     await capture
                         .StartAsync(cancellationToken)
-                        .ConfigureAwait(true);
+                        .ConfigureAwait(false);
                 }
                 catch
                 {
                     await StopCaptureCoreAsync(
                         "Capture failed to start",
-                        CancellationToken.None);
+                        CancellationToken.None).ConfigureAwait(false);
                     throw;
                 }
 
-                UpdateCropSummary();
+                Dispatcher.UIThread.Post(UpdateCropSummary);
                 PersistRunState(_state.CreateSnapshot());
                 SetStatus(
                     $"Watching {selected.Name} at {capture.SelectedFormat}");

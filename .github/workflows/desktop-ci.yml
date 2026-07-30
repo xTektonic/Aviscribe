@@ -145,7 +145,7 @@ jobs:
           dpkg-deb --info "artifacts/packages/aviscribe_${AVISCRIBE_VERSION}_amd64.deb"
           appimage="artifacts/packages/Aviscribe-${AVISCRIBE_VERSION}-x86_64.AppImage"
           test -x "${appimage}"
-          APPIMAGE_EXTRACT_AND_RUN=1 "${appimage}" --appimage-extract >/dev/null
+          "${appimage}" --appimage-extract >/dev/null
           set +e
           timeout 8s xvfb-run -a "${publish}/Aviscribe"
           result=$?
