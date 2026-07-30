@@ -124,15 +124,20 @@ namespace Aviscribe.Classifier
             using var innerOcr = new ScriptedOcrService((_, attempt) =>
                 attempt == 1 ? first.English : second.English);
             var ocr = new OcrAttemptCountingProxy(innerOcr);
+            var reappearAt =
+                CollectionConfirmationProfile.MoonGet.RequiredAbsentObservations + 2;
             var detector = new ScriptedDetector((type, call) =>
                 type == OcrRegionType.MoonGet &&
-                (call == 1 || call >= 5));
+                (call == 1 || call >= reappearAt));
             var processor = Processor(repo, state, ocr, detector);
 
             processor.Start();
             try
             {
-                PushFrames(processor, 45);
+                PushFrames(
+                    processor,
+                    (reappearAt + 3) *
+                    CollectionConfirmationProfile.MoonGet.DetectionIntervalFrames);
                 WaitForCollected(state, first);
                 WaitForCollected(state, second);
                 Thread.Sleep(200);

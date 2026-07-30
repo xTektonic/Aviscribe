@@ -6,10 +6,7 @@ namespace Aviscribe.Classifier
     internal static class RegionVideoAudit
     {
         public static void Run(
-            OcrRegionType regionType,
-            Rect bounds,
-            int stableFrameCount,
-            int stableImageMaxHammingDistance,
+            CollectionConfirmationProfile profile,
             string videoPath,
             string outputDir,
             int stride,
@@ -17,6 +14,9 @@ namespace Aviscribe.Classifier
             int maxFrames,
             int startFrame = 0)
         {
+            if (stride <= 0)
+                throw new ArgumentOutOfRangeException(nameof(stride));
+
             Directory.CreateDirectory(outputDir);
 
             using var capture = new VideoCapture(videoPath);
@@ -27,100 +27,128 @@ namespace Aviscribe.Classifier
                 capture.Set(VideoCaptureProperties.PosFrames, startFrame);
 
             var detector = new HeuristicTextPresenceDetector();
+            var tracker = new CollectionConfirmationTracker(profile);
             using var frame = new Mat();
-            var frameIndex = Math.Max(0, startFrame);
-            var positiveCount = 0;
+            using var transitions = new StreamWriter(
+                Path.Combine(outputDir, "transitions.csv"));
+            transitions.WriteLine(
+                "event,source_frame,generation,present,confirmed," +
+                "consecutive_present,consecutive_absent,present_observations");
+
+            var sourceFrameIndex = Math.Max(0, startFrame);
+            var processedFrameCount = 0L;
+            var inspectedObservations = 0;
+            var positiveObservations = 0;
             var savedCount = 0;
-            var previousPositive = false;
-            var positiveRun = 0;
-            var longestPositiveRun = 0;
-            var stableWindows = 0;
-            var stableRuns = 0;
-            var previousStable = false;
-            var detectionWindow = new Queue<bool>();
-            var hashWindow = new Queue<ulong>();
+            var confirmedAppearances = 0;
+            var confirmedReleases = 0;
+            var negativeRun = 0;
+            var longestBoundedNegativeRun = 0;
+            int? lastPositiveFrame = null;
 
             while (capture.Read(frame) && !frame.Empty())
             {
-                if (maxFrames > 0 && frameIndex >= startFrame + maxFrames)
-                    break;
-
-                if (frameIndex % stride != 0)
+                if (maxFrames > 0 &&
+                    sourceFrameIndex >= startFrame + maxFrames)
                 {
-                    frameIndex++;
+                    break;
+                }
+
+                if ((sourceFrameIndex - startFrame) % stride != 0)
+                {
+                    sourceFrameIndex++;
                     continue;
                 }
 
-                using var crop = new Mat(frame, bounds);
-                var result = detector.Detect(regionType, crop);
-
-                if (result.Present)
-                    positiveCount++;
-
-                positiveRun = result.Present ? positiveRun + 1 : 0;
-                longestPositiveRun = Math.Max(longestPositiveRun, positiveRun);
-
-                detectionWindow.Enqueue(result.Present);
-                hashWindow.Enqueue(result.Present ? ImageHash.Compute(crop) : 0);
-                if (detectionWindow.Count > stableFrameCount)
+                processedFrameCount++;
+                if (!tracker.ShouldInspect(processedFrameCount))
                 {
-                    detectionWindow.Dequeue();
-                    hashWindow.Dequeue();
+                    sourceFrameIndex++;
+                    continue;
                 }
 
-                var stable = detectionWindow.Count == stableFrameCount &&
-                             detectionWindow.All(x => x) &&
-                             IsStableHashWindow(hashWindow, stableImageMaxHammingDistance);
+                inspectedObservations++;
+                using var crop = new Mat(frame, profile.DetectionBounds);
+                var result = detector.Detect(profile.RegionType, crop);
+                var before = tracker.Snapshot();
+                var after = tracker.Observe(result.Present);
 
-                if (stable)
+                if (result.Present)
                 {
-                    stableWindows++;
-                    if (!previousStable)
+                    positiveObservations++;
+                    if (lastPositiveFrame != null && negativeRun > 0)
                     {
-                        stableRuns++;
-                        if (savedCount < maxSaved)
-                        {
-                            var prefix = $"stable_{frameIndex:D7}_conf_{result.Confidence:0.000}";
-                            Cv2.ImWrite(Path.Combine(outputDir, $"{prefix}_crop.jpg"), crop);
-                            Cv2.ImWrite(Path.Combine(outputDir, $"{prefix}_frame.jpg"), frame);
-                            savedCount++;
-                        }
+                        longestBoundedNegativeRun = Math.Max(
+                            longestBoundedNegativeRun,
+                            negativeRun);
+                        transitions.WriteLine(
+                            $"bounded_absence,{sourceFrameIndex},{after.Generation}," +
+                            $"true,{after.Confirmed},{after.ConsecutivePresent}," +
+                            $"{negativeRun},{after.PresentObservationCount}");
+                    }
+
+                    lastPositiveFrame = sourceFrameIndex;
+                    negativeRun = 0;
+                }
+                else if (lastPositiveFrame != null)
+                {
+                    negativeRun++;
+                }
+
+                var becameConfirmed =
+                    after.Active &&
+                    after.CurrentlyPresent &&
+                    after.Confirmed &&
+                    (!before.Confirmed ||
+                     before.Generation != after.Generation);
+                if (becameConfirmed)
+                {
+                    tracker.RecordEnqueued(after.Generation, attempt: 1);
+                    tracker.RecordOutcome(after.Generation, resolved: true);
+                    after = tracker.Snapshot();
+                    confirmedAppearances++;
+                    transitions.WriteLine(
+                        $"confirmed,{sourceFrameIndex},{after.Generation}," +
+                        $"true,true,{after.ConsecutivePresent}," +
+                        $"{after.ConsecutiveAbsent},{after.PresentObservationCount}");
+                    if (savedCount < maxSaved)
+                    {
+                        var prefix =
+                            $"confirmed_{sourceFrameIndex:D7}_" +
+                            $"generation_{after.Generation:D4}_" +
+                            $"conf_{result.Confidence:0.000}";
+                        Cv2.ImWrite(
+                            Path.Combine(outputDir, $"{prefix}_crop.jpg"),
+                            crop);
+                        Cv2.ImWrite(
+                            Path.Combine(outputDir, $"{prefix}_frame.jpg"),
+                            frame);
+                        savedCount++;
                     }
                 }
 
-                if (result.Present && (!previousPositive || savedCount < 10) && savedCount < maxSaved)
+                if (before.Active && !after.Active)
                 {
-                    var prefix = $"frame_{frameIndex:D7}_conf_{result.Confidence:0.000}";
-                    Cv2.ImWrite(Path.Combine(outputDir, $"{prefix}_crop.jpg"), crop);
-                    Cv2.ImWrite(Path.Combine(outputDir, $"{prefix}_frame.jpg"), frame);
-                    savedCount++;
+                    confirmedReleases++;
+                    transitions.WriteLine(
+                        $"released,{sourceFrameIndex},{before.Generation}," +
+                        $"false,{before.Confirmed},0," +
+                        $"{profile.RequiredAbsentObservations}," +
+                        $"{before.PresentObservationCount}");
                 }
 
-                previousStable = stable;
-                previousPositive = result.Present;
-                frameIndex++;
+                sourceFrameIndex++;
             }
 
             Console.WriteLine(
-                $"Scanned frames {startFrame}..{frameIndex}, positives {positiveCount}, longest run {longestPositiveRun}, " +
-                $"stable windows {stableWindows}, stable runs {stableRuns}, saved {savedCount} samples to {outputDir}");
-        }
-
-        private static bool IsStableHashWindow(IEnumerable<ulong> hashes, int maxHammingDistance)
-        {
-            using var enumerator = hashes.GetEnumerator();
-            if (!enumerator.MoveNext())
-                return false;
-
-            var first = enumerator.Current;
-            do
-            {
-                if (ImageHash.Hamming(first, enumerator.Current) > maxHammingDistance)
-                    return false;
-            }
-            while (enumerator.MoveNext());
-
-            return true;
+                $"{profile.RegionType} production-parity audit scanned source frames " +
+                $"{startFrame}..{sourceFrameIndex}: inspected {inspectedObservations} " +
+                $"observations every {profile.DetectionIntervalFrames} processed frame(s), " +
+                $"positive observations {positiveObservations}, confirmed appearances " +
+                $"{confirmedAppearances}, releases {confirmedReleases}, longest bounded " +
+                $"detector gap {longestBoundedNegativeRun} inspected absence observation(s), " +
+                $"release threshold {profile.RequiredAbsentObservations}, saved {savedCount} " +
+                $"samples and transitions.csv to {outputDir}.");
         }
     }
 }

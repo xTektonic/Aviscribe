@@ -27,6 +27,7 @@ namespace Aviscribe.Core.Ocr
         private string _observedKingdom;
         private long _suppressTalkatooUntilFrame;
         private const double WeakCollectionMatchThreshold = 0.50;
+        private const double WeakStoryMoonMatchThreshold = 0.40;
         private const double WeakCollectionPendingMargin = 0.08;
 
         private readonly object _ocrQueueLock = new();
@@ -372,7 +373,10 @@ namespace Aviscribe.Core.Ocr
             if (type == OcrRegionType.Talkatoo)
                 return false;
 
-            if (result.Score < WeakCollectionMatchThreshold)
+            var threshold = type == OcrRegionType.StoryMoon
+                ? WeakStoryMoonMatchThreshold
+                : WeakCollectionMatchThreshold;
+            if (result.Score < threshold)
                 return false;
 
             var snapshot = _state.CreateSnapshot();
@@ -381,7 +385,7 @@ namespace Aviscribe.Core.Ocr
                 : result.Candidates.Max(candidate => candidate.score);
             var weakCandidates = result.Candidates
                 .Where(candidate =>
-                    candidate.score >= WeakCollectionMatchThreshold &&
+                    candidate.score >= threshold &&
                     topScore - candidate.score <= WeakCollectionPendingMargin)
                 .Select(candidate => candidate.moon)
                 .Distinct()
@@ -392,7 +396,22 @@ namespace Aviscribe.Core.Ocr
                 .ToList();
 
             if (pending.Count != 1)
-                return false;
+            {
+                if (type != OcrRegionType.StoryMoon)
+                    return false;
+
+                var story = weakCandidates
+                    .Where(candidate =>
+                        candidate.IsStory &&
+                        !snapshot.Collected.Any(moon => moon.Id == candidate.Id) &&
+                        !snapshot.UncountedCollected.Any(moon => moon.Id == candidate.Id))
+                    .ToList();
+                if (story.Count != 1)
+                    return false;
+
+                match = story[0];
+                return true;
+            }
 
             match = pending[0];
             return true;
