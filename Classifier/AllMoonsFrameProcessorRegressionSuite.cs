@@ -60,6 +60,14 @@ namespace Aviscribe.Classifier
             new("luncheon-moonget-veggies-chest-standard", OcrRegionType.MoonGet, "Luncheon", 1_111_510, 34, RunCategory.Standard, Counted: true),
         ];
 
+        private static readonly RuntimeCollectionNegativeExpectation[] CollectionNegativeExpectations =
+        [
+            new("sand-platform-after-lone-pillar-not-moonget", "Sand", 68_624),
+            new("snow-map-screen-not-moonget", "Snow", 794_715),
+            new("mushroom-note-rail-not-moonget", "Mushroom", 1_206_375),
+            new("mushroom-light-platform-not-moonget", "Mushroom", 1_209_415),
+        ];
+
         private static readonly RuntimeStoryExpectation[] Expectations =
         [
             new("cascade-story-first-power-moon-standard", "Cascade", 16_317, 1, RunCategory.Standard, Counted: true),
@@ -115,6 +123,22 @@ namespace Aviscribe.Classifier
                 failures.Add(expectation.Name);
             }
 
+            foreach (var expectation in CollectionNegativeExpectations)
+            {
+                if (RunCollectionNegativeExpectation(
+                    capture,
+                    repo,
+                    expectation,
+                    windowFrames: 30,
+                    frameDelayMilliseconds: frameDelayMilliseconds,
+                    settleMilliseconds: 500))
+                {
+                    continue;
+                }
+
+                failures.Add(expectation.Name);
+            }
+
             foreach (var expectation in TalkatooNegativeExpectations)
             {
                 if (RunTalkatooNegativeExpectation(
@@ -155,6 +179,7 @@ namespace Aviscribe.Classifier
                 $"{TalkatooExpectations.Length} Talkatoo windows, " +
                 $"{CollectionExpectations.Length} collection windows, and " +
                 $"{Expectations.Length} story windows updated state; " +
+                $"{CollectionNegativeExpectations.Length} collection negative windows and " +
                 $"{TalkatooNegativeExpectations.Length} Talkatoo negative windows stayed at zero OCR.");
         }
 
@@ -281,7 +306,8 @@ namespace Aviscribe.Classifier
             if (expectation.Counted)
                 state.AddPending(expectedMoon);
 
-            using var ocr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
+            using var innerOcr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
+            var ocr = new OcrAttemptCountingProxy(innerOcr);
             var matcher = new MoonMatcher(repo, state.Settings.InputLanguage, state.Settings.OutputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state);
 
@@ -295,14 +321,24 @@ namespace Aviscribe.Classifier
                     expectation.Frame + windowFrames,
                     frameDelayMilliseconds);
 
-                if (WaitForExpectedMoon(state, expectedMoon, expectation.Counted, settleMilliseconds))
+                var resolved = WaitForExpectedMoon(
+                    state,
+                    expectedMoon,
+                    expectation.Counted,
+                    settleMilliseconds);
+                if (resolved)
+                    Thread.Sleep(250);
+
+                var attempts = ocr.Snapshot();
+                if (resolved && attempts.TotalCollectionAttempts == 1)
                 {
                     var snapshot = state.CreateSnapshot();
                     Console.WriteLine(
                         $"PASS {expectation.Name}: counted {snapshot.CountedMoonCount}, actual {snapshot.ActualMoonCount}, " +
                         $"pending [{string.Join(", ", snapshot.Pending.Select(moon => moon.Id))}], " +
                         $"collected [{string.Join(", ", snapshot.Collected.Select(moon => moon.Id))}], " +
-                        $"uncounted [{string.Join(", ", snapshot.UncountedCollected.Select(moon => moon.Id))}]");
+                        $"uncounted [{string.Join(", ", snapshot.UncountedCollected.Select(moon => moon.Id))}]" +
+                        CollectionAttemptReport(expectedMoon, snapshot, attempts));
                     return true;
                 }
 
@@ -311,8 +347,53 @@ namespace Aviscribe.Classifier
                     $"FAIL {expectation.Name}: counted {finalSnapshot.CountedMoonCount}, actual {finalSnapshot.ActualMoonCount}, " +
                     $"pending [{string.Join(", ", finalSnapshot.Pending.Select(moon => moon.Id))}], " +
                     $"collected [{string.Join(", ", finalSnapshot.Collected.Select(moon => moon.Id))}], " +
-                    $"uncounted [{string.Join(", ", finalSnapshot.UncountedCollected.Select(moon => moon.Id))}]");
+                    $"uncounted [{string.Join(", ", finalSnapshot.UncountedCollected.Select(moon => moon.Id))}]" +
+                    CollectionAttemptReport(expectedMoon, finalSnapshot, attempts));
                 return false;
+            }
+            finally
+            {
+                processor.Stop();
+            }
+        }
+
+        private static bool RunCollectionNegativeExpectation(
+            VideoCapture capture,
+            MoonRepository repo,
+            RuntimeCollectionNegativeExpectation expectation,
+            int windowFrames,
+            int frameDelayMilliseconds,
+            int settleMilliseconds)
+        {
+            var state = new GameState();
+            state.SetKingdom(expectation.Kingdom);
+            state.Settings.IncludePostGameKingdoms = true;
+            var ocr = new OcrAttemptCountingProxy(new EmptyOcrService());
+            var matcher = new MoonMatcher(
+                repo,
+                state.Settings.InputLanguage,
+                state.Settings.OutputLanguage);
+            var processor = new FrameProcessor(ocr, matcher, state);
+
+            processor.Start();
+            try
+            {
+                FeedFrames(
+                    capture,
+                    processor,
+                    expectation.Frame - windowFrames,
+                    expectation.Frame + windowFrames,
+                    frameDelayMilliseconds);
+                Thread.Sleep(settleMilliseconds);
+
+                var attempts = ocr.Snapshot();
+                var passed = attempts.TotalCollectionAttempts == 0;
+                Console.WriteLine(
+                    $"{(passed ? "PASS" : "FAIL")} {expectation.Name}: " +
+                    $"MoonGet attempts {attempts.MoonGetAttempts}, " +
+                    $"StoryMoon attempts {attempts.StoryMoonAttempts}, " +
+                    $"total collection attempts {attempts.TotalCollectionAttempts}");
+                return passed;
             }
             finally
             {
@@ -336,7 +417,8 @@ namespace Aviscribe.Classifier
             state.Settings.Category = expectation.Category;
             state.Settings.IncludePostGameKingdoms = true;
 
-            using var ocr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
+            using var innerOcr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
+            var ocr = new OcrAttemptCountingProxy(innerOcr);
             var matcher = new MoonMatcher(repo, state.Settings.InputLanguage, state.Settings.OutputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state);
 
@@ -350,13 +432,23 @@ namespace Aviscribe.Classifier
                     expectation.Frame + windowFrames,
                     frameDelayMilliseconds);
 
-                if (WaitForExpectedMoon(state, expectedMoon, expectation.Counted, settleMilliseconds))
+                var resolved = WaitForExpectedMoon(
+                    state,
+                    expectedMoon,
+                    expectation.Counted,
+                    settleMilliseconds);
+                if (resolved)
+                    Thread.Sleep(250);
+
+                var attempts = ocr.Snapshot();
+                if (resolved && attempts.TotalCollectionAttempts == 1)
                 {
                     var snapshot = state.CreateSnapshot();
                     Console.WriteLine(
                         $"PASS {expectation.Name}: counted {snapshot.CountedMoonCount}, actual {snapshot.ActualMoonCount}, " +
                         $"collected [{string.Join(", ", snapshot.Collected.Select(moon => moon.Id))}], " +
-                        $"uncounted [{string.Join(", ", snapshot.UncountedCollected.Select(moon => moon.Id))}]");
+                        $"uncounted [{string.Join(", ", snapshot.UncountedCollected.Select(moon => moon.Id))}]" +
+                        CollectionAttemptReport(expectedMoon, snapshot, attempts));
                     return true;
                 }
 
@@ -364,7 +456,8 @@ namespace Aviscribe.Classifier
                 Console.WriteLine(
                     $"FAIL {expectation.Name}: counted {finalSnapshot.CountedMoonCount}, actual {finalSnapshot.ActualMoonCount}, " +
                     $"collected [{string.Join(", ", finalSnapshot.Collected.Select(moon => moon.Id))}], " +
-                    $"uncounted [{string.Join(", ", finalSnapshot.UncountedCollected.Select(moon => moon.Id))}]");
+                    $"uncounted [{string.Join(", ", finalSnapshot.UncountedCollected.Select(moon => moon.Id))}]" +
+                    CollectionAttemptReport(expectedMoon, finalSnapshot, attempts));
                 return false;
             }
             finally
@@ -439,6 +532,26 @@ namespace Aviscribe.Classifier
             return false;
         }
 
+        private static string CollectionAttemptReport(
+            Moon expectedMoon,
+            GameStateSnapshot snapshot,
+            OcrAttemptSnapshot attempts)
+        {
+            var outcome = snapshot.Collected.Any(moon => moon.Id == expectedMoon.Id)
+                ? "counted"
+                : snapshot.UncountedCollected.Any(moon => moon.Id == expectedMoon.Id)
+                    ? "uncounted"
+                    : snapshot.Pending.Any(moon => moon.Id == expectedMoon.Id)
+                        ? "pending"
+                        : "missing";
+            var resolved = outcome is "counted" or "uncounted";
+            return
+                $", MoonGet attempts {attempts.MoonGetAttempts}, " +
+                $"StoryMoon attempts {attempts.StoryMoonAttempts}, " +
+                $"total collection attempts {attempts.TotalCollectionAttempts}, " +
+                $"resolved moon {resolved}, final outcome {outcome}";
+        }
+
         private readonly record struct RuntimeStoryExpectation(
             string Name,
             string Kingdom,
@@ -455,6 +568,11 @@ namespace Aviscribe.Classifier
             int ExpectedMoonId,
             RunCategory Category,
             bool Counted);
+
+        private readonly record struct RuntimeCollectionNegativeExpectation(
+            string Name,
+            string Kingdom,
+            int Frame);
 
         private readonly record struct RuntimeTalkatooExpectation(
             string Name,
@@ -500,6 +618,14 @@ namespace Aviscribe.Classifier
                 if (frame.Width == 649 && frame.Height == 48)
                     TalkatooReadCount++;
 
+                return string.Empty;
+            }
+        }
+
+        private sealed class EmptyOcrService : IOcrService
+        {
+            public string ReadText(Mat frame)
+            {
                 return string.Empty;
             }
         }

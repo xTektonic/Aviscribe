@@ -418,10 +418,7 @@ try
                 ? parsedStartFrame
                 : 0;
             RegionVideoAudit.Run(
-                OcrRegionType.MoonGet,
-                new OpenCvSharp.Rect(320, 600, 1250, 250),
-                stableFrameCount: 3,
-                stableImageMaxHammingDistance: 64,
+                CollectionConfirmationProfile.MoonGet,
                 videoPath,
                 outputDir,
                 stride,
@@ -450,10 +447,7 @@ try
                 ? parsedStartFrame
                 : 0;
             RegionVideoAudit.Run(
-                OcrRegionType.StoryMoon,
-                new OpenCvSharp.Rect(450, 820, 1100, 150),
-                stableFrameCount: 12,
-                stableImageMaxHammingDistance: 12,
+                CollectionConfirmationProfile.StoryMoon,
                 videoPath,
                 outputDir,
                 stride,
