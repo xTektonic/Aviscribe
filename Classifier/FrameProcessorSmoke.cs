@@ -11,6 +11,7 @@ namespace Aviscribe.Classifier
         {
             TalkatooConfirmationSmoke.Run();
             TalkatooDetectorSmoke.Run();
+            CollectionConfirmationSmoke.Run();
             StaleOcrDoesNotMutateNewKingdom();
             AmbiguousTalkatooUsesOnlyUnseenCandidate();
             AmbiguousResolvedTalkatooQuietsSamePrompt();

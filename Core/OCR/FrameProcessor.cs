@@ -21,18 +21,18 @@ namespace Aviscribe.Core.Ocr
         private Task? _frameWorker;
         private Task? _ocrWorker;
 
-        private readonly Dictionary<OcrRegionType, RegionHistory> _history = new();
-        private readonly HashSet<OcrRegionType> _activeRegions = new();
         private readonly TalkatooConfirmationTracker _talkatooConfirmation = new();
+        private readonly CollectionConfirmationCoordinator _collectionConfirmation = new();
         private long _processedFrameCount;
         private string _observedKingdom;
-        private long _suppressStoryMoonUntilFrame;
         private long _suppressTalkatooUntilFrame;
         private const double WeakCollectionMatchThreshold = 0.50;
+        private const double WeakStoryMoonMatchThreshold = 0.40;
         private const double WeakCollectionPendingMargin = 0.08;
 
         private readonly object _ocrQueueLock = new();
         private readonly Queue<OcrWorkItem> _ocrQueue = new();
+        private readonly HashSet<ConfirmationKey> _queuedOrInFlightConfirmations = new();
         private readonly ITextPresenceDetector _textDetector;
 
         private readonly OcrRegion[] _regions;
@@ -64,13 +64,18 @@ namespace Aviscribe.Core.Ocr
                     DetectionIntervalFrames: TalkatooConfirmationTracker.IdleDetectionIntervalFrames), // single line
                 new(
                     OcrRegionType.MoonGet,
-                    new Rect(490, 797, 930, 60),
+                    CollectionConfirmationProfile.MoonGet.OcrBounds,
                     _textDetector,
-                    StableFrameCount: 1,
-                    StableImageMaxHammingDistance: 64,
-                    DetectionBounds: new Rect(320, 600, 1250, 250),
-                    DetectionIntervalFrames: 5),
-                new(OcrRegionType.StoryMoon, new Rect(450, 820, 1100, 150), _textDetector, StableFrameCount: 2)
+                    StableFrameCount: CollectionConfirmationProfile.MoonGet.RequiredPresentObservations,
+                    DetectionBounds: CollectionConfirmationProfile.MoonGet.DetectionBounds,
+                    DetectionIntervalFrames: CollectionConfirmationProfile.MoonGet.DetectionIntervalFrames),
+                new(
+                    OcrRegionType.StoryMoon,
+                    CollectionConfirmationProfile.StoryMoon.OcrBounds,
+                    _textDetector,
+                    StableFrameCount: CollectionConfirmationProfile.StoryMoon.RequiredPresentObservations,
+                    DetectionBounds: CollectionConfirmationProfile.StoryMoon.DetectionBounds,
+                    DetectionIntervalFrames: CollectionConfirmationProfile.StoryMoon.DetectionIntervalFrames)
             ];
         }
 
@@ -157,7 +162,8 @@ namespace Aviscribe.Core.Ocr
             var kingdom = _state.CurrentKingdom;
             var settings = _state.Settings.Clone();
 
-            var frameStates = new List<RegionFrameState>(_regions.Length);
+            OcrRegion? talkatooRegion = null;
+            TalkatooConfirmationDecision talkatooDecision = default;
 
             foreach (var region in _regions)
             {
@@ -174,82 +180,36 @@ namespace Aviscribe.Core.Ocr
                     var decision = _talkatooConfirmation.Observe(
                         talkatooDetection.Present,
                         signature);
-                    frameStates.Add(new RegionFrameState(
-                        region,
-                        talkatooDetection.Present,
-                        decision.ShouldEnqueue,
-                        decision));
+                    talkatooRegion = region;
+                    talkatooDecision = decision;
                     continue;
                 }
 
-                if ((_processedFrameCount - 1) % Math.Max(1, region.DetectionIntervalFrames) != 0)
+                if (!_collectionConfirmation.ShouldInspect(
+                        region.Type,
+                        _processedFrameCount))
+                {
                     continue;
+                }
 
                 using var detectionCrop = mat[region.DetectionBounds ?? region.Bounds];
-
                 var detection = region.Detector.Detect(region.Type, detectionCrop);
-                bool detected = detection.Present;
-                //Console.WriteLine($"DETECTION ({region.Type}): {detected}");
-
-                if (!_history.TryGetValue(region.Type, out var history))
-                {
-                    history = new RegionHistory(region.StableFrameCount);
-                    _history[region.Type] = history;
-                }
-
-                history.Add(detected, detectionCrop);
-
-                bool stable = history.IsStableDetection() &&
-                              history.IsStableImage(region.StableImageMaxHammingDistance);
-
-                //Console.WriteLine($"STABILITY ({region.Type}): {stable}");
-
-                frameStates.Add(new RegionFrameState(region, detected, stable, default));
+                _collectionConfirmation.Observe(region.Type, detection.Present);
             }
 
-            var storyMoonDetected = frameStates.Any(state =>
-                state.Region.Type == OcrRegionType.StoryMoon &&
-                state.Detected);
-            var storyMoonStable = frameStates.Any(state =>
-                state.Region.Type == OcrRegionType.StoryMoon &&
-                state.Stable);
-            var moonGetStable = frameStates.Any(state =>
-                state.Region.Type == OcrRegionType.MoonGet &&
-                state.Stable);
-
-            if (moonGetStable && !storyMoonDetected)
-            {
-                _suppressStoryMoonUntilFrame = _processedFrameCount + 120;
-            }
-
-            if (moonGetStable || storyMoonStable)
-            {
+            var collectionDecision = _collectionConfirmation.NextDecision();
+            if (_collectionConfirmation.HasConfirmedPresence())
                 _suppressTalkatooUntilFrame = _processedFrameCount + 20;
-            }
-
-            var suppressStoryMoon = !storyMoonStable &&
-                _processedFrameCount <= _suppressStoryMoonUntilFrame;
             var suppressTalkatoo = _processedFrameCount <= _suppressTalkatooUntilFrame;
 
-            foreach (var state in frameStates)
+            if (collectionDecision.ShouldEnqueue)
             {
-                var region = state.Region;
-
-                if (region.Type == OcrRegionType.Talkatoo)
+                var region = _regions.First(item =>
+                    item.Type == collectionDecision.RegionType);
+                using var ocrCrop = mat[region.Bounds];
+                var hash = ImageHash.Compute(ocrCrop);
+                if (_collectionConfirmation.RecordEnqueued(collectionDecision))
                 {
-                    var decision = state.TalkatooDecision;
-                    if (!decision.ShouldEnqueue || suppressTalkatoo)
-                        continue;
-
-                    using var ocrCrop = mat[region.Bounds];
-                    var hash = ImageHash.Compute(ocrCrop);
-                    if (!_talkatooConfirmation.RecordEnqueued(
-                        decision.Generation,
-                        decision.Attempt))
-                    {
-                        continue;
-                    }
-
                     if (EnqueueOcr(
                         region.Type,
                         ocrCrop.Clone(),
@@ -257,56 +217,53 @@ namespace Aviscribe.Core.Ocr
                         settings,
                         hash,
                         _processedFrameCount,
-                        decision.Generation))
+                        collectionDecision.Generation))
                     {
                         Console.WriteLine(
-                            $"ENQUEUE OCR ({region.Type}, attempt {decision.Attempt})");
+                            $"ENQUEUE OCR ({region.Type}, attempt " +
+                            $"{collectionDecision.EventAttempt})");
                     }
                     else
                     {
-                        _talkatooConfirmation.RecordUnresolved(decision.Generation);
-                    }
-
-                    continue;
-                }
-
-                var stable = state.Stable &&
-                    !(region.Type == OcrRegionType.StoryMoon && suppressStoryMoon);
-
-                if (stable)
-                {
-                    var active = _activeRegions.Contains(region.Type);
-
-                    if (!active)
-                    {
-                        using var ocrCrop = mat[region.Bounds];
-                        ulong hash = ImageHash.Compute(ocrCrop);
-                        if (EnqueueOcr(
+                        _collectionConfirmation.RecordOutcome(
                             region.Type,
-                            ocrCrop.Clone(),
-                            kingdom,
-                            settings,
-                            hash,
-                            _processedFrameCount))
-                        {
-                            Console.WriteLine($"ENQUEUE OCR ({region.Type})");
-                        }
-
-                        _activeRegions.Add(region.Type);
+                            collectionDecision.Generation,
+                            resolved: false);
                     }
                 }
-                else
+            }
+
+            if (talkatooRegion != null &&
+                talkatooDecision.ShouldEnqueue &&
+                !suppressTalkatoo)
+            {
+                using var ocrCrop = mat[talkatooRegion.Bounds];
+                var hash = ImageHash.Compute(ocrCrop);
+                if (_talkatooConfirmation.RecordEnqueued(
+                    talkatooDecision.Generation,
+                    talkatooDecision.Attempt))
                 {
-                    _activeRegions.Remove(region.Type);
+                    if (EnqueueOcr(
+                        talkatooRegion.Type,
+                        ocrCrop.Clone(),
+                        kingdom,
+                        settings,
+                        hash,
+                        _processedFrameCount,
+                        talkatooDecision.Generation))
+                    {
+                        Console.WriteLine(
+                            $"ENQUEUE OCR ({talkatooRegion.Type}, attempt " +
+                            $"{talkatooDecision.Attempt})");
+                    }
+                    else
+                    {
+                        _talkatooConfirmation.RecordUnresolved(
+                            talkatooDecision.Generation);
+                    }
                 }
             }
         }
-
-        private readonly record struct RegionFrameState(
-            OcrRegion Region,
-            bool Detected,
-            bool Stable,
-            TalkatooConfirmationDecision TalkatooDecision);
 
         // ----------------------------
         // OCR LOOP (SLOW)
@@ -329,14 +286,14 @@ namespace Aviscribe.Core.Ocr
 
                     if (string.IsNullOrWhiteSpace(text))
                     {
-                        RecordTalkatooOutcome(item, resolved: false);
+                        RecordConfirmationOutcome(item, resolved: false);
                         continue;
                     }
 
                     if (!string.Equals(item.Kingdom, _state.CurrentKingdom, StringComparison.OrdinalIgnoreCase))
                     {
                         Console.WriteLine($"SKIP OCR ({item.Type}): Kingdom changed from {item.Kingdom} to {_state.CurrentKingdom}");
-                        RecordTalkatooOutcome(item, resolved: false);
+                        RecordConfirmationOutcome(item, resolved: false);
                         continue;
                     }
 
@@ -349,13 +306,13 @@ namespace Aviscribe.Core.Ocr
                         if (TryResolveAmbiguousMatch(item.Type, result, out var resolvedMatch))
                         {
                             Console.WriteLine($"RESOLVED AMBIGUOUS OCR ({item.Type}): \"{text}\" -> {resolvedMatch.English}");
-                            RecordTalkatooOutcome(item, resolved: true);
+                            RecordConfirmationOutcome(item, resolved: true);
                             Handle(item.Type, resolvedMatch);
                             continue;
                         }
 
                         Console.WriteLine($"AMBIGUOUS OCR ({item.Type}): \"{text}\"");
-                        RecordTalkatooOutcome(item, resolved: false);
+                        RecordConfirmationOutcome(item, resolved: false);
                         AmbiguousMatchReceived?.Invoke(
                             this,
                             new AmbiguousOcrResult(item.Type, text, result.Candidates));
@@ -364,7 +321,7 @@ namespace Aviscribe.Core.Ocr
 
                     if (result.BestMatch != null)
                     {
-                        RecordTalkatooOutcome(item, resolved: true);
+                        RecordConfirmationOutcome(item, resolved: true);
                         Handle(item.Type, result.BestMatch);
                         continue;
                     }
@@ -372,19 +329,21 @@ namespace Aviscribe.Core.Ocr
                     if (TryResolveWeakCollectionMatch(item.Type, result, out var weakResolvedMatch))
                     {
                         Console.WriteLine($"RESOLVED WEAK OCR ({item.Type}): \"{text}\" -> {weakResolvedMatch.English}");
+                        RecordConfirmationOutcome(item, resolved: true);
                         Handle(item.Type, weakResolvedMatch);
                         continue;
                     }
 
-                    RecordTalkatooOutcome(item, resolved: false);
+                    RecordConfirmationOutcome(item, resolved: false);
                 }
                 catch (Exception ex)
                 {
-                    RecordTalkatooOutcome(item, resolved: false);
+                    RecordConfirmationOutcome(item, resolved: false);
                     Console.WriteLine($"OCR ERROR: {ex.Message}");
                 }
                 finally
                 {
+                    CompleteConfirmation(item);
                     item.Image.Dispose();
                 }
             }
@@ -414,7 +373,10 @@ namespace Aviscribe.Core.Ocr
             if (type == OcrRegionType.Talkatoo)
                 return false;
 
-            if (result.Score < WeakCollectionMatchThreshold)
+            var threshold = type == OcrRegionType.StoryMoon
+                ? WeakStoryMoonMatchThreshold
+                : WeakCollectionMatchThreshold;
+            if (result.Score < threshold)
                 return false;
 
             var snapshot = _state.CreateSnapshot();
@@ -423,7 +385,7 @@ namespace Aviscribe.Core.Ocr
                 : result.Candidates.Max(candidate => candidate.score);
             var weakCandidates = result.Candidates
                 .Where(candidate =>
-                    candidate.score >= WeakCollectionMatchThreshold &&
+                    candidate.score >= threshold &&
                     topScore - candidate.score <= WeakCollectionPendingMargin)
                 .Select(candidate => candidate.moon)
                 .Distinct()
@@ -434,7 +396,22 @@ namespace Aviscribe.Core.Ocr
                 .ToList();
 
             if (pending.Count != 1)
-                return false;
+            {
+                if (type != OcrRegionType.StoryMoon)
+                    return false;
+
+                var story = weakCandidates
+                    .Where(candidate =>
+                        candidate.IsStory &&
+                        !snapshot.Collected.Any(moon => moon.Id == candidate.Id) &&
+                        !snapshot.UncountedCollected.Any(moon => moon.Id == candidate.Id))
+                    .ToList();
+                if (story.Count != 1)
+                    return false;
+
+                match = story[0];
+                return true;
+            }
 
             match = pending[0];
             return true;
@@ -482,16 +459,18 @@ namespace Aviscribe.Core.Ocr
             RunSettings settings,
             ulong imageHash,
             long frameIndex,
-            long talkatooGeneration = 0)
+            long confirmationGeneration = 0)
         {
             var maxQueuedPerRegion = type == OcrRegionType.Talkatoo ? 8 : 2;
+            OcrWorkItem? droppedItem = null;
 
             lock (_ocrQueueLock)
             {
-                if (type == OcrRegionType.Talkatoo &&
-                    _ocrQueue.Any(item =>
-                        item.Type == type &&
-                        item.TalkatooGeneration == talkatooGeneration))
+                var confirmationKey = new ConfirmationKey(
+                    type,
+                    confirmationGeneration);
+                if (confirmationGeneration != 0 &&
+                    _queuedOrInFlightConfirmations.Contains(confirmationKey))
                 {
                     image.Dispose();
                     return false;
@@ -500,15 +479,16 @@ namespace Aviscribe.Core.Ocr
                 if (_ocrQueue.Count(item => item.Type == type) >= maxQueuedPerRegion)
                 {
                     var kept = new Queue<OcrWorkItem>(_ocrQueue.Count);
-                    var dropped = false;
+                    var droppedOne = false;
 
                     while (_ocrQueue.Count > 0)
                     {
                         var item = _ocrQueue.Dequeue();
-                        if (!dropped && item.Type == type)
+                        if (!droppedOne && item.Type == type)
                         {
-                            item.Image.Dispose();
-                            dropped = true;
+                            droppedItem = item;
+                            RemoveConfirmationReservationCore(item);
+                            droppedOne = true;
                             continue;
                         }
 
@@ -526,35 +506,45 @@ namespace Aviscribe.Core.Ocr
                     settings.Clone(),
                     imageHash,
                     frameIndex,
-                    talkatooGeneration);
+                    confirmationGeneration);
+                if (confirmationGeneration != 0)
+                    _queuedOrInFlightConfirmations.Add(confirmationKey);
+
                 if (type == OcrRegionType.Talkatoo)
                 {
                     _ocrQueue.Enqueue(workItem);
-                    return true;
                 }
-
-                var prioritized = new Queue<OcrWorkItem>(_ocrQueue.Count + 1);
-                var delayedTalkatoo = new Queue<OcrWorkItem>();
-
-                while (_ocrQueue.Count > 0)
+                else
                 {
-                    var item = _ocrQueue.Dequeue();
-                    if (item.Type == OcrRegionType.Talkatoo)
-                        delayedTalkatoo.Enqueue(item);
-                    else
-                        prioritized.Enqueue(item);
+                    var prioritized = new Queue<OcrWorkItem>(_ocrQueue.Count + 1);
+                    var delayedTalkatoo = new Queue<OcrWorkItem>();
+
+                    while (_ocrQueue.Count > 0)
+                    {
+                        var item = _ocrQueue.Dequeue();
+                        if (item.Type == OcrRegionType.Talkatoo)
+                            delayedTalkatoo.Enqueue(item);
+                        else
+                            prioritized.Enqueue(item);
+                    }
+
+                    prioritized.Enqueue(workItem);
+
+                    while (delayedTalkatoo.Count > 0)
+                        prioritized.Enqueue(delayedTalkatoo.Dequeue());
+
+                    while (prioritized.Count > 0)
+                        _ocrQueue.Enqueue(prioritized.Dequeue());
                 }
-
-                prioritized.Enqueue(workItem);
-
-                while (delayedTalkatoo.Count > 0)
-                    prioritized.Enqueue(delayedTalkatoo.Dequeue());
-
-                while (prioritized.Count > 0)
-                    _ocrQueue.Enqueue(prioritized.Dequeue());
-
-                return true;
             }
+
+            if (droppedItem is { } dropped)
+            {
+                RecordConfirmationOutcome(dropped, resolved: false);
+                dropped.Image.Dispose();
+            }
+
+            return true;
         }
 
         private bool TryDequeueOcr(out OcrWorkItem item)
@@ -572,13 +562,42 @@ namespace Aviscribe.Core.Ocr
             return false;
         }
 
-        private void ClearOcrQueue()
+        private void CompleteConfirmation(OcrWorkItem item)
         {
+            lock (_ocrQueueLock)
+                RemoveConfirmationReservationCore(item);
+        }
+
+        private void ClearOcrQueue(bool recordUnresolved = true)
+        {
+            var droppedItems = new List<OcrWorkItem>();
             lock (_ocrQueueLock)
             {
                 while (_ocrQueue.Count > 0)
-                    _ocrQueue.Dequeue().Image.Dispose();
+                {
+                    var item = _ocrQueue.Dequeue();
+                    RemoveConfirmationReservationCore(item);
+                    droppedItems.Add(item);
+                }
             }
+
+            foreach (var item in droppedItems)
+            {
+                if (recordUnresolved)
+                    RecordConfirmationOutcome(item, resolved: false);
+
+                item.Image.Dispose();
+            }
+        }
+
+        private void RemoveConfirmationReservationCore(OcrWorkItem item)
+        {
+            if (item.ConfirmationGeneration == 0)
+                return;
+
+            _queuedOrInFlightConfirmations.Remove(new ConfirmationKey(
+                item.Type,
+                item.ConfirmationGeneration));
         }
 
         private void ResetRegionStateIfKingdomChanged()
@@ -587,24 +606,32 @@ namespace Aviscribe.Core.Ocr
             if (string.Equals(currentKingdom, _observedKingdom, StringComparison.OrdinalIgnoreCase))
                 return;
 
-            _history.Clear();
-            _activeRegions.Clear();
+            ClearOcrQueue(recordUnresolved: true);
             _talkatooConfirmation.Reset();
-            _suppressStoryMoonUntilFrame = 0;
+            _collectionConfirmation.Reset();
             _suppressTalkatooUntilFrame = 0;
-            ClearOcrQueue();
             _observedKingdom = currentKingdom;
         }
 
-        private void RecordTalkatooOutcome(OcrWorkItem item, bool resolved)
+        private void RecordConfirmationOutcome(OcrWorkItem item, bool resolved)
         {
-            if (item.Type != OcrRegionType.Talkatoo)
-                return;
+            switch (item.Type)
+            {
+                case OcrRegionType.Talkatoo:
+                    if (resolved)
+                        _talkatooConfirmation.RecordResolved(item.ConfirmationGeneration);
+                    else
+                        _talkatooConfirmation.RecordUnresolved(item.ConfirmationGeneration);
+                    break;
 
-            if (resolved)
-                _talkatooConfirmation.RecordResolved(item.TalkatooGeneration);
-            else
-                _talkatooConfirmation.RecordUnresolved(item.TalkatooGeneration);
+                case OcrRegionType.MoonGet:
+                case OcrRegionType.StoryMoon:
+                    _collectionConfirmation.RecordOutcome(
+                        item.Type,
+                        item.ConfirmationGeneration,
+                        resolved);
+                    break;
+            }
         }
 
         // ----------------------------
@@ -655,6 +682,6 @@ namespace Aviscribe.Core.Ocr
             RunSettings Settings,
             ulong ImageHash,
             long FrameIndex,
-            long TalkatooGeneration);
+            long ConfirmationGeneration);
     }
 }
