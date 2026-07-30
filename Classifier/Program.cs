@@ -573,6 +573,13 @@ try
             break;
         }
 
+        case "talkatoo-static-gate-audit":
+        {
+            var dataRoot = args.Length > 1 ? args[1] : DatasetPaths.DefaultDataRoot;
+            TalkatooStaticGateAudit.Run(dataRoot);
+            break;
+        }
+
         case "matcher-smoke":
         {
             MatcherSmoke.Run();
@@ -636,5 +643,6 @@ static void PrintUsage()
     Console.WriteLine("  state-smoke");
     Console.WriteLine("  frameprocessor-smoke");
     Console.WriteLine("  talkatoo-confirmation-smoke");
+    Console.WriteLine("  talkatoo-static-gate-audit [dataRoot]");
     Console.WriteLine("  matcher-smoke");
 }
