@@ -105,6 +105,11 @@ namespace Aviscribe.Core.Ocr
                 .ToArray();
 
             Task.WaitAll(workers, 1500);
+            lock (_lock)
+            {
+                _latestFrame?.Dispose();
+                _latestFrame = null;
+            }
             ClearOcrQueue();
         }
 
