@@ -567,6 +567,12 @@ try
             break;
         }
 
+        case "talkatoo-confirmation-smoke":
+        {
+            TalkatooConfirmationSmoke.Run();
+            break;
+        }
+
         case "matcher-smoke":
         {
             MatcherSmoke.Run();
@@ -629,5 +635,6 @@ static void PrintUsage()
     Console.WriteLine("  storymoon-search [dataRoot]");
     Console.WriteLine("  state-smoke");
     Console.WriteLine("  frameprocessor-smoke");
+    Console.WriteLine("  talkatoo-confirmation-smoke");
     Console.WriteLine("  matcher-smoke");
 }
