@@ -1,4 +1,5 @@
 using Aviscribe.Core;
+using Aviscribe.Core.Capture;
 
 namespace Aviscribe.Classifier
 {
@@ -163,14 +164,41 @@ namespace Aviscribe.Classifier
             var statePath = Path.Combine(Path.GetTempPath(), $"aviscribe-state-smoke-{Guid.NewGuid():N}.json");
             try
             {
-                store.Save(statePath, state.CreateSnapshot(), writeOverlay: true, overlayOutputPath: outputPath);
+                var captureCrops = new Dictionary<string, CaptureCropSettings>
+                {
+                    ["obs-camera"] = CaptureCropSettings.FromRect(
+                        1920,
+                        1080,
+                        new OpenCvSharp.Rect(160, 90, 1600, 900)),
+                    ["capture-card"] = CaptureCropSettings.Default
+                };
+                store.Save(
+                    statePath,
+                    state.CreateSnapshot(),
+                    writeOverlay: true,
+                    overlayOutputPath: outputPath,
+                    captureDeviceId: "obs-camera",
+                    captureCropsByDevice: captureCrops);
                 var saved = store.Load(statePath);
                 Expect(saved != null, "Saved state should load.");
+                Expect(saved!.CaptureDeviceId == "obs-camera", "Saved state should restore the selected capture device.");
+                Expect(saved.CaptureCropsByDevice.Count == 2, "Saved state should preserve per-device crops.");
+                Expect(
+                    saved.CaptureCropsByDevice["obs-camera"].Width == 1600,
+                    "Saved state should preserve crop dimensions.");
 
                 var restored = new GameState();
-                store.Restore(restored, saved!);
+                store.Restore(restored, saved);
                 Expect(restored.Pending.Count == 1, "Saved state should restore pending moons.");
                 Expect(restored.Pending[0].Id == talkatooMoon.Id, "Saved state should restore the pending moon id.");
+
+                File.WriteAllText(statePath, """{"CaptureDeviceId":"legacy-camera"}""");
+                var legacy = store.Load(statePath);
+                Expect(legacy != null, "Legacy saved state should load.");
+                Expect(
+                    legacy!.CaptureCropsByDevice != null &&
+                    legacy.CaptureCropsByDevice.Count == 0,
+                    "Legacy saved state should default to no device calibrations.");
             }
             finally
             {
