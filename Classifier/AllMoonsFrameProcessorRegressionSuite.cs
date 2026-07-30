@@ -7,6 +7,50 @@ namespace Aviscribe.Classifier
 {
     internal static class AllMoonsFrameProcessorRegressionSuite
     {
+        private static readonly RuntimeTalkatooExpectation[] TalkatooExpectations =
+        [
+            new("sand-talkatoo-employees-only", "Sand", 218_490, 43),
+            new("sand-talkatoo-alcove-ruins", "Sand", 219_830, 6),
+            new("sand-talkatoo-bird-wastes", "Sand", 224_020, 22),
+            new("sand-talkatoo-flowing-sands", "Sand", 224_178, 8),
+            new("sand-talkatoo-rumble-floor", "Sand", 228_358, 52),
+            new("sand-talkatoo-captain-toad", "Sand", 228_518, 37),
+            new("mushroom-talkatoo-mushroom-art", "Mushroom", 1_299_062, 41),
+            new("mushroom-talkatoo-peach-castle-love", "Mushroom", 1_299_224, 16),
+            new("metro-talkatoo-jump-rope-genius", "Metro", 652_332, 30),
+            new("metro-talkatoo-building-planter", "Metro", 661_446, 21),
+            new("metro-talkatoo-sewer-treasure", "Metro", 661_602, 35),
+            new("metro-talkatoo-tourist", "Metro", 676_726, 52),
+            new("metro-talkatoo-celebrating-streets", "Metro", 681_594, 36),
+            new("luncheon-talkatoo-two-flames", "Luncheon", 1_090_804, 31),
+            new("luncheon-talkatoo-captain-toad", "Luncheon", 1_099_184, 33),
+            new("luncheon-talkatoo-kingdom-art", "Luncheon", 1_099_358, 49),
+            new("luncheon-talkatoo-big-pot-swim", "Luncheon", 1_099_530, 36),
+            new("luncheon-talkatoo-volcano-hop", "Luncheon", 1_106_554, 35),
+            new("luncheon-talkatoo-veggies-chest", "Luncheon", 1_107_868, 34),
+            new("luncheon-talkatoo-tourist", "Luncheon", 1_114_498, 48),
+        ];
+
+        private static readonly RuntimeTalkatooNegativeExpectation[] TalkatooNegativeExpectations =
+        [
+            new("sand-yellow-platform-not-talkatoo", 217_178),
+            new("sand-yellow-wall-pattern-not-talkatoo", 223_938),
+            new("cascade-grass-particles-not-talkatoo", 40_068),
+            new("sand-rooftop-yellow-wall-not-talkatoo", 66_282),
+            new("sand-stone-platform-not-talkatoo", 76_539),
+            new("sand-blue-edge-yellow-trim-not-talkatoo", 80_286),
+            new("sand-diagonal-painted-trim-not-talkatoo", 80_295),
+            new("sand-bright-paint-patch-not-talkatoo", 80_670),
+            new("sand-painted-ornament-not-talkatoo", 80_676),
+            new("sand-smooth-painted-surface-not-talkatoo", 80_685),
+            new("sand-round-jaxi-object-not-talkatoo", 85_116),
+            new("sand-small-round-jaxi-object-not-talkatoo", 85_122),
+            new("sand-top-yellow-strip-not-talkatoo", 88_341),
+            new("sand-wall-zigzag-not-talkatoo", 88_560),
+            new("sand-wall-zigzag-late-not-talkatoo", 88_605),
+            new("sand-wall-zigzag-stable-not-talkatoo", 88_611),
+        ];
+
         private static readonly RuntimeCollectionExpectation[] CollectionExpectations =
         [
             new("sand-moonget-lone-pillar-standard", OcrRegionType.MoonGet, "Sand", 68_108, 13, RunCategory.Standard, Counted: true),
@@ -39,6 +83,22 @@ namespace Aviscribe.Classifier
             var repo = MoonRepository.LoadDefault();
             var failures = new List<string>();
 
+            foreach (var expectation in TalkatooExpectations)
+            {
+                if (RunTalkatooExpectation(
+                    capture,
+                    repo,
+                    expectation,
+                    windowFrames,
+                    frameDelayMilliseconds,
+                    settleMilliseconds))
+                {
+                    continue;
+                }
+
+                failures.Add(expectation.Name);
+            }
+
             foreach (var expectation in CollectionExpectations)
             {
                 if (RunCollectionExpectation(
@@ -48,6 +108,22 @@ namespace Aviscribe.Classifier
                     windowFrames,
                     frameDelayMilliseconds,
                     settleMilliseconds))
+                {
+                    continue;
+                }
+
+                failures.Add(expectation.Name);
+            }
+
+            foreach (var expectation in TalkatooNegativeExpectations)
+            {
+                if (RunTalkatooNegativeExpectation(
+                    capture,
+                    repo,
+                    expectation,
+                    windowFrames: 30,
+                    frameDelayMilliseconds: frameDelayMilliseconds,
+                    settleMilliseconds: 500))
                 {
                     continue;
                 }
@@ -76,7 +152,116 @@ namespace Aviscribe.Classifier
 
             Console.WriteLine(
                 $"All-moons FrameProcessor regression passed: " +
-                $"{CollectionExpectations.Length} collection windows and {Expectations.Length} story windows updated state.");
+                $"{TalkatooExpectations.Length} Talkatoo windows, " +
+                $"{CollectionExpectations.Length} collection windows, and " +
+                $"{Expectations.Length} story windows updated state; " +
+                $"{TalkatooNegativeExpectations.Length} Talkatoo negative windows stayed at zero OCR.");
+        }
+
+        private static bool RunTalkatooExpectation(
+            VideoCapture capture,
+            MoonRepository repo,
+            RuntimeTalkatooExpectation expectation,
+            int windowFrames,
+            int frameDelayMilliseconds,
+            int settleMilliseconds)
+        {
+            var settings = new RunSettings
+            {
+                IncludePostGameKingdoms = true
+            };
+            var expectedMoon = repo
+                .GetTalkatooCandidates(expectation.Kingdom, settings)
+                .FirstOrDefault(moon => moon.Id == expectation.ExpectedMoonId);
+            if (expectedMoon == null)
+            {
+                throw new InvalidOperationException(
+                    $"Could not find Talkatoo moon {expectation.ExpectedMoonId} in {expectation.Kingdom}.");
+            }
+
+            var state = new GameState();
+            state.SetKingdom(expectation.Kingdom);
+            state.Settings.IncludePostGameKingdoms = true;
+
+            using var innerOcr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
+            var ocr = new CountingOcrProxy(innerOcr);
+            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage, state.Settings.OutputLanguage);
+            var processor = new FrameProcessor(ocr, matcher, state);
+
+            processor.Start();
+            try
+            {
+                FeedFrames(
+                    capture,
+                    processor,
+                    expectation.Frame - windowFrames,
+                    expectation.Frame + windowFrames,
+                    frameDelayMilliseconds);
+
+                var deadline = DateTime.UtcNow.AddMilliseconds(settleMilliseconds);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (state.CreateSnapshot().Pending.Any(moon => moon.Id == expectedMoon.Id))
+                        break;
+
+                    Thread.Sleep(25);
+                }
+
+                var resolved = state
+                    .CreateSnapshot()
+                    .Pending
+                    .Any(moon => moon.Id == expectedMoon.Id);
+                var boundedAttempts = ocr.TalkatooReadCount is >= 1 and <= 2;
+                Console.WriteLine(
+                    $"{(resolved && boundedAttempts ? "PASS" : "FAIL")} {expectation.Name}: " +
+                    $"resolved {resolved}, Talkatoo OCR attempts {ocr.TalkatooReadCount}, " +
+                    $"texts [{string.Join(" | ", ocr.TalkatooTexts.Select(text => $"\"{text}\""))}]");
+                return resolved && boundedAttempts;
+            }
+            finally
+            {
+                processor.Stop();
+            }
+        }
+
+        private static bool RunTalkatooNegativeExpectation(
+            VideoCapture capture,
+            MoonRepository repo,
+            RuntimeTalkatooNegativeExpectation expectation,
+            int windowFrames,
+            int frameDelayMilliseconds,
+            int settleMilliseconds)
+        {
+            var state = new GameState();
+            state.SetKingdom("Sand");
+            var ocr = new EmptyCountingOcrService();
+            var matcher = new MoonMatcher(
+                repo,
+                state.Settings.InputLanguage,
+                state.Settings.OutputLanguage);
+            var processor = new FrameProcessor(ocr, matcher, state);
+
+            processor.Start();
+            try
+            {
+                FeedFrames(
+                    capture,
+                    processor,
+                    expectation.Frame - windowFrames,
+                    expectation.Frame + windowFrames,
+                    frameDelayMilliseconds);
+                Thread.Sleep(settleMilliseconds);
+
+                var passed = ocr.TalkatooReadCount == 0;
+                Console.WriteLine(
+                    $"{(passed ? "PASS" : "FAIL")} {expectation.Name}: " +
+                    $"Talkatoo OCR attempts {ocr.TalkatooReadCount}");
+                return passed;
+            }
+            finally
+            {
+                processor.Stop();
+            }
         }
 
         private static bool RunCollectionExpectation(
@@ -270,5 +455,53 @@ namespace Aviscribe.Classifier
             int ExpectedMoonId,
             RunCategory Category,
             bool Counted);
+
+        private readonly record struct RuntimeTalkatooExpectation(
+            string Name,
+            string Kingdom,
+            int Frame,
+            int ExpectedMoonId);
+
+        private readonly record struct RuntimeTalkatooNegativeExpectation(
+            string Name,
+            int Frame);
+
+        private sealed class CountingOcrProxy : IOcrService
+        {
+            private readonly IOcrService _inner;
+
+            public CountingOcrProxy(IOcrService inner)
+            {
+                _inner = inner;
+            }
+
+            public int TalkatooReadCount { get; private set; }
+            public List<string> TalkatooTexts { get; } = new();
+
+            public string ReadText(Mat frame)
+            {
+                var text = _inner.ReadText(frame);
+                if (frame.Width == 649 && frame.Height == 48)
+                {
+                    TalkatooReadCount++;
+                    TalkatooTexts.Add(text);
+                }
+
+                return text;
+            }
+        }
+
+        private sealed class EmptyCountingOcrService : IOcrService
+        {
+            public int TalkatooReadCount { get; private set; }
+
+            public string ReadText(Mat frame)
+            {
+                if (frame.Width == 649 && frame.Height == 48)
+                    TalkatooReadCount++;
+
+                return string.Empty;
+            }
+        }
     }
 }

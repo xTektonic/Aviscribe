@@ -28,6 +28,11 @@ namespace Aviscribe.Classifier
             new("metro-moonget-jump-rope-hero", OcrRegionType.MoonGet, "Metro", 170_217, 29),
         ];
 
+        private static readonly RuntimeNegativeExpectation[] NegativeExpectations =
+        [
+            new("cascade-background-after-fast-talkatoo", "Cascade", 18_989),
+        ];
+
         public static void Run(
             string videoPath,
             int windowFrames = 42,
@@ -55,10 +60,33 @@ namespace Aviscribe.Classifier
                 }
             }
 
+            foreach (var expectation in NegativeExpectations)
+            {
+                if (RunNegativeExpectation(
+                    capture,
+                    repo,
+                    expectation,
+                    windowFrames: 30,
+                    frameDelayMilliseconds: frameDelayMilliseconds,
+                    settleMilliseconds: 500))
+                {
+                    continue;
+                }
+
+                failures.Add(new RuntimeExpectation(
+                    expectation.Name,
+                    OcrRegionType.Talkatoo,
+                    expectation.Kingdom,
+                    expectation.Frame,
+                    0));
+            }
+
             if (failures.Count > 0)
                 throw new InvalidOperationException($"{failures.Count} frame processor video expectation(s) failed.");
 
-            Console.WriteLine($"FrameProcessor video regression passed: {Expectations.Length} expected windows updated state.");
+            Console.WriteLine(
+                $"FrameProcessor video regression passed: {Expectations.Length} expected windows updated state; " +
+                $"{NegativeExpectations.Length} Talkatoo negative window stayed at zero OCR.");
         }
 
         public static void RunChronological(
@@ -177,6 +205,45 @@ namespace Aviscribe.Classifier
             }
         }
 
+        private static bool RunNegativeExpectation(
+            VideoCapture capture,
+            MoonRepository repo,
+            RuntimeNegativeExpectation expectation,
+            int windowFrames,
+            int frameDelayMilliseconds,
+            int settleMilliseconds)
+        {
+            var state = new GameState();
+            state.SetKingdom(expectation.Kingdom);
+            var ocr = new EmptyCountingOcrService();
+            var matcher = new MoonMatcher(
+                repo,
+                state.Settings.InputLanguage,
+                state.Settings.OutputLanguage);
+            var processor = new FrameProcessor(ocr, matcher, state);
+
+            processor.Start();
+            try
+            {
+                FeedFrames(
+                    capture,
+                    processor,
+                    expectation.Frame - windowFrames,
+                    expectation.Frame + windowFrames,
+                    frameDelayMilliseconds);
+                Thread.Sleep(settleMilliseconds);
+
+                Console.WriteLine(
+                    $"{(ocr.TalkatooReadCount == 0 ? "PASS" : "FAIL")} {expectation.Name}: " +
+                    $"Talkatoo OCR attempts {ocr.TalkatooReadCount}");
+                return ocr.TalkatooReadCount == 0;
+            }
+            finally
+            {
+                processor.Stop();
+            }
+        }
+
         private static Moon FindExpectedMoon(MoonRepository repo, RuntimeExpectation expectation)
         {
             var settings = new RunSettings();
@@ -244,5 +311,23 @@ namespace Aviscribe.Classifier
             string Kingdom,
             int Frame,
             int ExpectedMoonId);
+
+        private readonly record struct RuntimeNegativeExpectation(
+            string Name,
+            string Kingdom,
+            int Frame);
+
+        private sealed class EmptyCountingOcrService : IOcrService
+        {
+            public int TalkatooReadCount { get; private set; }
+
+            public string ReadText(Mat frame)
+            {
+                if (frame.Width == 649 && frame.Height == 48)
+                    TalkatooReadCount++;
+
+                return string.Empty;
+            }
+        }
     }
 }

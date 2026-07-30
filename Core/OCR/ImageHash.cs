@@ -6,18 +6,26 @@ namespace Aviscribe.Core.Ocr
     {
         public static ulong Compute(Mat mat)
         {
-            using var small = mat.Resize(new Size(16, 16));
-            using var gray = small.CvtColor(ColorConversionCodes.BGR2GRAY);
+            if (mat.Empty())
+                return 0;
+
+            using var gray = mat.Channels() switch
+            {
+                1 => mat.Clone(),
+                4 => mat.CvtColor(ColorConversionCodes.BGRA2GRAY),
+                _ => mat.CvtColor(ColorConversionCodes.BGR2GRAY)
+            };
+            using var small = gray.Resize(new Size(8, 8), 0, 0, InterpolationFlags.Area);
+            var average = Cv2.Mean(small).Val0;
 
             ulong hash = 0;
-
-            for (int y = 0; y < gray.Rows; y++)
+            for (int y = 0; y < small.Rows; y++)
             {
-                for (int x = 0; x < gray.Cols; x++)
+                for (int x = 0; x < small.Cols; x++)
                 {
-                    hash <<= 1;
-                    if (gray.At<byte>(y, x) > 128)
-                        hash |= 1;
+                    var bit = y * small.Cols + x;
+                    if (small.At<byte>(y, x) > average)
+                        hash |= 1UL << bit;
                 }
             }
 
