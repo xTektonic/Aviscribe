@@ -1,4 +1,5 @@
 using Avalonia;
+using Aviscribe.Capture;
 using Aviscribe.UI;
 
 namespace Aviscribe.Desktop;
@@ -15,7 +16,7 @@ internal static class Program
     private static AppBuilder BuildAvaloniaApp()
     {
         return AppBuilder
-            .Configure<AviscribeApp>()
+            .Configure(() => new AviscribeApp(new FlashCapVideoProvider()))
             .UsePlatformDetect()
             .WithInterFont();
     }
