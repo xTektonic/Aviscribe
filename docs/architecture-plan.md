@@ -22,16 +22,17 @@ Longer categories:
 
 ## Project Boundaries
 
-Shared projects should stay platform-neutral:
+Maintained projects stay portable and map directly to their namespaces:
 
-- `Core`: moon data, run state, OCR abstractions, matching, frame processing, classifier interfaces.
-- `Core.Capture`: capture interfaces only.
-- `UI`: platform-neutral Avalonia UI.
+- `src/Aviscribe.Core`: moon data, run state, OCR, matching, and frame processing
+- `src/Aviscribe.Core.Capture`: capture contracts, owned frames, and crop models
+- `src/Aviscribe.Capture`: shared FlashCap capture for DirectShow, AVFoundation, and V4L2
+- `src/Aviscribe.UI`: platform-neutral Avalonia views and controls
+- `src/Aviscribe.Desktop`: the single cross-platform GUI entry point
 
-OS-specific capture belongs in OS-specific projects:
-
-- `Windows.Capture`: Windows camera/window capture. OBS Virtual Camera compatibility requires DirectShow support because OBS Virtual Camera supports DirectShow but not Media Foundation.
-- Future Linux/macOS capture providers should live in their own projects and implement `IVideoProvider` / `IVideoCapture`.
+The old Windows application and Accord capture projects remain outside the
+solution only as temporary parity references. They are not a runtime or release
+dependency.
 
 ## Detection Pipeline
 
@@ -54,11 +55,9 @@ Text regions:
 
 ## Classifier Workflow
 
-The tracked classifier workspace is `Classifier/`. It reads local data from:
-
-```text
-C:\Users\amaho\Desktop\AviscribeClassifierData
-```
+The tracked classifier workspace is `tools/Aviscribe.Classifier/`. Pass local
+dataset and video paths explicitly; large private training inputs are not stored
+in the repository.
 
 The first goal is not training; it is measurement:
 
@@ -79,13 +78,13 @@ The current measured result is useful but uneven:
 - Talkatoo separates well with cheap features. Runtime exports currently include a Talkatoo detector.
 - MoonGet does not separate well with the current global features; high-recall rules and the linear feature model both produce too many false positives. MoonGet should move to either better localized features or a small image classifier.
 
-The Desktop data can remain where it is or be mirrored into `Classifier/Data`. Large videos, generated CSVs, and model experiments are ignored unless a final small model is intentionally promoted into `Core/Data`.
+The Desktop data can remain where it is or be mirrored into `tools/Aviscribe.Classifier/Data`. Large videos, generated CSVs, and model experiments are ignored unless a final small model is intentionally promoted into `src/Aviscribe.Core/Data`.
 
 ## Near-Term Implementation Order
 
 1. Finish run-rule support in `Core`.
 2. Add classifier interfaces and a frame state machine in `Core`.
-3. Benchmark the current detectors with `Classifier`.
+3. Benchmark the current detectors with `tools/Aviscribe.Classifier`.
 4. Add StoryMoon ROI extraction/normalization from the existing full-frame story samples.
 5. Train/export CPU classifiers.
 6. Replace heuristic OCR triggering with classifier-backed triggering.

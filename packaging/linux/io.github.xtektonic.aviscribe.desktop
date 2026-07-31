@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Aviscribe
+Comment=Talkatoo run assistant for Super Mario Odyssey
+Exec=Aviscribe
+TryExec=Aviscribe
+Icon=aviscribe
+Terminal=false
+Categories=Utility;AudioVideo;
+StartupNotify=true

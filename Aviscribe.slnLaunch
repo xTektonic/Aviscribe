@@ -1,0 +1,11 @@
+[
+  {
+    "Name": "Aviscribe Desktop",
+    "Projects": [
+      {
+        "Path": "src\\Aviscribe.Desktop\\Aviscribe.Desktop.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]
