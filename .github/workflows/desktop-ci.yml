@@ -1,0 +1,172 @@
+name: Desktop CI
+
+on:
+  push:
+    branches: [main, "codex/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  AVISCRIBE_VERSION: "0.1.0"
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+      - name: Restore
+        run: dotnet restore Aviscribe.sln
+      - name: Build
+        run: dotnet build Aviscribe.sln --configuration Release --no-restore
+      - name: Automated tests
+        run: dotnet test Aviscribe.sln --configuration Release --no-build
+      - name: Smoke suites
+        shell: pwsh
+        run: |
+          $commands = @(
+            "state-smoke",
+            "capture-crop-smoke",
+            "frameprocessor-smoke",
+            "talkatoo-confirmation-smoke",
+            "matcher-smoke"
+          )
+          foreach ($command in $commands) {
+            dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- $command
+            if ($LASTEXITCODE -ne 0) { throw "$command failed." }
+          }
+      - name: Build Windows installer
+        shell: pwsh
+        run: ./packaging/windows/package.ps1 -Version $env:AVISCRIBE_VERSION
+      - name: Inspect Windows payload
+        shell: pwsh
+        run: |
+          $publish = "artifacts/publish/win-x64"
+          if (-not (Test-Path "$publish/Aviscribe.exe")) { throw "Aviscribe.exe is missing." }
+          foreach ($library in @("OpenCvSharpExtern.dll", "onnxruntime.dll")) {
+            if (-not (Get-ChildItem $publish -Recurse -Filter $library)) {
+              throw "$library is missing."
+            }
+          }
+          foreach ($library in @("Accord.Video.DirectShow.dll", "CoreCompat.System.Drawing.dll")) {
+            if (-not (Test-Path "$publish/$library")) {
+              throw "$library is missing from the Windows compatibility payload."
+            }
+          }
+          if (-not (Get-ChildItem "artifacts/packages" -Filter "*.msi")) {
+            throw "The Windows installer is missing."
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Aviscribe-${{ env.AVISCRIBE_VERSION }}-win-x64
+          path: artifacts/packages/*.msi
+          if-no-files-found: error
+
+  macos-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+      - name: Restore
+        run: dotnet restore Aviscribe.sln
+      - name: Build
+        run: dotnet build Aviscribe.sln --configuration Release --no-restore
+      - name: Automated tests
+        run: dotnet test Aviscribe.sln --configuration Release --no-build
+      - name: Smoke suites
+        run: |
+          for command in \
+            state-smoke \
+            capture-crop-smoke \
+            frameprocessor-smoke \
+            talkatoo-confirmation-smoke \
+            matcher-smoke
+          do
+            dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- "$command"
+          done
+      - name: Build macOS application and DMG
+        run: bash packaging/macos/package.sh "${AVISCRIBE_VERSION}"
+      - name: Inspect macOS payload
+        run: |
+          app="artifacts/staging/macos/Aviscribe.app"
+          test -x "${app}/Contents/MacOS/Aviscribe"
+          file "${app}/Contents/MacOS/Aviscribe" | grep -q arm64
+          find "${app}" -name "libOpenCvSharpExtern.dylib" -print -quit | grep -q .
+          find "${app}" -name "libonnxruntime.dylib" -print -quit | grep -q .
+          test ! -f "${app}/Contents/MacOS/Accord.Video.DirectShow.dll"
+          test ! -f "${app}/Contents/MacOS/CoreCompat.System.Drawing.dll"
+          plutil -lint "${app}/Contents/Info.plist"
+          codesign --verify --deep --strict "${app}"
+          test -f "artifacts/packages/Aviscribe-${AVISCRIBE_VERSION}-osx-arm64.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Aviscribe-${{ env.AVISCRIBE_VERSION }}-osx-arm64
+          path: artifacts/packages/*.dmg
+          if-no-files-found: error
+
+  linux-x64:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+      - name: Install runtime and package prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libfontconfig1 libice6 libsm6 libx11-6 xvfb
+      - name: Restore
+        run: dotnet restore Aviscribe.sln
+      - name: Build
+        run: dotnet build Aviscribe.sln --configuration Release --no-restore
+      - name: Automated tests
+        run: dotnet test Aviscribe.sln --configuration Release --no-build
+      - name: Smoke suites
+        run: |
+          for command in \
+            state-smoke \
+            capture-crop-smoke \
+            frameprocessor-smoke \
+            talkatoo-confirmation-smoke \
+            matcher-smoke
+          do
+            dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- "$command"
+          done
+      - name: Build Debian and AppImage packages
+        run: bash packaging/linux/package.sh "${AVISCRIBE_VERSION}"
+      - name: Inspect Linux payload and packages
+        run: |
+          publish="artifacts/publish/linux-x64"
+          test -x "${publish}/Aviscribe"
+          find "${publish}" -name "libOpenCvSharpExtern.so" -print -quit | grep -q .
+          find "${publish}" -name "libonnxruntime.so" -print -quit | grep -q .
+          test ! -f "${publish}/Accord.Video.DirectShow.dll"
+          test ! -f "${publish}/CoreCompat.System.Drawing.dll"
+          dpkg-deb --info "artifacts/packages/aviscribe_${AVISCRIBE_VERSION}_amd64.deb"
+          appimage="artifacts/packages/Aviscribe-${AVISCRIBE_VERSION}-x86_64.AppImage"
+          test -x "${appimage}"
+          "${appimage}" --appimage-extract >/dev/null
+          set +e
+          timeout 8s xvfb-run -a "${publish}/Aviscribe"
+          result=$?
+          set -e
+          if [[ $result -ne 0 && $result -ne 124 ]]; then
+            echo "Aviscribe launch failed with exit code ${result}."
+            exit "$result"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Aviscribe-${{ env.AVISCRIBE_VERSION }}-linux-x64
+          path: |
+            artifacts/packages/*.deb
+            artifacts/packages/*.AppImage
+          if-no-files-found: error

@@ -1,19 +1,25 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.36414.22
+# Visual Studio Version 18
+VisualStudioVersion = 18.7.11925.98
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core", "Core\Core.csproj", "{75E80C1A-DE6D-49E4-A87F-EAE25B4B237F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aviscribe.Core", "src\Aviscribe.Core\Aviscribe.Core.csproj", "{75E80C1A-DE6D-49E4-A87F-EAE25B4B237F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UI", "UI\UI.csproj", "{4B63B244-2BD5-4053-A6E5-50282F453458}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aviscribe.UI", "src\Aviscribe.UI\Aviscribe.UI.csproj", "{4B63B244-2BD5-4053-A6E5-50282F453458}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Windows.App", "Windows.App\Windows.App.csproj", "{B54A9A12-A299-46E6-BACF-452FBD4502BF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aviscribe.Capture", "src\Aviscribe.Capture\Aviscribe.Capture.csproj", "{5E23CB81-51D7-47F7-BBE6-26FC5AD92EE2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Windows.Capture", "Windows.Capture\Windows.Capture.csproj", "{735F035F-3D8F-451E-8E88-46FBCE2097B4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aviscribe.Desktop", "src\Aviscribe.Desktop\Aviscribe.Desktop.csproj", "{3BD9FA85-D53D-48F5-99BB-7F7C2C37C998}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core.Capture", "Core.Capture\Core.Capture.csproj", "{4BF5709E-2DA1-4074-AD9E-D23E7F440DF2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aviscribe.Core.Capture", "src\Aviscribe.Core.Capture\Aviscribe.Core.Capture.csproj", "{4BF5709E-2DA1-4074-AD9E-D23E7F440DF2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aviscribe.Classifier", "Classifier\Aviscribe.Classifier.csproj", "{AB415E62-7FA0-4F76-956F-89921ED4AB58}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aviscribe.Classifier", "tools\Aviscribe.Classifier\Aviscribe.Classifier.csproj", "{AB415E62-7FA0-4F76-956F-89921ED4AB58}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aviscribe.Core.Tests", "tests\Aviscribe.Core.Tests\Aviscribe.Core.Tests.csproj", "{F94A3E94-227A-4BA0-90D4-B8AD403E2CF4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aviscribe.Capture.Tests", "tests\Aviscribe.Capture.Tests\Aviscribe.Capture.Tests.csproj", "{28CF41DC-9741-47D3-B725-FA26F18F886E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aviscribe.Windows.DrawingCompat", "src\Aviscribe.Windows.DrawingCompat\Aviscribe.Windows.DrawingCompat.csproj", "{C6734A99-FC79-4DB0-BB92-6D5D9933AE77}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -29,14 +35,14 @@ Global
 		{4B63B244-2BD5-4053-A6E5-50282F453458}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4B63B244-2BD5-4053-A6E5-50282F453458}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4B63B244-2BD5-4053-A6E5-50282F453458}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B54A9A12-A299-46E6-BACF-452FBD4502BF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B54A9A12-A299-46E6-BACF-452FBD4502BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B54A9A12-A299-46E6-BACF-452FBD4502BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B54A9A12-A299-46E6-BACF-452FBD4502BF}.Release|Any CPU.Build.0 = Release|Any CPU
-		{735F035F-3D8F-451E-8E88-46FBCE2097B4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{735F035F-3D8F-451E-8E88-46FBCE2097B4}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{735F035F-3D8F-451E-8E88-46FBCE2097B4}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{735F035F-3D8F-451E-8E88-46FBCE2097B4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5E23CB81-51D7-47F7-BBE6-26FC5AD92EE2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5E23CB81-51D7-47F7-BBE6-26FC5AD92EE2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5E23CB81-51D7-47F7-BBE6-26FC5AD92EE2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5E23CB81-51D7-47F7-BBE6-26FC5AD92EE2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3BD9FA85-D53D-48F5-99BB-7F7C2C37C998}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3BD9FA85-D53D-48F5-99BB-7F7C2C37C998}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3BD9FA85-D53D-48F5-99BB-7F7C2C37C998}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3BD9FA85-D53D-48F5-99BB-7F7C2C37C998}.Release|Any CPU.Build.0 = Release|Any CPU
 		{4BF5709E-2DA1-4074-AD9E-D23E7F440DF2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{4BF5709E-2DA1-4074-AD9E-D23E7F440DF2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4BF5709E-2DA1-4074-AD9E-D23E7F440DF2}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -45,6 +51,18 @@ Global
 		{AB415E62-7FA0-4F76-956F-89921ED4AB58}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AB415E62-7FA0-4F76-956F-89921ED4AB58}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AB415E62-7FA0-4F76-956F-89921ED4AB58}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F94A3E94-227A-4BA0-90D4-B8AD403E2CF4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F94A3E94-227A-4BA0-90D4-B8AD403E2CF4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F94A3E94-227A-4BA0-90D4-B8AD403E2CF4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F94A3E94-227A-4BA0-90D4-B8AD403E2CF4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{28CF41DC-9741-47D3-B725-FA26F18F886E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{28CF41DC-9741-47D3-B725-FA26F18F886E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{28CF41DC-9741-47D3-B725-FA26F18F886E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{28CF41DC-9741-47D3-B725-FA26F18F886E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C6734A99-FC79-4DB0-BB92-6D5D9933AE77}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C6734A99-FC79-4DB0-BB92-6D5D9933AE77}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C6734A99-FC79-4DB0-BB92-6D5D9933AE77}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C6734A99-FC79-4DB0-BB92-6D5D9933AE77}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
