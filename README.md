@@ -24,6 +24,17 @@ NixOS-specific packaging is not provided.
 Install the .NET 10 SDK. The repository pins the expected SDK feature band in
 `global.json`.
 
+On Windows, open `Aviscribe.sln` with Visual Studio 2026 18.x or another
+Visual Studio release that supports .NET 10. Select the shared
+**Aviscribe Desktop** launch profile and press F5. If shared solution launch
+profiles are disabled, set `Aviscribe.Desktop` as the startup project instead.
+`Aviscribe.Core`, `Aviscribe.Core.Capture`, `Aviscribe.Capture`, and
+`Aviscribe.UI` are libraries and are debugged through the desktop process.
+
+After switching from an older checkout that used the pre-normalization project
+paths, close Visual Studio and remove the ignored `.vs` directory once so the
+IDE does not restore retired projects such as `Core\Core.csproj`.
+
 ```text
 dotnet restore Aviscribe.sln
 dotnet build Aviscribe.sln --configuration Release --no-restore
