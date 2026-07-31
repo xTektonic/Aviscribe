@@ -1,5 +1,6 @@
 ﻿using OpenCvSharp;
 using Aviscribe.Core.Capture;
+using Aviscribe.Core.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,6 +14,7 @@ namespace Aviscribe.Core.Ocr
         private readonly IOcrService _ocr;
         private readonly MoonMatcher _matcher;
         private readonly GameState _state;
+        private readonly IAppDiagnostics _diagnostics;
 
         private readonly object _lock = new();
         private readonly object _lifecycleLock = new();
@@ -48,11 +50,13 @@ namespace Aviscribe.Core.Ocr
             MoonMatcher matcher,
             GameState state,
             ITextPresenceDetector? textDetector = null,
-            CaptureCropSettings? cropSettings = null)
+            CaptureCropSettings? cropSettings = null,
+            IAppDiagnostics? diagnostics = null)
         {
             _ocr = ocr;
             _matcher = matcher;
             _state = state;
+            _diagnostics = diagnostics ?? NullAppDiagnostics.Instance;
             _textDetector = textDetector ?? new HeuristicTextPresenceDetector();
             _cropSettings = (cropSettings ?? CaptureCropSettings.Default).Clone();
             _observedKingdom = state.CurrentKingdom;
@@ -290,7 +294,7 @@ namespace Aviscribe.Core.Ocr
                         _processedFrameCount,
                         collectionDecision.Generation))
                     {
-                        Console.WriteLine(
+                        _diagnostics.Debug(
                             $"ENQUEUE OCR ({region.Type}, attempt " +
                             $"{collectionDecision.EventAttempt})");
                     }
@@ -323,7 +327,7 @@ namespace Aviscribe.Core.Ocr
                         _processedFrameCount,
                         talkatooDecision.Generation))
                     {
-                        Console.WriteLine(
+                        _diagnostics.Debug(
                             $"ENQUEUE OCR ({talkatooRegion.Type}, attempt " +
                             $"{talkatooDecision.Attempt})");
                     }
@@ -353,7 +357,8 @@ namespace Aviscribe.Core.Ocr
                 {
                     var text = _ocr.ReadText(item.Image);
 
-                    //Console.WriteLine($"OCR RESULT ({item.Type}): \"{text}\"");
+                    _diagnostics.Debug(
+                        $"OCR RESULT ({item.Type}): \"{text}\"");
 
                     if (string.IsNullOrWhiteSpace(text))
                     {
@@ -363,7 +368,9 @@ namespace Aviscribe.Core.Ocr
 
                     if (!string.Equals(item.Kingdom, _state.CurrentKingdom, StringComparison.OrdinalIgnoreCase))
                     {
-                        Console.WriteLine($"SKIP OCR ({item.Type}): Kingdom changed from {item.Kingdom} to {_state.CurrentKingdom}");
+                        _diagnostics.Debug(
+                            $"SKIP OCR ({item.Type}): Kingdom changed from " +
+                            $"{item.Kingdom} to {_state.CurrentKingdom}");
                         RecordConfirmationOutcome(item, resolved: false);
                         continue;
                     }
@@ -376,13 +383,16 @@ namespace Aviscribe.Core.Ocr
                     {
                         if (TryResolveAmbiguousMatch(item.Type, result, out var resolvedMatch))
                         {
-                            Console.WriteLine($"RESOLVED AMBIGUOUS OCR ({item.Type}): \"{text}\" -> {resolvedMatch.English}");
+                            _diagnostics.Debug(
+                                $"RESOLVED AMBIGUOUS OCR ({item.Type}): " +
+                                $"\"{text}\" -> {resolvedMatch.English}");
                             RecordConfirmationOutcome(item, resolved: true);
                             Handle(item.Type, resolvedMatch);
                             continue;
                         }
 
-                        Console.WriteLine($"AMBIGUOUS OCR ({item.Type}): \"{text}\"");
+                        _diagnostics.Debug(
+                            $"AMBIGUOUS OCR ({item.Type}): \"{text}\"");
                         RecordConfirmationOutcome(item, resolved: false);
                         AmbiguousMatchReceived?.Invoke(
                             this,
@@ -399,7 +409,9 @@ namespace Aviscribe.Core.Ocr
 
                     if (TryResolveWeakCollectionMatch(item.Type, result, out var weakResolvedMatch))
                     {
-                        Console.WriteLine($"RESOLVED WEAK OCR ({item.Type}): \"{text}\" -> {weakResolvedMatch.English}");
+                        _diagnostics.Debug(
+                            $"RESOLVED WEAK OCR ({item.Type}): " +
+                            $"\"{text}\" -> {weakResolvedMatch.English}");
                         RecordConfirmationOutcome(item, resolved: true);
                         Handle(item.Type, weakResolvedMatch);
                         continue;
@@ -410,7 +422,9 @@ namespace Aviscribe.Core.Ocr
                 catch (Exception ex)
                 {
                     RecordConfirmationOutcome(item, resolved: false);
-                    Console.WriteLine($"OCR ERROR: {ex.Message}");
+                    _diagnostics.Error(
+                        $"OCR failed for {item.Type}.",
+                        ex);
                 }
                 finally
                 {
@@ -714,7 +728,7 @@ namespace Aviscribe.Core.Ocr
             {
                 case OcrRegionType.Talkatoo:
                     if (_state.TryAddPending(match))
-                        Console.WriteLine($"ADD: {match.English}");
+                        _diagnostics.Debug($"ADD: {match.English}");
                     break;
 
                 case OcrRegionType.MoonGet:
@@ -723,23 +737,30 @@ namespace Aviscribe.Core.Ocr
                     switch (outcome)
                     {
                         case CollectionOutcome.Counted:
-                            Console.WriteLine($"COLLECTED: {match.English} ({_state.CountedMoonCount} counted)");
+                            _diagnostics.Debug(
+                                $"COLLECTED: {match.English} " +
+                                $"({_state.CountedMoonCount} counted)");
                             break;
 
                         case CollectionOutcome.Uncounted:
-                            Console.WriteLine($"UNCOUNTED: {match.English} ({_state.ActualMoonCount} actual, {_state.CountedMoonCount} counted)");
+                            _diagnostics.Debug(
+                                $"UNCOUNTED: {match.English} " +
+                                $"({_state.ActualMoonCount} actual, " +
+                                $"{_state.CountedMoonCount} counted)");
                             break;
 
                         case CollectionOutcome.AlreadyCounted:
-                            Console.WriteLine($"SKIP COLLECTED: {match.English}");
+                            _diagnostics.Debug(
+                                $"SKIP COLLECTED: {match.English}");
                             break;
 
                         case CollectionOutcome.AlreadyUncounted:
-                            Console.WriteLine($"SKIP UNCOUNTED: {match.English}");
+                            _diagnostics.Debug(
+                                $"SKIP UNCOUNTED: {match.English}");
                             break;
 
                         default:
-                            Console.WriteLine($"IGNORED: {match.English}");
+                            _diagnostics.Debug($"IGNORED: {match.English}");
                             break;
                     }
                     break;

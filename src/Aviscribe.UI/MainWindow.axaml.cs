@@ -40,6 +40,7 @@ namespace Aviscribe.UI
         private readonly CancellationTokenSource _closingCancellation = new();
 
         private FrameProcessor? _processor;
+        private DiagnosticsWindow? _diagnosticsWindow;
         private string _processorCaptureDeviceId = string.Empty;
         private AmbiguousOcrResult? _activeReview;
         private Bitmap? _previewBitmap;
@@ -412,7 +413,8 @@ namespace Aviscribe.UI
                 matcher,
                 _state,
                 detector,
-                GetCropForDevice(_captureDeviceId));
+                GetCropForDevice(_captureDeviceId),
+                _diagnostics);
             _processorCaptureDeviceId = _captureDeviceId;
             _processor.AmbiguousMatchReceived += (_, result) => EnqueueReview(result);
         }
@@ -1488,14 +1490,22 @@ namespace Aviscribe.UI
                 left.Kingdom.Equals(right.Kingdom, StringComparison.OrdinalIgnoreCase);
         }
 
-        private async void OpenDiagnostics(
+        private void OpenDiagnostics(
             object? sender,
             RoutedEventArgs args)
         {
-            var window = new DiagnosticsWindow(
+            if (_diagnosticsWindow != null)
+            {
+                _diagnosticsWindow.Activate();
+                return;
+            }
+
+            _diagnosticsWindow = new DiagnosticsWindow(
                 _diagnostics,
                 CreateDiagnosticsSnapshot);
-            await window.ShowDialog(this);
+            _diagnosticsWindow.Closed += (_, _) =>
+                _diagnosticsWindow = null;
+            _diagnosticsWindow.Show(this);
         }
 
         private DiagnosticsSnapshot CreateDiagnosticsSnapshot()
@@ -1540,6 +1550,8 @@ namespace Aviscribe.UI
         protected override void OnClosed(EventArgs e)
         {
             _diagnostics.Information("Aviscribe is shutting down.");
+            _diagnosticsWindow?.Close();
+            _diagnosticsWindow = null;
             _closingCancellation.Cancel();
             _snapshotBroker.Cancel(
                 new OperationCanceledException("The application was closed."));
