@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableWindowsDirectShowFallback
+      Condition="'$(EnableWindowsDirectShowFallback)' == '' And '$(RuntimeIdentifier)' == 'win-x64'">true</EnableWindowsDirectShowFallback>
+    <EnableWindowsDirectShowFallback
+      Condition="'$(EnableWindowsDirectShowFallback)' == '' And '$(RuntimeIdentifier)' != ''">false</EnableWindowsDirectShowFallback>
+    <EnableWindowsDirectShowFallback
+      Condition="'$(EnableWindowsDirectShowFallback)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">true</EnableWindowsDirectShowFallback>
+    <EnableWindowsDirectShowFallback
+      Condition="'$(EnableWindowsDirectShowFallback)' == ''">false</EnableWindowsDirectShowFallback>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(EnableWindowsDirectShowFallback)' == 'true'">
+    <DefineConstants>$(DefineConstants);WINDOWS_DIRECTSHOW_FALLBACK</DefineConstants>
+    <UseSystemDrawing>true</UseSystemDrawing>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FlashCap" Version="1.11.0" />
+    <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableWindowsDirectShowFallback)' == 'true'">
+    <PackageReference Include="Accord.Video.DirectShow" Version="3.8.0" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.5" />
+    <ProjectReference Include="..\Aviscribe.Windows.DrawingCompat\Aviscribe.Windows.DrawingCompat.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aviscribe.Core.Capture\Aviscribe.Core.Capture.csproj" />
+  </ItemGroup>
+</Project>

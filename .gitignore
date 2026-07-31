@@ -430,6 +430,6 @@ FodyWeavers.xsd
 
 # Aviscribe local classifier artifacts
 /.dotnet-home/
-/Classifier/Data/
-/Classifier/Output/
-/Classifier/Models/
+/tools/Aviscribe.Classifier/Data/
+/tools/Aviscribe.Classifier/Output/
+/tools/Aviscribe.Classifier/Models/
