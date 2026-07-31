@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Threading;
 using Aviscribe.Core.Diagnostics;
 using System;
 using System.Diagnostics;
@@ -17,6 +18,7 @@ public partial class DiagnosticsWindow : Window
 {
     private readonly IAppDiagnostics _diagnostics;
     private readonly Func<DiagnosticsSnapshot> _snapshotProvider;
+    private readonly DispatcherTimer _refreshTimer;
 
     public DiagnosticsWindow()
         : this(
@@ -34,6 +36,11 @@ public partial class DiagnosticsWindow : Window
     {
         _diagnostics = diagnostics;
         _snapshotProvider = snapshotProvider;
+        _refreshTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _refreshTimer.Tick += (_, _) => RefreshDiagnostics();
         InitializeComponent();
 
         this.GetControl<Button>("btnRefreshDiagnostics").Click +=
@@ -42,7 +49,12 @@ public partial class DiagnosticsWindow : Window
             (_, _) => OpenLogFolder();
         this.GetControl<Button>("btnCloseDiagnostics").Click +=
             (_, _) => Close();
-        Opened += (_, _) => RefreshDiagnostics();
+        Opened += (_, _) =>
+        {
+            RefreshDiagnostics();
+            _refreshTimer.Start();
+        };
+        Closed += (_, _) => _refreshTimer.Stop();
     }
 
     private void RefreshDiagnostics()
