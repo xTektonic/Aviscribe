@@ -55,6 +55,11 @@ jobs:
               throw "$library is missing."
             }
           }
+          foreach ($library in @("Accord.Video.DirectShow.dll", "CoreCompat.System.Drawing.dll")) {
+            if (-not (Test-Path "$publish/$library")) {
+              throw "$library is missing from the Windows compatibility payload."
+            }
+          }
           if (-not (Get-ChildItem "artifacts/packages" -Filter "*.msi")) {
             throw "The Windows installer is missing."
           }
@@ -97,6 +102,8 @@ jobs:
           file "${app}/Contents/MacOS/Aviscribe" | grep -q arm64
           find "${app}" -name "libOpenCvSharpExtern.dylib" -print -quit | grep -q .
           find "${app}" -name "libonnxruntime.dylib" -print -quit | grep -q .
+          test ! -f "${app}/Contents/MacOS/Accord.Video.DirectShow.dll"
+          test ! -f "${app}/Contents/MacOS/CoreCompat.System.Drawing.dll"
           plutil -lint "${app}/Contents/Info.plist"
           codesign --verify --deep --strict "${app}"
           test -f "artifacts/packages/Aviscribe-${AVISCRIBE_VERSION}-osx-arm64.dmg"
@@ -142,6 +149,8 @@ jobs:
           test -x "${publish}/Aviscribe"
           find "${publish}" -name "libOpenCvSharpExtern.so" -print -quit | grep -q .
           find "${publish}" -name "libonnxruntime.so" -print -quit | grep -q .
+          test ! -f "${publish}/Accord.Video.DirectShow.dll"
+          test ! -f "${publish}/CoreCompat.System.Drawing.dll"
           dpkg-deb --info "artifacts/packages/aviscribe_${AVISCRIBE_VERSION}_amd64.deb"
           appimage="artifacts/packages/Aviscribe-${AVISCRIBE_VERSION}-x86_64.AppImage"
           test -x "${appimage}"
