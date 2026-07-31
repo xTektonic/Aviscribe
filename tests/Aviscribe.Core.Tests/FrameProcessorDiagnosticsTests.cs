@@ -23,17 +23,20 @@ public sealed class FrameProcessorDiagnosticsTests
             new MoonRepository(),
             state.Settings.InputLanguage,
             state.Settings.OutputLanguage);
+        using var detector = new TalkatooOnlyDetector();
         using var processor = new FrameProcessor(
             ocr,
             matcher,
             state,
-            new TalkatooOnlyDetector(),
+            detector,
             diagnostics: diagnostics);
 
         processor.Start();
         try
         {
-            for (var index = 0; index < 4; index++)
+            for (var index = 0;
+                index < TalkatooConfirmationTracker.RequiredStableFrames;
+                index++)
             {
                 processor.PushFrame(new VideoFrame(
                     new Mat(
@@ -41,14 +44,17 @@ public sealed class FrameProcessorDiagnosticsTests
                         MatType.CV_8UC3,
                         Scalar.Black),
                     DateTime.UtcNow));
-                await Task.Delay(
-                    50,
-                    TestContext.Current.CancellationToken);
+
+                Assert.True(
+                    await detector.Detected.WaitAsync(
+                        TimeSpan.FromSeconds(10),
+                        TestContext.Current.CancellationToken),
+                    $"Frame {index + 1} was not inspected.");
             }
 
             Assert.True(
                 ocr.Read.Wait(
-                    TimeSpan.FromSeconds(3),
+                    TimeSpan.FromSeconds(10),
                     TestContext.Current.CancellationToken),
                 "The diagnostic test did not reach OCR.");
             await Task.Delay(
@@ -95,16 +101,27 @@ public sealed class FrameProcessorDiagnosticsTests
         }
     }
 
-    private sealed class TalkatooOnlyDetector : ITextPresenceDetector
+    private sealed class TalkatooOnlyDetector :
+        ITextPresenceDetector,
+        IDisposable
     {
+        public SemaphoreSlim Detected { get; } = new(0);
+
         public TextPresenceResult Detect(
             OcrRegionType regionType,
             Mat image)
         {
-            return regionType == OcrRegionType.Talkatoo
-                ? TextPresenceResult.PresentResult(
-                    nameof(TalkatooOnlyDetector))
-                : TextPresenceResult.Absent(nameof(TalkatooOnlyDetector));
+            if (regionType != OcrRegionType.Talkatoo)
+                return TextPresenceResult.Absent(nameof(TalkatooOnlyDetector));
+
+            Detected.Release();
+            return TextPresenceResult.PresentResult(
+                nameof(TalkatooOnlyDetector));
+        }
+
+        public void Dispose()
+        {
+            Detected.Dispose();
         }
     }
 
