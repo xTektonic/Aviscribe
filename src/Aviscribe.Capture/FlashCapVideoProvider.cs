@@ -1,6 +1,9 @@
 using Aviscribe.Core.Capture;
 using FlashCap;
 using System.Collections.ObjectModel;
+#if WINDOWS_DIRECTSHOW_FALLBACK
+using System.Runtime.Versioning;
+#endif
 
 namespace Aviscribe.Capture;
 
@@ -11,6 +14,11 @@ public sealed class FlashCapVideoProvider : IVideoProvider
     private IReadOnlyList<VideoDevice> _devices = [];
     private Dictionary<string, DescriptorEntry> _descriptors =
         new(StringComparer.Ordinal);
+#if WINDOWS_DIRECTSHOW_FALLBACK
+    private WindowsDirectShowFallbackProvider? _windowsFallback;
+    private HashSet<string> _fallbackDeviceIds =
+        new(StringComparer.Ordinal);
+#endif
 
     public IReadOnlyList<VideoDevice> GetDevices()
     {
@@ -31,6 +39,15 @@ public sealed class FlashCapVideoProvider : IVideoProvider
                 RefreshLocked();
                 if (!_descriptors.TryGetValue(deviceId, out entry!))
                 {
+#if WINDOWS_DIRECTSHOW_FALLBACK
+                    if (OperatingSystem.IsWindows() &&
+                        _fallbackDeviceIds.Contains(deviceId))
+                    {
+                        return OpenWindowsFallbackCapture(
+                            deviceId,
+                            formatId);
+                    }
+#endif
                     throw new InvalidOperationException(
                         "The selected capture device is no longer available. " +
                         "Refresh the device list and select it again.");
@@ -87,9 +104,60 @@ public sealed class FlashCapVideoProvider : IVideoProvider
         _descriptors = entries.ToDictionary(
             item => item.Device.Id,
             StringComparer.Ordinal);
+
+        IEnumerable<VideoDevice> devices =
+            entries.Select(item => item.Device);
+#if WINDOWS_DIRECTSHOW_FALLBACK
+        _fallbackDeviceIds = new HashSet<string>(StringComparer.Ordinal);
+        if (OperatingSystem.IsWindows())
+        {
+            // FlashCap 1.11 requires DirectShow's optional DevicePath
+            // property. OBS Virtual Camera can omit it, so merge only the
+            // filters that FlashCap did not already expose.
+            var flashCapNames = entries
+                .Select(item => item.Device.Name.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var missingFallbackDevices = GetWindowsFallbackDevices()
+                .Where(item => !flashCapNames.Contains(item.Name.Trim()))
+                .ToArray();
+            _fallbackDeviceIds = missingFallbackDevices
+                .Select(item => item.Id)
+                .ToHashSet(StringComparer.Ordinal);
+            devices = devices.Concat(missingFallbackDevices);
+        }
+#endif
+
         _devices = new ReadOnlyCollection<VideoDevice>(
-            entries.Select(item => item.Device).ToArray());
+            devices
+                .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(item => item.Id, StringComparer.Ordinal)
+                .ToArray());
     }
+
+#if WINDOWS_DIRECTSHOW_FALLBACK
+    [SupportedOSPlatform("windows")]
+    private IReadOnlyList<VideoDevice> GetWindowsFallbackDevices()
+    {
+        _windowsFallback ??= new WindowsDirectShowFallbackProvider();
+        try
+        {
+            return _windowsFallback.GetDevices();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private IVideoCapture OpenWindowsFallbackCapture(
+        string deviceId,
+        string? formatId)
+    {
+        _windowsFallback ??= new WindowsDirectShowFallbackProvider();
+        return _windowsFallback.GetVideoCapture(deviceId, formatId);
+    }
+#endif
 
     private static DescriptorEntry CreateEntry(
         CaptureDeviceDescriptor descriptor)

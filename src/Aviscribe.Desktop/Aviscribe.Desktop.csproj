@@ -9,6 +9,14 @@
     <RuntimeIdentifiers>win-x64;osx-arm64;linux-x64</RuntimeIdentifiers>
     <PublishSingleFile>false</PublishSingleFile>
     <SelfContained>true</SelfContained>
+    <EnableWindowsDirectShowFallback
+      Condition="'$(RuntimeIdentifier)' == 'win-x64'">true</EnableWindowsDirectShowFallback>
+    <EnableWindowsDirectShowFallback
+      Condition="'$(RuntimeIdentifier)' != '' And '$(RuntimeIdentifier)' != 'win-x64'">false</EnableWindowsDirectShowFallback>
+    <EnableWindowsDirectShowFallback
+      Condition="'$(EnableWindowsDirectShowFallback)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">true</EnableWindowsDirectShowFallback>
+    <EnableWindowsDirectShowFallback
+      Condition="'$(EnableWindowsDirectShowFallback)' == ''">false</EnableWindowsDirectShowFallback>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,7 +28,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Aviscribe.Capture\Aviscribe.Capture.csproj" />
+    <ProjectReference
+      Include="..\Aviscribe.Capture\Aviscribe.Capture.csproj"
+      AdditionalProperties="RuntimeIdentifier=$(RuntimeIdentifier);EnableWindowsDirectShowFallback=$(EnableWindowsDirectShowFallback)" />
     <ProjectReference Include="..\Aviscribe.Core\Aviscribe.Core.csproj" />
     <ProjectReference Include="..\Aviscribe.UI\Aviscribe.UI.csproj" />
   </ItemGroup>

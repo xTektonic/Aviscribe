@@ -6,7 +6,9 @@ gameplay text, and maintains pending, counted, and uncounted moon state.
 
 The maintained application is one Avalonia desktop program. Capture is provided
 by FlashCap through DirectShow on Windows, AVFoundation on macOS, and V4L2 on
-Linux.
+Linux. On Windows only, DirectShow filters that FlashCap cannot enumerate use a
+narrow compatibility adapter; all devices visible to FlashCap stay on the
+shared FlashCap path.
 
 ## Supported platforms
 
@@ -47,6 +49,8 @@ The solution contains:
 - `src/Aviscribe.Core`: game state, matching, OCR, persistence, and frame processing
 - `src/Aviscribe.Core.Capture`: capture contracts, owned frames, and crop models
 - `src/Aviscribe.Capture`: the shared FlashCap implementation
+- `src/Aviscribe.Windows.DrawingCompat`: Windows-only type forwarding required by
+  the legacy DirectShow compatibility adapter
 - `src/Aviscribe.UI`: platform-neutral Avalonia views and controls
 - `src/Aviscribe.Desktop`: the single GUI entry point and dependency composition
 - `tools/Aviscribe.Classifier`: audits, experiments, and smoke/regression commands
@@ -118,6 +122,13 @@ Close other applications that may have opened the device exclusively, then use
 **Refresh**. The installer creates Start menu integration under Program Files
 and can be removed through Installed Apps without retaining program files.
 
+OBS Virtual Camera is a DirectShow source. Some OBS installations omit the
+`DevicePath` property that FlashCap 1.11 requires during discovery. Aviscribe
+therefore merges only DirectShow devices missing from FlashCap's list through
+the compatibility adapter. In the source picker these appear with the
+**DirectShow compatibility** backend. Start the OBS virtual camera, select it,
+and start capture normally.
+
 ### macOS
 
 The app bundle contains `NSCameraUsageDescription`. On first use, allow camera
@@ -160,9 +171,12 @@ window to see:
 - The log directory and an action to open it
 
 Informational logging is the default. Debug logging is an explicit persisted
-opt-in. Logs rotate at 5 MiB with ten files retained. Aviscribe never
-automatically saves captured frames, and logs avoid native device identifiers,
-stack traces, secrets, and unnecessary personal paths.
+opt-in. OCR enqueue, recognized text, match decisions, and collection outcomes
+are included only while debug logging is enabled. The diagnostics window is
+modeless, remains open while the main window is used, and refreshes recent
+entries automatically. Logs rotate at 5 MiB with ten files retained. Aviscribe
+never automatically saves captured frames, and logs avoid native device
+identifiers, stack traces, secrets, and unnecessary personal paths.
 
 | Platform | Settings and run state | Logs |
 | --- | --- | --- |
