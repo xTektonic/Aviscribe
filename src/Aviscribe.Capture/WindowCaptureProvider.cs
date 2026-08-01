@@ -81,6 +81,23 @@ public sealed class WindowCaptureProvider : IVideoProvider
     }
 }
 
+public static class PlatformWindowCaptureProvider
+{
+    public static IVideoProvider Create()
+    {
+        if (OperatingSystem.IsLinux() &&
+            !string.IsNullOrWhiteSpace(
+                Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
+        {
+            return new CompositeVideoProvider(
+                new WaylandPortalVideoProvider(),
+                new WindowCaptureProvider(new X11WindowCaptureBackend()));
+        }
+
+        return new WindowCaptureProvider();
+    }
+}
+
 internal interface IWindowCaptureBackend
 {
     string Name { get; }
