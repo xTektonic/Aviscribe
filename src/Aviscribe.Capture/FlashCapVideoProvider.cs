@@ -78,6 +78,11 @@ public sealed class FlashCapVideoProvider : IVideoProvider
             .EnumerateDescriptors()
             .Where(IsSupportedBackend)
             .Select(CreateEntry)
+            .Where(item => item.Device.Capabilities.Count > 0)
+            .GroupBy(LinuxPhysicalDeviceKey, StringComparer.Ordinal)
+            .Select(group => group
+                .OrderByDescending(item => item.Device.Capabilities.Count)
+                .First())
             .GroupBy(item => item.Device.Id, StringComparer.Ordinal)
             .Select(group => group.First())
             .OrderBy(item => item.Device.Name, StringComparer.OrdinalIgnoreCase)
@@ -132,6 +137,39 @@ public sealed class FlashCapVideoProvider : IVideoProvider
             DeviceTypes.V4L2 => OperatingSystem.IsLinux(),
             _ => false
         };
+    }
+
+    private static string LinuxPhysicalDeviceKey(DescriptorEntry entry)
+    {
+        if (!OperatingSystem.IsLinux() ||
+            entry.Descriptor.DeviceType != DeviceTypes.V4L2)
+            return entry.Device.Id;
+
+        var identity = Convert.ToString(
+            entry.Descriptor.Identity,
+            System.Globalization.CultureInfo.InvariantCulture);
+        if (string.IsNullOrWhiteSpace(identity))
+            return entry.Device.Id;
+
+        var deviceName = Path.GetFileName(identity.Trim());
+        if (!deviceName.StartsWith("video", StringComparison.Ordinal))
+            return entry.Device.Id;
+
+        try
+        {
+            var sysfsDevice = new DirectoryInfo(
+                Path.Combine("/sys/class/video4linux", deviceName, "device"));
+            var physicalDevice = sysfsDevice.ResolveLinkTarget(returnFinalTarget: true);
+            return physicalDevice?.FullName ?? entry.Device.Id;
+        }
+        catch (IOException)
+        {
+            return entry.Device.Id;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return entry.Device.Id;
+        }
     }
 
     private static VideoCharacteristics SelectCharacteristics(
