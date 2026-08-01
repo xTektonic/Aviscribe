@@ -180,17 +180,17 @@ cannot be opened, inspect its permissions and add the current user to the
 distribution's `video` group, then sign out and back in. Also close software
 that may be holding the device.
 
-Window capture supports X11 and XWayland through `libX11`. In a Wayland session,
-the source list includes the X11/XWayland windows visible to Aviscribe plus an
-explanation that native Wayland windows are unavailable. To capture a window
-with the current backend, launch that target application through XWayland or
-select **Video Device**. Native Wayland portal/PipeWire capture is a future
-adapter implementation; the capture, crop, and OCR contracts do not need to
-change when it is added.
+Choose **Choose Capture Source…** for a unified list of video devices and
+windows. X11 and XWayland windows are listed directly through `libX11`. In a
+Wayland session, choose **Choose a Wayland window…**, then start capture to open
+the compositor's secure window picker. Aviscribe receives the selected window
+through the XDG ScreenCast portal and PipeWire; native Wayland applications do
+not expose a window list to Aviscribe.
 
 Covered-window behavior depends on the compositor. Minimized windows generally
 cannot be captured through X11. Linux packaging already depends on `libx11-6`;
-no external capture executable or additional runtime is required.
+Wayland capture requires a working `xdg-desktop-portal` ScreenCast backend,
+PipeWire, and `libpipewire-0.3.so.0`. No external capture executable is used.
 
 AppImage execution commonly requires FUSE 2. If FUSE mounting is unavailable:
 
