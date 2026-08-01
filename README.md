@@ -31,8 +31,9 @@ packages in `../../LocalNuGet` relative to the repository. `NuGet.Config` maps
 those two package IDs exclusively to that local feed so they cannot silently
 fall back to the public FlashCap packages. CI keeps the packages out of public
 feeds and source control by building them from the pinned fork commit. The
-resulting local feed is cached by commit and restored by each platform job; it
-is an internal build dependency, not a downloadable application artifact.
+resulting local feed is passed to each platform job as a one-day workflow
+artifact. It is an internal build dependency rather than an application
+installer.
 
 On Windows, open `Aviscribe.sln` with Visual Studio 2026 18.x or another
 Visual Studio release that supports .NET 10. Select the shared

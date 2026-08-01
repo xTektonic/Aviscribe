@@ -26,24 +26,14 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
-      - name: Restore patched FlashCap packages
-        id: flashcap-cache
-        uses: actions/cache@v4
-        with:
-          path: ../../LocalNuGet
-          key: FlashCap-${{ env.FLASHCAP_VERSION }}-${{ env.FLASHCAP_COMMIT }}
-          enableCrossOsArchive: true
       - uses: actions/setup-dotnet@v5
-        if: steps.flashcap-cache.outputs.cache-hit != 'true'
         with:
           dotnet-version: "10.0.x"
       - name: Build patched FlashCap packages
-        if: steps.flashcap-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $source = Join-Path $env:RUNNER_TEMP "FlashCap"
-          $output = [IO.Path]::GetFullPath(
-            (Join-Path $env:GITHUB_WORKSPACE "../../LocalNuGet"))
+          $output = Join-Path $env:RUNNER_TEMP "LocalNuGet"
           git clone https://github.com/xTektonic/FlashCap.git $source
           git -C $source checkout --detach $env:FLASHCAP_COMMIT
 
@@ -65,19 +55,13 @@ jobs:
               throw "$package was not created."
             }
           }
-      - name: Verify patched FlashCap packages
-        shell: pwsh
-        run: |
-          $output = [IO.Path]::GetFullPath(
-            (Join-Path $env:GITHUB_WORKSPACE "../../LocalNuGet"))
-          foreach ($package in @(
-            "FlashCap.$env:FLASHCAP_VERSION.nupkg",
-            "FlashCap.Core.$env:FLASHCAP_VERSION.nupkg"
-          )) {
-            if (-not (Test-Path (Join-Path $output $package))) {
-              throw "$package is missing from the local feed."
-            }
-          }
+      - name: Upload internal FlashCap feed
+        uses: actions/upload-artifact@v4
+        with:
+          name: _internal-FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
+          path: ${{ runner.temp }}/LocalNuGet/*.nupkg
+          if-no-files-found: error
+          retention-days: 1
 
   validate:
     needs: flashcap-packages
@@ -85,13 +69,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - name: Restore patched FlashCap packages
-        uses: actions/cache/restore@v4
+      - name: Download internal FlashCap feed
+        uses: actions/download-artifact@v5
         with:
+          name: _internal-FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
           path: ../../LocalNuGet
-          key: FlashCap-${{ env.FLASHCAP_VERSION }}-${{ env.FLASHCAP_COMMIT }}
-          enableCrossOsArchive: true
-          fail-on-cache-miss: true
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
@@ -124,13 +106,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
-      - name: Restore patched FlashCap packages
-        uses: actions/cache/restore@v4
+      - name: Download internal FlashCap feed
+        uses: actions/download-artifact@v5
         with:
+          name: _internal-FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
           path: ../../LocalNuGet
-          key: FlashCap-${{ env.FLASHCAP_VERSION }}-${{ env.FLASHCAP_COMMIT }}
-          enableCrossOsArchive: true
-          fail-on-cache-miss: true
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
@@ -174,13 +154,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
-      - name: Restore patched FlashCap packages
-        uses: actions/cache/restore@v4
+      - name: Download internal FlashCap feed
+        uses: actions/download-artifact@v5
         with:
+          name: _internal-FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
           path: ../../LocalNuGet
-          key: FlashCap-${{ env.FLASHCAP_VERSION }}-${{ env.FLASHCAP_COMMIT }}
-          enableCrossOsArchive: true
-          fail-on-cache-miss: true
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
@@ -214,13 +192,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
-      - name: Restore patched FlashCap packages
-        uses: actions/cache/restore@v4
+      - name: Download internal FlashCap feed
+        uses: actions/download-artifact@v5
         with:
+          name: _internal-FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
           path: ../../LocalNuGet
-          key: FlashCap-${{ env.FLASHCAP_VERSION }}-${{ env.FLASHCAP_COMMIT }}
-          enableCrossOsArchive: true
-          fail-on-cache-miss: true
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
