@@ -41,6 +41,7 @@ namespace Aviscribe.UI
         private readonly CancellationTokenSource _closingCancellation = new();
 
         private FrameProcessor? _processor;
+        private OnnxOcrService? _ocrService;
         private DiagnosticsWindow? _diagnosticsWindow;
         private string _processorCaptureDeviceId = string.Empty;
         private AmbiguousOcrResult? _activeReview;
@@ -290,6 +291,28 @@ namespace Aviscribe.UI
             this.GetControl<Button>("btnOpenDiagnostics").Click +=
                 OpenDiagnostics;
 
+            var ocrModeSelect = this.GetControl<ComboBox>("cbOcrModeSelect");
+            var ocrModes = new[]
+            {
+                new OcrModeListItem(OcrMode.Cpu, "CPU (compatible default)"),
+                new OcrModeListItem(OcrMode.WebGpu, "GPU (WebGPU)")
+            };
+            ocrModeSelect.ItemsSource = ocrModes;
+            ocrModeSelect.SelectedItem = ocrModes.First(item => item.Mode == _state.Settings.OcrMode);
+            ocrModeSelect.SelectionChanged += (_, _) =>
+            {
+                if (ocrModeSelect.SelectedItem is not OcrModeListItem item ||
+                    item.Mode == _state.Settings.OcrMode)
+                    return;
+                _state.Settings.OcrMode = item.Mode;
+                RecreateFrameProcessor();
+                _state.NotifySettingsChanged();
+                var status = _ocrService?.RuntimeStatus;
+                SetStatus(status?.IsFallback == true
+                    ? $"GPU OCR unavailable; using CPU: {status.FallbackReason}"
+                    : $"OCR provider changed to {status?.ActiveProvider ?? item.Name}");
+            };
+
             ConfigureHotkeySelect(
                 "cbFocusMoonHotkey",
                 _state.Settings.FocusMoonNumberHotkey,
@@ -473,7 +496,12 @@ namespace Aviscribe.UI
                 _state.Settings.OutputLanguage
             );
 
-            var ocr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
+            var ocr = new OnnxOcrService(
+                AppPaths.OcrModelPath,
+                AppPaths.CharsetPath,
+                _state.Settings.OcrMode,
+                _diagnostics);
+            _ocrService = ocr;
             var detector = LoadTextPresenceDetector();
 
             _processor = new FrameProcessor(
@@ -1699,7 +1727,18 @@ namespace Aviscribe.UI
             return new DiagnosticsSnapshot(
                 captureDevice,
                 captureState,
-                sourceAndCrop);
+                sourceAndCrop,
+                _state.Settings.OcrMode == OcrMode.WebGpu ? "GPU (WebGPU)" : "CPU",
+                FormatOcrRuntimeStatus());
+        }
+
+        private string FormatOcrRuntimeStatus()
+        {
+            var status = _ocrService?.RuntimeStatus;
+            if (status == null)
+                return "OCR session is not initialized";
+            var active = $"{status.ActiveProvider} ({status.ActiveDevice})";
+            return status.IsFallback ? $"{active}; fallback: {status.FallbackReason}" : active;
         }
 
         private void SetStatus(string text)
@@ -1759,6 +1798,11 @@ namespace Aviscribe.UI
         private sealed record ReviewCandidateItem(OcrMatchCandidate Candidate, string Label)
         {
             public override string ToString() => Label;
+        }
+
+        private sealed record OcrModeListItem(OcrMode Mode, string Name)
+        {
+            public override string ToString() => Name;
         }
 
         private enum ManualMoonTarget

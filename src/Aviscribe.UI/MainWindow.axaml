@@ -238,6 +238,9 @@
 						<Border Classes="panel">
 							<StackPanel Spacing="10">
 								<TextBlock Classes="sectionTitle" Text="Diagnostics"/>
+								<TextBlock Text="OCR processor"/>
+								<ComboBox Name="cbOcrModeSelect"
+										  ToolTip.Tip="WebGPU accelerates supported nodes and safely falls back to CPU on failure."/>
 								<CheckBox Name="chkDebugLogging"
 										  Content="Enable debug logging"
 										  ToolTip.Tip="Adds detailed operational events; captured frames are never saved."/>
