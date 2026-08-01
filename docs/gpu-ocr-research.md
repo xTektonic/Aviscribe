@@ -43,7 +43,7 @@ device reported by ONNX Runtime as NVIDIA, device ID 11525.
 - Hybrid session creation took 0.80 seconds.
 - CPU warm-up took 594.84 ms; hybrid WebGPU warm-up took 1,901.23 ms.
 - Three post-warm-up CPU runs averaged 577.09 ms.
-- Three post-warm-up hybrid WebGPU runs averaged 17.07 ms, a 33.82× speedup.
+- Three post-warm-up hybrid WebGPU runs averaged 17.07 ms, a 33.82x speedup.
 
 Run the research-only probe after building the classifier tool:
 
