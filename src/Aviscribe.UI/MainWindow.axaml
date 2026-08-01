@@ -64,6 +64,7 @@
 
 						<Grid Grid.Row="1" ColumnDefinitions="82,Auto" ColumnSpacing="6" HorizontalAlignment="Left">
 							<TextBox Name="txtMoonNumber" Width="82" PlaceholderText="Moon #"
+									 AcceptsReturn="False" VerticalAlignment="Top"
 									 ToolTip.Tip="Use the configured hotkey, type a moon number, then choose its destination"/>
 							<Grid Grid.Column="1" ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto"
 								  ColumnSpacing="4" RowSpacing="4">
