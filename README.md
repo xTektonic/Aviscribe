@@ -180,11 +180,13 @@ cannot be opened, inspect its permissions and add the current user to the
 distribution's `video` group, then sign out and back in. Also close software
 that may be holding the device.
 
-Window capture supports X11 and XWayland through `libX11`. A native Wayland
-session without XWayland displays an explanatory unavailable source rather than
-an empty list. Select **Video Device** or launch Aviscribe through XWayland.
-Native Wayland portal/PipeWire capture is a future adapter implementation; the
-capture, crop, and OCR contracts do not need to change when it is added.
+Window capture supports X11 and XWayland through `libX11`. In a Wayland session,
+the source list includes the X11/XWayland windows visible to Aviscribe plus an
+explanation that native Wayland windows are unavailable. To capture a window
+with the current backend, launch that target application through XWayland or
+select **Video Device**. Native Wayland portal/PipeWire capture is a future
+adapter implementation; the capture, crop, and OCR contracts do not need to
+change when it is added.
 
 Covered-window behavior depends on the compositor. Minimized windows generally
 cannot be captured through X11. Linux packaging already depends on `libx11-6`;

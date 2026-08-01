@@ -9,12 +9,16 @@ internal sealed class X11WindowCaptureBackend : IWindowCaptureBackend
     private const string X11 = "libX11.so.6";
     private const int ZPixmap = 2;
     private const int LsbFirst = 0;
+    private const int Success = 0;
+    private const nuint AnyPropertyType = 0;
 
     public string Name => "X11/XWayland window capture";
 
     public IReadOnlyList<WindowCaptureTarget> EnumerateTargets()
     {
-        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")) &&
+        var isWaylandSession =
+            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"));
+        if (isWaylandSession &&
             string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
         {
             return [Unavailable(
@@ -27,8 +31,10 @@ internal sealed class X11WindowCaptureBackend : IWindowCaptureBackend
 
         try
         {
-            var candidates = new HashSet<nuint>();
-            CollectChildren(display, XDefaultRootWindow(display), candidates, depth: 2);
+            var root = XDefaultRootWindow(display);
+            var candidates = GetClientWindows(display, root);
+            if (candidates.Count == 0)
+                CollectChildren(display, root, candidates, depth: 8);
             var targets = new List<WindowCaptureTarget>();
             foreach (var window in candidates)
             {
@@ -55,9 +61,20 @@ internal sealed class X11WindowCaptureBackend : IWindowCaptureBackend
                 .Select(group => group.First())
                 .OrderBy(target => target.Name, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            return result.Length > 0
-                ? result
-                : [Unavailable("No capturable X11/XWayland windows were found. Native Wayland windows are not currently visible to Aviscribe.")];
+            if (result.Length == 0)
+                return [Unavailable("No capturable X11/XWayland windows were found. Native Wayland windows are not currently visible to Aviscribe.")];
+
+            if (isWaylandSession)
+            {
+                return
+                [
+                    .. result,
+                    Unavailable(
+                        "Only X11/XWayland windows are listed in this Wayland session. Native Wayland windows require portal/PipeWire capture, which is not available yet.")
+                ];
+            }
+
+            return result;
         }
         finally
         {
@@ -146,10 +163,96 @@ internal sealed class X11WindowCaptureBackend : IWindowCaptureBackend
 
     private static string GetWindowName(nint display, nuint window)
     {
+        var utf8Title = GetUtf8Property(display, window, "_NET_WM_NAME");
+        if (!string.IsNullOrWhiteSpace(utf8Title))
+            return utf8Title;
+
         if (XFetchName(display, window, out var name) == 0 || name == 0)
             return string.Empty;
         try { return Marshal.PtrToStringUTF8(name)?.Trim() ?? string.Empty; }
         finally { XFree(name); }
+    }
+
+    private static HashSet<nuint> GetClientWindows(nint display, nuint root)
+    {
+        foreach (var propertyName in new[] { "_NET_CLIENT_LIST_STACKING", "_NET_CLIENT_LIST" })
+        {
+            var property = XInternAtom(display, propertyName, onlyIfExists: true);
+            if (property == 0)
+                continue;
+
+            if (XGetWindowProperty(
+                    display,
+                    root,
+                    property,
+                    0,
+                    1024 * 1024,
+                    delete: false,
+                    AnyPropertyType,
+                    out _,
+                    out var format,
+                    out var count,
+                    out _,
+                    out var data) != Success || data == 0)
+                continue;
+
+            try
+            {
+                if (format != 32)
+                    continue;
+
+                var windows = new HashSet<nuint>();
+                for (nuint index = 0; index < count; index++)
+                {
+                    var value = Marshal.ReadIntPtr(
+                        data,
+                        checked((int)index * IntPtr.Size));
+                    if (value != 0)
+                        windows.Add((nuint)value);
+                }
+                return windows;
+            }
+            finally
+            {
+                XFree(data);
+            }
+        }
+
+        return [];
+    }
+
+    private static string GetUtf8Property(nint display, nuint window, string propertyName)
+    {
+        var property = XInternAtom(display, propertyName, onlyIfExists: true);
+        var utf8 = XInternAtom(display, "UTF8_STRING", onlyIfExists: true);
+        if (property == 0 || utf8 == 0)
+            return string.Empty;
+
+        if (XGetWindowProperty(
+                display,
+                window,
+                property,
+                0,
+                1024 * 1024,
+                delete: false,
+                utf8,
+                out var actualType,
+                out var format,
+                out var count,
+                out _,
+                out var data) != Success || data == 0)
+            return string.Empty;
+
+        try
+        {
+            if (actualType != utf8 || format != 8 || count == 0 || count > int.MaxValue)
+                return string.Empty;
+            return Marshal.PtrToStringUTF8(data, (int)count)?.Trim() ?? string.Empty;
+        }
+        finally
+        {
+            XFree(data);
+        }
     }
 
     private static string GetWindowClass(nint display, nuint window)
@@ -202,6 +305,10 @@ internal sealed class X11WindowCaptureBackend : IWindowCaptureBackend
     private static extern nuint XDefaultRootWindow(nint display);
     [DllImport(X11)]
     private static extern int XQueryTree(nint display, nuint window, out nuint root, out nuint parent, out nint children, out uint childCount);
+    [DllImport(X11, CharSet = CharSet.Ansi)]
+    private static extern nuint XInternAtom(nint display, string atomName, [MarshalAs(UnmanagedType.Bool)] bool onlyIfExists);
+    [DllImport(X11)]
+    private static extern int XGetWindowProperty(nint display, nuint window, nuint property, nint longOffset, nint longLength, [MarshalAs(UnmanagedType.Bool)] bool delete, nuint requestedType, out nuint actualType, out int actualFormat, out nuint itemCount, out nuint bytesAfter, out nint propertyData);
     [DllImport(X11)]
     private static extern int XFetchName(nint display, nuint window, out nint name);
     [DllImport(X11)]
