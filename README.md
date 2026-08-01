@@ -6,9 +6,8 @@ gameplay text, and maintains pending, counted, and uncounted moon state.
 
 The maintained application is one Avalonia desktop program. Capture is provided
 by FlashCap through DirectShow on Windows, AVFoundation on macOS, and V4L2 on
-Linux. On Windows only, DirectShow filters that FlashCap cannot enumerate use a
-narrow compatibility adapter; all devices visible to FlashCap stay on the
-shared FlashCap path.
+Linux. Aviscribe uses the same shared FlashCap capture path on every platform,
+including DirectShow virtual cameras that do not expose a `DevicePath`.
 
 ## Supported platforms
 
@@ -25,6 +24,14 @@ NixOS-specific packaging is not provided.
 
 Install the .NET 10 SDK. The repository pins the expected SDK feature band in
 `global.json`.
+
+Restore also requires the private `FlashCap` and `FlashCap.Core` 1.11.9
+packages in `../../LocalNuGet` relative to the repository. `NuGet.Config` maps
+those two package IDs exclusively to that local feed so they cannot silently
+fall back to the public FlashCap packages. CI keeps the packages out of public
+feeds and source control by building them from the pinned fork commit in a
+bootstrap job, then passing the resulting local feed to each platform job as a
+short-lived workflow artifact.
 
 On Windows, open `Aviscribe.sln` with Visual Studio 2026 18.x or another
 Visual Studio release that supports .NET 10. Select the shared
@@ -49,8 +56,6 @@ The solution contains:
 - `src/Aviscribe.Core`: game state, matching, OCR, persistence, and frame processing
 - `src/Aviscribe.Core.Capture`: capture contracts, owned frames, and crop models
 - `src/Aviscribe.Capture`: the shared FlashCap implementation
-- `src/Aviscribe.Windows.DrawingCompat`: Windows-only type forwarding required by
-  the legacy DirectShow compatibility adapter
 - `src/Aviscribe.UI`: platform-neutral Avalonia views and controls
 - `src/Aviscribe.Desktop`: the single GUI entry point and dependency composition
 - `tools/Aviscribe.Classifier`: audits, experiments, and smoke/regression commands
@@ -122,12 +127,10 @@ Close other applications that may have opened the device exclusively, then use
 **Refresh**. The installer creates Start menu integration under Program Files
 and can be removed through Installed Apps without retaining program files.
 
-OBS Virtual Camera is a DirectShow source. Some OBS installations omit the
-`DevicePath` property that FlashCap 1.11 requires during discovery. Aviscribe
-therefore merges only DirectShow devices missing from FlashCap's list through
-the compatibility adapter. In the source picker these appear with the
-**DirectShow compatibility** backend. Start the OBS virtual camera, select it,
-and start capture normally.
+OBS Virtual Camera is a DirectShow source and may omit the optional `DevicePath`
+property. Aviscribe's FlashCap build locates those filters by their DirectShow
+moniker and captures them through the same FlashCap backend as physical cameras.
+Start the OBS virtual camera, select it, and start capture normally.
 
 ### macOS
 
