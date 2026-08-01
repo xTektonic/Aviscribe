@@ -63,6 +63,14 @@ namespace Aviscribe.Core
             return KingdomRoute.Order(kingdoms, settings).ToList();
         }
 
+        public List<GameLanguage> GetAvailableLanguages()
+        {
+            return Enum.GetValues<GameLanguage>()
+                .Where(language => Moons.Any(moon =>
+                    !string.IsNullOrWhiteSpace(moon.GetName(language))))
+                .ToList();
+        }
+
         public List<Moon> GetByKingdom(string kingdom)
         {
             return Moons

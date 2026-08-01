@@ -12,7 +12,9 @@ namespace Aviscribe.UI;
 public sealed record DiagnosticsSnapshot(
     string CaptureDevice,
     string CaptureStateAndFormat,
-    string SourceAndCrop);
+    string SourceAndCrop,
+    string RequestedOcrMode,
+    string ActiveOcrProvider);
 
 public partial class DiagnosticsWindow : Window
 {
@@ -26,7 +28,9 @@ public partial class DiagnosticsWindow : Window
             () => new DiagnosticsSnapshot(
                 "No capture device selected",
                 "Stopped",
-                "No source frame received"))
+                "No source frame received",
+                "CPU",
+                "CPU"))
     {
     }
 
@@ -79,6 +83,8 @@ public partial class DiagnosticsWindow : Window
             snapshot.CaptureStateAndFormat;
         this.GetControl<TextBlock>("txtSourceCrop").Text =
             snapshot.SourceAndCrop;
+        this.GetControl<TextBlock>("txtRequestedOcrMode").Text = snapshot.RequestedOcrMode;
+        this.GetControl<TextBlock>("txtActiveOcrProvider").Text = snapshot.ActiveOcrProvider;
         this.GetControl<TextBlock>("txtLogDirectory").Text =
             string.IsNullOrWhiteSpace(_diagnostics.LogDirectory)
                 ? "Logging is unavailable in the designer."

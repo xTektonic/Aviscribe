@@ -1,5 +1,6 @@
 namespace Aviscribe.Core
 {
+    using Aviscribe.Core.Ocr;
     public class RunSettings
     {
         public RunCategory Category { get; set; } = RunCategory.Standard;
@@ -10,6 +11,7 @@ namespace Aviscribe.Core
         public bool SeasideBeforeSnow { get; set; } = true;
         public bool ShowPendingMoonImages { get; set; }
         public bool DebugLogging { get; set; }
+        public OcrMode OcrMode { get; set; } = OcrMode.Cpu;
         public string FocusMoonNumberHotkey { get; set; } = "M";
         public string MoveToPendingHotkey { get; set; } = "P";
         public string MoveToCountedHotkey { get; set; } = "C";
@@ -30,6 +32,7 @@ namespace Aviscribe.Core
                 SeasideBeforeSnow = SeasideBeforeSnow,
                 ShowPendingMoonImages = ShowPendingMoonImages,
                 DebugLogging = DebugLogging,
+                OcrMode = OcrMode,
                 FocusMoonNumberHotkey = FocusMoonNumberHotkey,
                 MoveToPendingHotkey = MoveToPendingHotkey,
                 MoveToCountedHotkey = MoveToCountedHotkey,
@@ -48,6 +51,7 @@ namespace Aviscribe.Core
             SeasideBeforeSnow = settings.SeasideBeforeSnow;
             ShowPendingMoonImages = settings.ShowPendingMoonImages;
             DebugLogging = settings.DebugLogging;
+            OcrMode = settings.OcrMode;
             FocusMoonNumberHotkey = settings.FocusMoonNumberHotkey;
             MoveToPendingHotkey = settings.MoveToPendingHotkey;
             MoveToCountedHotkey = settings.MoveToCountedHotkey;

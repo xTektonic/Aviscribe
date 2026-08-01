@@ -58,12 +58,13 @@
 							<StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6"
 										VerticalAlignment="Center" HorizontalAlignment="Right">
 								<Button Name="btnUpdatePreview" Content="Start / Update" ToolTip.Tip="Start capture using the selected source"/>
-								<Button Name="btnResetKingdom" Content="Reset" ToolTip.Tip="Clear this kingdom's run state"/>
+								<Button Name="btnResetKingdom" Content="Reset Run" ToolTip.Tip="Clear all kingdoms and ambiguous reviews"/>
 							</StackPanel>
 						</Grid>
 
 						<Grid Grid.Row="1" ColumnDefinitions="82,Auto" ColumnSpacing="6" HorizontalAlignment="Left">
 							<TextBox Name="txtMoonNumber" Width="82" PlaceholderText="Moon #"
+									 AcceptsReturn="False" VerticalAlignment="Top"
 									 ToolTip.Tip="Use the configured hotkey, type a moon number, then choose its destination"/>
 							<Grid Grid.Column="1" ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto"
 								  ColumnSpacing="4" RowSpacing="4">
@@ -177,6 +178,8 @@
 								<TextBlock Classes="sectionTitle" Text="Language"/>
 								<TextBlock Text="Game text language"/>
 								<ComboBox Name="cbInputLanguageSelect"/>
+								<TextBlock Text="OCR input currently supports Traditional Chinese. Simplified Chinese is temporarily disabled."
+										   FontSize="11" Opacity="0.65" TextWrapping="Wrap"/>
 								<TextBlock Text="Display language"/>
 								<ComboBox Name="cbOutputLanguageSelect"/>
 							</StackPanel>
@@ -206,11 +209,14 @@
 						<Border Classes="panel">
 							<StackPanel Spacing="10">
 								<TextBlock Classes="sectionTitle" Text="Capture Source"/>
+								<TextBlock Text="Source type"/>
+								<ComboBox Name="cbCaptureSourceKind"/>
+								<TextBlock Text="Source"/>
 								<ComboBox Name="cbInputSelect"/>
 								<Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="8">
 									<Button Name="btnSettingsUpdatePreview" Content="Start / Update Capture"/>
 									<Button Name="btnCropGameplay" Grid.Column="1" Content="Crop Gameplay…"/>
-									<Button Name="btnRefreshCaptureDevices" Grid.Column="2" Content="Refresh"/>
+									<Button Name="btnRefreshCaptureDevices" Grid.Column="2" Content="Refresh" ToolTip.Tip="Refresh the selected source type"/>
 								</Grid>
 								<TextBlock Name="txtCropSummary" Text="Crop: Full frame (1920 × 1080)"
 										   Opacity="0.7" TextWrapping="Wrap"/>
@@ -232,6 +238,9 @@
 						<Border Classes="panel">
 							<StackPanel Spacing="10">
 								<TextBlock Classes="sectionTitle" Text="Diagnostics"/>
+								<TextBlock Text="OCR processor"/>
+								<ComboBox Name="cbOcrModeSelect"
+										  ToolTip.Tip="WebGPU accelerates supported nodes and safely falls back to CPU on failure."/>
 								<CheckBox Name="chkDebugLogging"
 										  Content="Enable debug logging"
 										  ToolTip.Tip="Adds detailed operational events; captured frames are never saved."/>

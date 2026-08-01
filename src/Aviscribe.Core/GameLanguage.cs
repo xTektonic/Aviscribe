@@ -24,4 +24,12 @@ namespace Aviscribe.Core
         SpanishLatinAmerica,
         Russian
     }
+
+    public static class GameLanguageCatalog
+    {
+        public static bool IsSupportedInputLanguage(GameLanguage language)
+        {
+            return language == GameLanguage.ChineseTraditional;
+        }
+    }
 }

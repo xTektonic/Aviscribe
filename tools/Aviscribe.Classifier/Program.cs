@@ -20,6 +20,12 @@ try
             break;
         }
 
+        case "ocr-provider-benchmark":
+        {
+            OcrProviderBenchmark.Run();
+            break;
+        }
+
         case "manifest":
         {
             var dataRoot = args.Length > 1 ? args[1] : DatasetPaths.DefaultDataRoot;
