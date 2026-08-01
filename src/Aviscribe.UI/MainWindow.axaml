@@ -178,7 +178,7 @@
 								<TextBlock Classes="sectionTitle" Text="Language"/>
 								<TextBlock Text="Game text language"/>
 								<ComboBox Name="cbInputLanguageSelect"/>
-								<TextBlock Text="OCR currently supports Simplified and Traditional Chinese."
+								<TextBlock Text="OCR input currently supports Traditional Chinese. Simplified Chinese is temporarily disabled."
 										   FontSize="11" Opacity="0.65" TextWrapping="Wrap"/>
 								<TextBlock Text="Display language"/>
 								<ComboBox Name="cbOutputLanguageSelect"/>
