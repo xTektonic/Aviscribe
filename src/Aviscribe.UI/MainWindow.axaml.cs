@@ -100,12 +100,27 @@ namespace Aviscribe.UI
             _repo = MoonRepository.LoadDefault();
             _stateStore = new RunStateStore(_repo);
             LoadSavedRunState();
+            NormalizeLanguageSettings();
             _diagnostics.DebugEnabled = _state.Settings.DebugLogging;
             _outputWriter.Language = _state.Settings.OutputLanguage;
             InitControls();
             InitFrameProcessor();
             _state.Changed += (_, _) => UpdateRunState();
             UpdateRunState();
+        }
+
+        private void NormalizeLanguageSettings()
+        {
+            if (!GameLanguageCatalog.IsSupportedInputLanguage(_state.Settings.InputLanguage))
+                _state.Settings.InputLanguage = GameLanguage.ChineseTraditional;
+
+            var outputLanguages = _repo.GetAvailableLanguages();
+            if (outputLanguages.Contains(_state.Settings.OutputLanguage))
+                return;
+
+            _state.Settings.OutputLanguage = outputLanguages.Contains(GameLanguage.English)
+                ? GameLanguage.English
+                : outputLanguages.FirstOrDefault();
         }
 
         private void InitControls()
@@ -156,11 +171,19 @@ namespace Aviscribe.UI
             };
 
             _inputLanguageSelect = this.GetControl<ComboBox>("cbInputLanguageSelect");
-            _inputLanguageSelect.ItemsSource = Enum.GetValues<GameLanguage>();
-            _inputLanguageSelect.SelectedItem = _state.Settings.InputLanguage;
+            var inputLanguageItems = Enum.GetValues<GameLanguage>()
+                .Select(language => new ComboBoxItem
+                {
+                    Content = language,
+                    IsEnabled = GameLanguageCatalog.IsSupportedInputLanguage(language)
+                })
+                .ToList();
+            _inputLanguageSelect.ItemsSource = inputLanguageItems;
+            _inputLanguageSelect.SelectedItem = inputLanguageItems.Single(item =>
+                Equals(item.Content, _state.Settings.InputLanguage));
             _inputLanguageSelect.SelectionChanged += (_, _) =>
             {
-                if (_inputLanguageSelect.SelectedItem is GameLanguage language)
+                if (_inputLanguageSelect.SelectedItem is ComboBoxItem { Content: GameLanguage language })
                 {
                     _state.Settings.InputLanguage = language;
                     if (_processor != null)
@@ -170,11 +193,15 @@ namespace Aviscribe.UI
             };
 
             _outputLanguageSelect = this.GetControl<ComboBox>("cbOutputLanguageSelect");
-            _outputLanguageSelect.ItemsSource = Enum.GetValues<GameLanguage>();
-            _outputLanguageSelect.SelectedItem = _state.Settings.OutputLanguage;
+            var outputLanguageItems = _repo.GetAvailableLanguages()
+                .Select(language => new ComboBoxItem { Content = language })
+                .ToList();
+            _outputLanguageSelect.ItemsSource = outputLanguageItems;
+            _outputLanguageSelect.SelectedItem = outputLanguageItems.Single(item =>
+                Equals(item.Content, _state.Settings.OutputLanguage));
             _outputLanguageSelect.SelectionChanged += (_, _) =>
             {
-                if (_outputLanguageSelect.SelectedItem is GameLanguage language)
+                if (_outputLanguageSelect.SelectedItem is ComboBoxItem { Content: GameLanguage language })
                 {
                     _state.Settings.OutputLanguage = language;
                     _outputWriter.Language = language;
