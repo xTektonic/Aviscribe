@@ -69,8 +69,8 @@ namespace Aviscribe.UI
         private TextBox? _overlayPathText;
         private TextBox? _moonNumberText;
         private TextBlock? _cropSummaryText;
-        private ComboBox? _inputSelect;
-        private ComboBox? _captureSourceKindSelect;
+        private TextBlock? _selectedCaptureSourceText;
+        private VideoDevice? _selectedCaptureSource;
         private TabControl? _mainTabs;
         private bool _processorRunning;
         private bool _writeOverlayEnabled = true;
@@ -130,41 +130,11 @@ namespace Aviscribe.UI
 
         private void InitControls()
         {
-            _captureSourceKindSelect = this.GetControl<ComboBox>("cbCaptureSourceKind");
-            _captureSourceKindSelect.ItemsSource = new[]
-            {
-                new CaptureSourceKindItem(CaptureSourceKind.VideoDevice, "Video Device"),
-                new CaptureSourceKindItem(CaptureSourceKind.Window, "Window")
-            };
-            _captureSourceKindSelect.SelectedItem =
-                ((IEnumerable<CaptureSourceKindItem>)_captureSourceKindSelect.ItemsSource)
-                .First(item => item.Kind == _captureSourceSelection.Kind);
-            _captureSourceKindSelect.SelectionChanged += (_, _) =>
-            {
-                if (_captureSourceKindSelect.SelectedItem is not CaptureSourceKindItem item)
-                    return;
-
-                _captureSourceSelection.SetKind(item.Kind);
-                ApplyCaptureSourcesForSelectedKind();
-                PersistRunState(_state.CreateSnapshot());
-            };
-
-            _inputSelect = this.GetControl<ComboBox>("cbInputSelect");
-            _inputSelect.DisplayMemberBinding =
-                new Avalonia.Data.Binding(nameof(VideoDevice.Name));
-            _inputSelect.SelectionChanged += (_, _) =>
-            {
-                if (_inputSelect.SelectedItem is VideoDevice device)
-                {
-                    _captureSourceSelection.Select(device);
-                    _captureDeviceId = device.Id;
-                    UpdateCropSummary();
-                    PersistRunState(_state.CreateSnapshot());
-                }
-            };
+            _selectedCaptureSourceText =
+                this.GetControl<TextBlock>("txtSelectedCaptureSource");
             ApplyCaptureDevices(_videoProvider.GetDevices());
-            this.GetControl<Button>("btnRefreshCaptureDevices").Click +=
-                async (_, _) => await RefreshCaptureDevicesAsync();
+            this.GetControl<Button>("btnChooseCaptureSource").Click +=
+                ChooseCaptureSource;
 
             // Update Preview button
             Button updatePreview = this.GetControl<Button>("btnUpdatePreview");
@@ -440,18 +410,37 @@ namespace Aviscribe.UI
             RefreshMoonList();
         }
 
-        private async Task RefreshCaptureDevicesAsync()
+        private void ApplyCaptureDevices(IReadOnlyList<VideoDevice> devices)
+        {
+            _allCaptureSources = devices;
+            _selectedCaptureSource = _captureSourceSelection.Restore(devices) ??
+                devices.FirstOrDefault(source => source.IsAvailable);
+            if (_selectedCaptureSource != null)
+                SelectCaptureSource(_selectedCaptureSource, persist: false);
+            else if (_selectedCaptureSourceText != null)
+                _selectedCaptureSourceText.Text = "No compatible capture sources found";
+        }
+
+        private async void ChooseCaptureSource(object? sender, RoutedEventArgs args)
         {
             try
             {
                 var devices = await _videoProvider.RefreshAsync(
                     _closingCancellation.Token);
-                ApplyCaptureDevices(devices);
-                _diagnostics.Information(
-                    $"Capture device refresh found {devices.Count} device(s).");
-                SetStatus(devices.Count == 0
-                    ? "No compatible capture sources found"
-                    : $"Found {devices.Count} capture source(s)");
+                _allCaptureSources = devices;
+                var selectableSources = devices.Where(source =>
+                    source.IsAvailable ||
+                    !devices.Any(candidate =>
+                        candidate.Kind == source.Kind && candidate.IsAvailable));
+                var chooser = new CaptureSourcePickerWindow(
+                    selectableSources.ToArray(),
+                    _selectedCaptureSource?.Id);
+                var selected = await chooser.ShowDialog<VideoDevice?>(this);
+                if (selected == null)
+                    return;
+
+                SelectCaptureSource(selected, persist: true);
+                SetStatus($"Selected {selected.Name}");
             }
             catch (OperationCanceledException)
                 when (_closingCancellation.IsCancellationRequested)
@@ -459,34 +448,26 @@ namespace Aviscribe.UI
             }
             catch (Exception ex)
             {
-                _diagnostics.Error(
-                    "Could not refresh capture devices.",
-                    ex);
-                SetStatus($"Could not refresh capture devices: {ex.Message}");
+                _diagnostics.Error("Could not choose a capture source.", ex);
+                SetStatus($"Could not choose a capture source: {ex.Message}");
             }
         }
 
-        private void ApplyCaptureDevices(IReadOnlyList<VideoDevice> devices)
+        private void SelectCaptureSource(VideoDevice selected, bool persist)
         {
-            _allCaptureSources = devices;
-            ApplyCaptureSourcesForSelectedKind();
+            _selectedCaptureSource = selected;
+            _captureSourceSelection.Select(selected);
+            _captureDeviceId = selected.Id;
+            if (_selectedCaptureSourceText != null)
+                _selectedCaptureSourceText.Text =
+                    $"{SourceKindLabel(selected.Kind)} — {selected.Name}";
+            UpdateCropSummary();
+            if (persist)
+                PersistRunState(_state.CreateSnapshot());
         }
 
-        private void ApplyCaptureSourcesForSelectedKind()
-        {
-            if (_inputSelect == null)
-                return;
-
-            var sources = _captureSourceSelection.Filter(_allCaptureSources);
-            _inputSelect.ItemsSource = sources;
-            _inputSelect.SelectedItem = _captureSourceSelection.Restore(_allCaptureSources);
-            if (_inputSelect.SelectedItem is VideoDevice selected)
-            {
-                _captureSourceSelection.Select(selected);
-                _captureDeviceId = selected.Id;
-                UpdateCropSummary();
-            }
-        }
+        private static string SourceKindLabel(CaptureSourceKind kind) =>
+            kind == CaptureSourceKind.Window ? "Window" : "Video device";
 
         private void InitFrameProcessor()
         {
@@ -575,7 +556,7 @@ namespace Aviscribe.UI
 
         private async void StartPreview(object? sender, RoutedEventArgs args)
         {
-            if (_inputSelect?.SelectedItem is not VideoDevice selected)
+            if (_selectedCaptureSource is not VideoDevice selected)
             {
                 SetStatus("Select a capture source first");
                 return;
@@ -637,6 +618,8 @@ namespace Aviscribe.UI
                     selected.Id,
                     cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
+                _currentDevice = capture.Device;
+                _selectedCaptureSource = capture.Device;
                 _video = capture;
                 capture.FrameReceived += OnFrame;
                 capture.CaptureFailed += OnCaptureFailed;
@@ -658,13 +641,20 @@ namespace Aviscribe.UI
                     throw;
                 }
 
-                Dispatcher.UIThread.Post(UpdateCropSummary);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_selectedCaptureSourceText != null)
+                        _selectedCaptureSourceText.Text =
+                            $"{SourceKindLabel(capture.Device.Kind)} — " +
+                            capture.Device.Name;
+                    UpdateCropSummary();
+                });
                 PersistRunState(_state.CreateSnapshot());
                 SetStatus(
-                    $"Watching {selected.Name} at {capture.SelectedFormat}");
+                    $"Watching {capture.Device.Name} at {capture.SelectedFormat}");
                 _diagnostics.Information(
-                    $"Capture started: {selected.Name}; " +
-                    $"{capture.SelectedFormat}; backend {selected.Backend}.");
+                    $"Capture started: {capture.Device.Name}; " +
+                    $"{capture.SelectedFormat}; backend {capture.Device.Backend}.");
             }
             finally
             {
@@ -775,7 +765,7 @@ namespace Aviscribe.UI
 
         private async void OpenCropWindow(object? sender, RoutedEventArgs args)
         {
-            if (_inputSelect?.SelectedItem is not VideoDevice selected)
+            if (_selectedCaptureSource is not VideoDevice selected)
             {
                 SetStatus("Select a capture source before cropping gameplay");
                 return;
@@ -812,7 +802,7 @@ namespace Aviscribe.UI
         private async Task<Bitmap?> RequestRawSnapshotAsync(
             CancellationToken cancellationToken)
         {
-            if (_inputSelect?.SelectedItem is not VideoDevice selected)
+            if (_selectedCaptureSource is not VideoDevice selected)
                 return null;
 
             await EnsureCaptureStartedAsync(selected, cancellationToken);
@@ -1702,8 +1692,7 @@ namespace Aviscribe.UI
         private DiagnosticsSnapshot CreateDiagnosticsSnapshot()
         {
             var capture = _video;
-            var device = _currentDevice ??
-                _inputSelect?.SelectedItem as VideoDevice;
+            var device = _currentDevice ?? _selectedCaptureSource;
             var captureDevice = device == null
                 ? "No capture device selected"
                 : $"{device.Name} ({device.Backend})";
@@ -1790,10 +1779,6 @@ namespace Aviscribe.UI
             public override string ToString() => Label;
         }
 
-        private sealed record CaptureSourceKindItem(CaptureSourceKind Kind, string Label)
-        {
-            public override string ToString() => Label;
-        }
 
         private sealed record ReviewCandidateItem(OcrMatchCandidate Candidate, string Label)
         {
