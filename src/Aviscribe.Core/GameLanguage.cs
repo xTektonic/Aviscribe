@@ -29,7 +29,7 @@ namespace Aviscribe.Core
     {
         public static bool IsSupportedInputLanguage(GameLanguage language)
         {
-            return language is GameLanguage.ChineseSimplified or GameLanguage.ChineseTraditional;
+            return language == GameLanguage.ChineseTraditional;
         }
     }
 }
