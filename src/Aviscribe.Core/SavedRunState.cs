@@ -11,6 +11,8 @@ namespace Aviscribe.Core
         public bool WriteOverlay { get; set; } = true;
         public string OverlayOutputPath { get; set; } = AppPaths.PendingOutputPath;
         public string CaptureDeviceId { get; set; } = string.Empty;
+        public CaptureSourceKind CaptureSourceKind { get; set; } = CaptureSourceKind.VideoDevice;
+        public Dictionary<string, string> CaptureSourceIdsByKind { get; set; } = new();
         public Dictionary<string, CaptureCropSettings> CaptureCropsByDevice { get; set; } = new();
         public List<int> PendingMoonIds { get; set; } = new();
         public List<int> CollectedMoonIds { get; set; } = new();

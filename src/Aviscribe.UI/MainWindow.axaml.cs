@@ -69,10 +69,13 @@ namespace Aviscribe.UI
         private TextBox? _moonNumberText;
         private TextBlock? _cropSummaryText;
         private ComboBox? _inputSelect;
+        private ComboBox? _captureSourceKindSelect;
         private TabControl? _mainTabs;
         private bool _processorRunning;
         private bool _writeOverlayEnabled = true;
         private string _captureDeviceId = string.Empty;
+        private CaptureSourceSelection _captureSourceSelection = new();
+        private IReadOnlyList<VideoDevice> _allCaptureSources = [];
         private bool _updatingLists;
         private bool _dragStarted;
         private bool _suppressListClick;
@@ -126,6 +129,25 @@ namespace Aviscribe.UI
 
         private void InitControls()
         {
+            _captureSourceKindSelect = this.GetControl<ComboBox>("cbCaptureSourceKind");
+            _captureSourceKindSelect.ItemsSource = new[]
+            {
+                new CaptureSourceKindItem(CaptureSourceKind.VideoDevice, "Video Device"),
+                new CaptureSourceKindItem(CaptureSourceKind.Window, "Window")
+            };
+            _captureSourceKindSelect.SelectedItem =
+                ((IEnumerable<CaptureSourceKindItem>)_captureSourceKindSelect.ItemsSource)
+                .First(item => item.Kind == _captureSourceSelection.Kind);
+            _captureSourceKindSelect.SelectionChanged += (_, _) =>
+            {
+                if (_captureSourceKindSelect.SelectedItem is not CaptureSourceKindItem item)
+                    return;
+
+                _captureSourceSelection.SetKind(item.Kind);
+                ApplyCaptureSourcesForSelectedKind();
+                PersistRunState(_state.CreateSnapshot());
+            };
+
             _inputSelect = this.GetControl<ComboBox>("cbInputSelect");
             _inputSelect.DisplayMemberBinding =
                 new Avalonia.Data.Binding(nameof(VideoDevice.Name));
@@ -133,6 +155,7 @@ namespace Aviscribe.UI
             {
                 if (_inputSelect.SelectedItem is VideoDevice device)
                 {
+                    _captureSourceSelection.Select(device);
                     _captureDeviceId = device.Id;
                     UpdateCropSummary();
                     PersistRunState(_state.CreateSnapshot());
@@ -404,8 +427,8 @@ namespace Aviscribe.UI
                 _diagnostics.Information(
                     $"Capture device refresh found {devices.Count} device(s).");
                 SetStatus(devices.Count == 0
-                    ? "No compatible capture devices found"
-                    : $"Found {devices.Count} capture device(s)");
+                    ? "No compatible capture sources found"
+                    : $"Found {devices.Count} capture source(s)");
             }
             catch (OperationCanceledException)
                 when (_closingCancellation.IsCancellationRequested)
@@ -422,16 +445,24 @@ namespace Aviscribe.UI
 
         private void ApplyCaptureDevices(IReadOnlyList<VideoDevice> devices)
         {
+            _allCaptureSources = devices;
+            ApplyCaptureSourcesForSelectedKind();
+        }
+
+        private void ApplyCaptureSourcesForSelectedKind()
+        {
             if (_inputSelect == null)
                 return;
 
-            var selectedId = (_inputSelect.SelectedItem as VideoDevice)?.Id;
-            if (string.IsNullOrWhiteSpace(selectedId))
-                selectedId = _captureDeviceId;
-
-            _inputSelect.ItemsSource = devices;
-            _inputSelect.SelectedItem = devices.FirstOrDefault(device =>
-                string.Equals(device.Id, selectedId, StringComparison.Ordinal));
+            var sources = _captureSourceSelection.Filter(_allCaptureSources);
+            _inputSelect.ItemsSource = sources;
+            _inputSelect.SelectedItem = _captureSourceSelection.Restore(_allCaptureSources);
+            if (_inputSelect.SelectedItem is VideoDevice selected)
+            {
+                _captureSourceSelection.Select(selected);
+                _captureDeviceId = selected.Id;
+                UpdateCropSummary();
+            }
         }
 
         private void InitFrameProcessor()
@@ -721,6 +752,11 @@ namespace Aviscribe.UI
                 SetStatus("Select a capture source before cropping gameplay");
                 return;
             }
+            if (!selected.IsAvailable)
+            {
+                SetStatus(selected.UnavailableReason);
+                return;
+            }
 
             var window = new GameplayCropWindow(
                 GetCropForDevice(selected.Id),
@@ -941,6 +977,16 @@ namespace Aviscribe.UI
                 }
                 _writeOverlayEnabled = savedState.WriteOverlay;
                 _captureDeviceId = savedState.CaptureDeviceId;
+                var selectedIds = new Dictionary<CaptureSourceKind, string>();
+                foreach (var item in savedState.CaptureSourceIdsByKind ?? new Dictionary<string, string>())
+                {
+                    if (Enum.TryParse<CaptureSourceKind>(item.Key, ignoreCase: true, out var kind) &&
+                        !string.IsNullOrWhiteSpace(item.Value))
+                        selectedIds[kind] = item.Value;
+                }
+                if (selectedIds.Count == 0 && !string.IsNullOrWhiteSpace(savedState.CaptureDeviceId))
+                    selectedIds[savedState.CaptureSourceKind] = savedState.CaptureDeviceId;
+                _captureSourceSelection = new CaptureSourceSelection(savedState.CaptureSourceKind, selectedIds);
                 lock (_captureConfigurationLock)
                 {
                     _captureCropsByDevice.Clear();
@@ -973,6 +1019,8 @@ namespace Aviscribe.UI
                     _outputWriter.OutputPath,
                     _captureDeviceId,
                     GetCaptureCropSnapshot(),
+                    _captureSourceSelection.Kind,
+                    _captureSourceSelection.Snapshot(),
                     GetReviewSnapshot());
             }
             catch (Exception ex)
@@ -1699,6 +1747,11 @@ namespace Aviscribe.UI
         }
 
         private sealed record KingdomListItem(string Kingdom, string Label)
+        {
+            public override string ToString() => Label;
+        }
+
+        private sealed record CaptureSourceKindItem(CaptureSourceKind Kind, string Label)
         {
             public override string ToString() => Label;
         }

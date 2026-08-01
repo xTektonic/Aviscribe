@@ -1,13 +1,14 @@
 # Aviscribe
 
 Aviscribe is a cross-platform Talkatoo run assistant for Super Mario Odyssey.
-It watches a camera, capture card, or virtual camera, recognizes relevant
+It watches a camera, capture card, virtual camera, or application window, recognizes relevant
 gameplay text, and maintains pending, counted, and uncounted moon state.
 
-The maintained application is one Avalonia desktop program. Capture is provided
-by FlashCap through DirectShow on Windows, AVFoundation on macOS, and V4L2 on
-Linux. Aviscribe uses the same shared FlashCap capture path on every platform,
-including DirectShow virtual cameras that do not expose a `DevicePath`.
+The maintained application is one Avalonia desktop program. Video-device capture
+is provided by FlashCap through DirectShow on Windows, AVFoundation on macOS,
+and V4L2 on Linux. Window capture uses an in-process platform adapter: Win32
+window capture on Windows, CoreGraphics on macOS, and X11/XWayland on Linux.
+Both paths deliver the same owned BGR frame contract to crop, OCR, and preview.
 
 ## Supported platforms
 
@@ -84,20 +85,29 @@ test footage and are intentionally not part of hardware-independent CI.
 
 ## Capture and crop behavior
 
-Choose a source under **Settings → Capture Source**, refresh the list if a
-device was attached after startup, then start capture. Aviscribe selects a
-reported format closest to 1920×1080 at 16:9, preferring higher frame rates.
+Choose **Video Device** or **Window** under **Settings → Capture Source**, then
+choose a source and start capture. Refresh after attaching a device, opening a
+window, or changing permissions. Aviscribe remembers the last selection for each
+source type and keeps crop settings independently for every device and window.
+For video devices, Aviscribe selects a reported format closest to 1920×1080 at
+16:9, preferring higher frame rates.
 
-Device crop keys have this form:
+Capture-source crop keys have this form:
 
 ```text
 platform:backend:96-bit-sha256-fingerprint
 ```
 
-The fingerprint is derived from FlashCap's native device identity, falling back
-to its normalized display name. This is stable enough for a device on one
-machine without writing the native identifier to settings. Mappings from a
-different operating system or a disconnected device are ignored harmlessly.
+For devices, the fingerprint is derived from FlashCap's native identity, falling
+back to its normalized display name. For windows it is derived from the owning
+application, class where available, and title. This avoids storing native handles
+and lets recurring application windows recover their crop after restart. Mappings
+from another operating system or a source that is not open are ignored harmlessly.
+
+Window capture runs at 10 fps, which is sufficient for Aviscribe's OCR cadence.
+Covered windows work on supported compositor/application combinations. Minimized
+windows and protected or GPU-only surfaces are best effort; restore the window if
+the preview is blank or capture reports repeated failures.
 
 **Crop Gameplay** waits for a raw, uncropped source frame. The saved per-device
 selection is always 16:9. When source resolution changes, it scales the saved
@@ -132,6 +142,10 @@ property. Aviscribe's FlashCap build locates those filters by their DirectShow
 moniker and captures them through the same FlashCap backend as physical cameras.
 Start the OBS virtual camera, select it, and start capture normally.
 
+Window capture uses `PrintWindow` with a display-copy fallback. Most covered
+desktop windows work. Minimized, hardware-overlay, and protected-content windows
+may return no usable image; restore the source window in that case.
+
 ### macOS
 
 The app bundle contains `NSCameraUsageDescription`. On first use, allow camera
@@ -142,6 +156,13 @@ Development and CI bundles use an ad-hoc signature. Public distribution still
 requires an Apple Developer ID certificate, hardened-runtime signing, and
 notarization.
 
+Window capture requires **Screen & System Audio Recording** permission. If the
+Window list shows a permission message, enable Aviscribe under **System Settings
+→ Privacy & Security**, restart it, and refresh. CoreGraphics captures covered
+windows, but minimized or protected windows may be unavailable. macOS builds and
+permission behavior must be validated on a signed app bundle; Windows CI cannot
+exercise those APIs.
+
 ### Linux
 
 Capture devices normally appear as `/dev/video*`. If a device is listed but
@@ -149,8 +170,15 @@ cannot be opened, inspect its permissions and add the current user to the
 distribution's `video` group, then sign out and back in. Also close software
 that may be holding the device.
 
-Aviscribe supports Avalonia's X11 path, including XWayland sessions. Native
-Wayland support is experimental and is not a release target yet.
+Window capture supports X11 and XWayland through `libX11`. A native Wayland
+session without XWayland displays an explanatory unavailable source rather than
+an empty list. Select **Video Device** or launch Aviscribe through XWayland.
+Native Wayland portal/PipeWire capture is a future adapter implementation; the
+capture, crop, and OCR contracts do not need to change when it is added.
+
+Covered-window behavior depends on the compositor. Minimized windows generally
+cannot be captured through X11. Linux packaging already depends on `libx11-6`;
+no external capture executable or additional runtime is required.
 
 AppImage execution commonly requires FUSE 2. If FUSE mounting is unavailable:
 
