@@ -13,12 +13,58 @@ env:
   DOTNET_NOLOGO: "true"
   DOTNET_CLI_TELEMETRY_OPTOUT: "true"
   AVISCRIBE_VERSION: "0.1.0"
+  FLASHCAP_VERSION: "1.11.9"
+  FLASHCAP_COMMIT: "ba2de264b0c6bcd77c3ad2b65a83963393631e88"
 
 jobs:
+  flashcap-packages:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+      - name: Build patched FlashCap packages
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:RUNNER_TEMP "FlashCap"
+          $output = Join-Path $env:RUNNER_TEMP "LocalNuGet"
+          git clone https://github.com/xTektonic/FlashCap.git $source
+          git -C $source checkout --detach $env:FLASHCAP_COMMIT
+
+          foreach ($project in @("FlashCap.Core", "FlashCap")) {
+            dotnet pack (Join-Path $source "$project/$project.csproj") `
+              --configuration Release `
+              --output $output `
+              -p:Version=$env:FLASHCAP_VERSION `
+              -p:PackageVersion=$env:FLASHCAP_VERSION
+            if ($LASTEXITCODE -ne 0) { throw "$project pack failed." }
+          }
+
+          $expected = @(
+            "FlashCap.$env:FLASHCAP_VERSION.nupkg",
+            "FlashCap.Core.$env:FLASHCAP_VERSION.nupkg"
+          )
+          foreach ($package in $expected) {
+            if (-not (Test-Path (Join-Path $output $package))) {
+              throw "$package was not created."
+            }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
+          path: ${{ runner.temp }}/LocalNuGet/*.nupkg
+          if-no-files-found: error
+          retention-days: 1
+
   windows-x64:
+    needs: flashcap-packages
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
+          path: ../../LocalNuGet
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
@@ -55,9 +101,14 @@ jobs:
               throw "$library is missing."
             }
           }
-          foreach ($library in @("Accord.Video.DirectShow.dll", "CoreCompat.System.Drawing.dll")) {
+          foreach ($library in @("FlashCap.dll", "FlashCap.Core.dll")) {
             if (-not (Test-Path "$publish/$library")) {
-              throw "$library is missing from the Windows compatibility payload."
+              throw "$library is missing from the Windows payload."
+            }
+          }
+          foreach ($library in @("Accord.Video.DirectShow.dll", "CoreCompat.System.Drawing.dll")) {
+            if (Test-Path "$publish/$library") {
+              throw "$library should not be present in the FlashCap-only payload."
             }
           }
           if (-not (Get-ChildItem "artifacts/packages" -Filter "*.msi")) {
@@ -70,9 +121,14 @@ jobs:
           if-no-files-found: error
 
   macos-arm64:
+    needs: flashcap-packages
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
+          path: ../../LocalNuGet
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
@@ -102,6 +158,8 @@ jobs:
           file "${app}/Contents/MacOS/Aviscribe" | grep -q arm64
           find "${app}" -name "libOpenCvSharpExtern.dylib" -print -quit | grep -q .
           find "${app}" -name "libonnxruntime.dylib" -print -quit | grep -q .
+          test -f "${app}/Contents/MacOS/FlashCap.dll"
+          test -f "${app}/Contents/MacOS/FlashCap.Core.dll"
           test ! -f "${app}/Contents/MacOS/Accord.Video.DirectShow.dll"
           test ! -f "${app}/Contents/MacOS/CoreCompat.System.Drawing.dll"
           plutil -lint "${app}/Contents/Info.plist"
@@ -114,9 +172,14 @@ jobs:
           if-no-files-found: error
 
   linux-x64:
+    needs: flashcap-packages
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
+          path: ../../LocalNuGet
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
@@ -149,6 +212,8 @@ jobs:
           test -x "${publish}/Aviscribe"
           find "${publish}" -name "libOpenCvSharpExtern.so" -print -quit | grep -q .
           find "${publish}" -name "libonnxruntime.so" -print -quit | grep -q .
+          test -f "${publish}/FlashCap.dll"
+          test -f "${publish}/FlashCap.Core.dll"
           test ! -f "${publish}/Accord.Video.DirectShow.dll"
           test ! -f "${publish}/CoreCompat.System.Drawing.dll"
           dpkg-deb --info "artifacts/packages/aviscribe_${AVISCRIBE_VERSION}_amd64.deb"
