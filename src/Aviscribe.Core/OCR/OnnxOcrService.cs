@@ -2,27 +2,59 @@
 using Microsoft.ML.OnnxRuntime.Tensors;
 using OpenCvSharp;
 using System;
-using System.Linq;
 using System.Text;
+using Aviscribe.Core.Diagnostics;
 
 namespace Aviscribe.Core.Ocr
 {
     public class OnnxOcrService : IOcrService, IDisposable
     {
-        private readonly InferenceSession _session;
-        private readonly string _inputName;
+        private readonly IOcrInferenceSession _session;
         private readonly string[] _charset;
 
         private const int TargetHeight = 48;
         private const int MaxWidth = 320; // safe cap
 
         public OnnxOcrService(string modelPath, string dictPath)
+            : this(modelPath, dictPath, OcrMode.Cpu, NullAppDiagnostics.Instance)
         {
-            _session = new InferenceSession(modelPath);
-            _inputName = _session.InputMetadata.Keys.First();
+        }
 
+        public OnnxOcrService(
+            string modelPath,
+            string dictPath,
+            OcrMode requestedMode,
+            IAppDiagnostics? diagnostics = null)
+            : this(
+                dictPath,
+                new OcrSessionManager(
+                    modelPath,
+                    requestedMode,
+                    new CpuOnnxInferenceSessionFactory(),
+                    new WebGpuOnnxInferenceSessionFactory(),
+                    diagnostics ?? NullAppDiagnostics.Instance))
+        {
+        }
+
+        internal OnnxOcrService(
+            string modelPath,
+            string dictPath,
+            IOcrInferenceSessionFactory sessionFactory)
+            : this(dictPath, sessionFactory.Create(modelPath))
+        {
+        }
+
+        private OnnxOcrService(
+            string dictPath,
+            IOcrInferenceSession session)
+        {
+            _session = session;
             _charset = System.IO.File.ReadAllLines(dictPath);
         }
+
+        public OcrRuntimeStatus RuntimeStatus =>
+            (_session as OcrSessionManager)?.Status ??
+            new OcrRuntimeStatus(OcrMode.Cpu, "CPU", "CPU");
 
         public string ReadText(Mat image)
         {
@@ -38,15 +70,8 @@ namespace Aviscribe.Core.Ocr
             //Console.WriteLine($"ran tensor in {(DateTime.UtcNow - start)}");
 
             //start = DateTime.UtcNow;
-            using var results = _session.Run(new[]
-            {
-                NamedOnnxValue.CreateFromTensor(_inputName, tensor)
-            });
+            var output = _session.Run(tensor);
             //Console.WriteLine($"ran session in {(DateTime.UtcNow - start)}");
-
-            //start = DateTime.UtcNow;
-            var output = results.First().AsTensor<float>();
-            //Console.WriteLine($"got output in {(DateTime.UtcNow - start)}");
 
             //start = DateTime.UtcNow;
             var text = Decode(output);
@@ -107,10 +132,10 @@ namespace Aviscribe.Core.Ocr
         // ----------------------------
         // CTC DECODER (FIXED)
         // ----------------------------
-        private string Decode(Tensor<float> output)
+        private string Decode(OcrInferenceOutput output)
         {
-            int timeSteps = output.Dimensions[1];
-            int classes = output.Dimensions[2];
+            int timeSteps = output.TimeSteps;
+            int classes = output.Classes;
 
             int lastIndex = -1;
             var sb = new StringBuilder();
@@ -122,7 +147,7 @@ namespace Aviscribe.Core.Ocr
 
                 for (int c = 0; c < classes; c++)
                 {
-                    float val = output[0, t, c];
+                    float val = output.Values[t * classes + c];
                     if (val > bestScore)
                     {
                         bestScore = val;
@@ -144,7 +169,7 @@ namespace Aviscribe.Core.Ocr
 
         public void Dispose()
         {
-            _session?.Dispose();
+            _session.Dispose();
         }
     }
 }

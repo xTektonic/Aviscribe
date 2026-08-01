@@ -47,13 +47,23 @@ public sealed class RunStateCropPersistenceTests
                 writeOverlay: false,
                 overlayOutputPath: "pending.txt",
                 captureDeviceId: "linux:v4l2:abc",
-                captureCropsByDevice: crops);
+                captureCropsByDevice: crops,
+                captureSourceKind: CaptureSourceKind.Window,
+                captureSourceIdsByKind: new Dictionary<CaptureSourceKind, string>
+                {
+                    [CaptureSourceKind.VideoDevice] = "linux:v4l2:abc",
+                    [CaptureSourceKind.Window] = "linux:x11-window:def"
+                });
             crop.X = 999;
 
             var loaded = store.Load(path);
 
             Assert.NotNull(loaded);
             Assert.Equal("linux:v4l2:abc", loaded.CaptureDeviceId);
+            Assert.Equal(CaptureSourceKind.Window, loaded.CaptureSourceKind);
+            Assert.Equal(
+                "linux:x11-window:def",
+                loaded.CaptureSourceIdsByKind[nameof(CaptureSourceKind.Window)]);
             Assert.Equal(
                 320,
                 loaded.CaptureCropsByDevice["linux:v4l2:abc"].X);

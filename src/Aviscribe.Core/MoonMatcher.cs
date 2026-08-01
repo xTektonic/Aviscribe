@@ -79,8 +79,15 @@ namespace Aviscribe.Core
                 .OrderByDescending(r => r.score)
                 .ToList();
 
-            var best = ordered.FirstOrDefault();
-            var ambiguous = IsAmbiguousNumberedVariant(best, ordered);
+            var best = PreferMatchingTrailingNumber(normalizedInput, ordered.FirstOrDefault(), ordered);
+            var preferredIndex = ordered.FindIndex(candidate => candidate.moon?.Id == best.moon?.Id);
+            if (preferredIndex > 0)
+            {
+                ordered.RemoveAt(preferredIndex);
+                ordered.Insert(0, best);
+            }
+
+            var ambiguous = IsAmbiguousNumberedVariant(normalizedInput, best, ordered);
 
             return new MatchResult
             {
@@ -91,28 +98,72 @@ namespace Aviscribe.Core
             };
         }
 
-        private bool IsAmbiguousNumberedVariant((Moon moon, double score) best, IReadOnlyList<(Moon moon, double score)> ordered)
+        private (Moon moon, double score) PreferMatchingTrailingNumber(
+            string normalizedInput,
+            (Moon moon, double score) best,
+            IReadOnlyList<(Moon moon, double score)> ordered)
+        {
+            var inputNumber = GetTrailingArabicNumber(normalizedInput);
+            if (best.moon == null || best.score < Threshold || inputNumber == null)
+                return best;
+
+            var bestName = Normalize(best.moon.GetName(_inputLanguage));
+            var bestBase = StripTrailingNumber(bestName);
+            if (bestBase == bestName || string.IsNullOrWhiteSpace(bestBase))
+                return best;
+
+            var matchingVariants = ordered
+                .Take(8)
+                .Where(candidate =>
+                    candidate.score >= Threshold &&
+                    best.score - candidate.score <= 0.06 &&
+                    StripTrailingNumber(Normalize(candidate.moon.GetName(_inputLanguage))) == bestBase &&
+                    GetTrailingArabicNumber(Normalize(candidate.moon.GetName(_inputLanguage))) == inputNumber)
+                .ToList();
+
+            return matchingVariants.Count == 1 ? matchingVariants[0] : best;
+        }
+
+        private bool IsAmbiguousNumberedVariant(
+            string normalizedInput,
+            (Moon moon, double score) best,
+            IReadOnlyList<(Moon moon, double score)> ordered)
         {
             if (best.moon == null || best.score < Threshold)
                 return false;
 
-            var bestBase = StripTrailingNumber(Normalize(best.moon.GetName(_inputLanguage)));
-            if (string.IsNullOrWhiteSpace(bestBase))
+            var bestName = Normalize(best.moon.GetName(_inputLanguage));
+            var bestBase = StripTrailingNumber(bestName);
+            if (bestBase == bestName || string.IsNullOrWhiteSpace(bestBase))
                 return false;
 
-            return ordered
-                .Skip(1)
+            var numberedVariants = ordered
                 .Take(8)
-                .Any(candidate =>
+                .Where(candidate =>
                     candidate.score >= Threshold &&
                     best.score - candidate.score <= 0.06 &&
                     StripTrailingNumber(Normalize(candidate.moon.GetName(_inputLanguage))) == bestBase &&
-                    candidate.moon.Id != best.moon.Id);
+                    GetTrailingArabicNumber(Normalize(candidate.moon.GetName(_inputLanguage))) != null)
+                .ToList();
+
+            if (numberedVariants.Select(candidate => candidate.moon.Id).Distinct().Count() < 2)
+                return false;
+
+            var inputNumber = GetTrailingArabicNumber(normalizedInput);
+            return inputNumber == null ||
+                   numberedVariants.Count(candidate =>
+                       GetTrailingArabicNumber(Normalize(candidate.moon.GetName(_inputLanguage))) == inputNumber) != 1;
         }
 
         private static string StripTrailingNumber(string input)
         {
-            return Regex.Replace(input, @"[\d０-９]+$", string.Empty);
+            return Regex.Replace(input, @"[0-9]+$", string.Empty);
+        }
+
+        private static string? GetTrailingArabicNumber(string input)
+        {
+            var match = Regex.Match(input, @"[0-9]+$");
+            return match.Success ? match.Value : null;
         }
 
         public string GetDisplayName(Moon? moon)
@@ -134,7 +185,7 @@ namespace Aviscribe.Core
             if (string.IsNullOrWhiteSpace(input))
                 return string.Empty;
 
-            return input
+            var normalized = input
                 .ToLowerInvariant()
                 .Replace("！", "!")
                 .Replace("’", "'")
@@ -147,6 +198,11 @@ namespace Aviscribe.Core
                 .Replace("目", "月")
                 .Replace(" ", "")
                 .Trim();
+
+            return string.Concat(normalized.Select(character =>
+                character is >= '０' and <= '９'
+                    ? (char)('0' + character - '０')
+                    : character));
         }
 
         private static double LongestCommonSubstringSimilarity(string input, string moonText)

@@ -29,7 +29,8 @@ namespace Aviscribe.UI
         private readonly GameState _state = new();
         private readonly RunStateStore _stateStore;
         private readonly RunOutputWriter _outputWriter = new();
-        private readonly Queue<AmbiguousOcrResult> _reviewQueue = new();
+        private readonly Dictionary<string, List<AmbiguousOcrResult>> _reviewsByKingdom =
+            new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _reviewSignatures = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Bitmap> _moonImageCache = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, CaptureCropSettings> _captureCropsByDevice =
@@ -40,6 +41,7 @@ namespace Aviscribe.UI
         private readonly CancellationTokenSource _closingCancellation = new();
 
         private FrameProcessor? _processor;
+        private OnnxOcrService? _ocrService;
         private DiagnosticsWindow? _diagnosticsWindow;
         private string _processorCaptureDeviceId = string.Empty;
         private AmbiguousOcrResult? _activeReview;
@@ -68,10 +70,13 @@ namespace Aviscribe.UI
         private TextBox? _moonNumberText;
         private TextBlock? _cropSummaryText;
         private ComboBox? _inputSelect;
+        private ComboBox? _captureSourceKindSelect;
         private TabControl? _mainTabs;
         private bool _processorRunning;
         private bool _writeOverlayEnabled = true;
         private string _captureDeviceId = string.Empty;
+        private CaptureSourceSelection _captureSourceSelection = new();
+        private IReadOnlyList<VideoDevice> _allCaptureSources = [];
         private bool _updatingLists;
         private bool _dragStarted;
         private bool _suppressListClick;
@@ -100,6 +105,7 @@ namespace Aviscribe.UI
             _repo = MoonRepository.LoadDefault();
             _stateStore = new RunStateStore(_repo);
             LoadSavedRunState();
+            NormalizeLanguageSettings();
             _diagnostics.DebugEnabled = _state.Settings.DebugLogging;
             _outputWriter.Language = _state.Settings.OutputLanguage;
             InitControls();
@@ -108,8 +114,41 @@ namespace Aviscribe.UI
             UpdateRunState();
         }
 
+        private void NormalizeLanguageSettings()
+        {
+            if (!GameLanguageCatalog.IsSupportedInputLanguage(_state.Settings.InputLanguage))
+                _state.Settings.InputLanguage = GameLanguage.ChineseTraditional;
+
+            var outputLanguages = _repo.GetAvailableLanguages();
+            if (outputLanguages.Contains(_state.Settings.OutputLanguage))
+                return;
+
+            _state.Settings.OutputLanguage = outputLanguages.Contains(GameLanguage.English)
+                ? GameLanguage.English
+                : outputLanguages.FirstOrDefault();
+        }
+
         private void InitControls()
         {
+            _captureSourceKindSelect = this.GetControl<ComboBox>("cbCaptureSourceKind");
+            _captureSourceKindSelect.ItemsSource = new[]
+            {
+                new CaptureSourceKindItem(CaptureSourceKind.VideoDevice, "Video Device"),
+                new CaptureSourceKindItem(CaptureSourceKind.Window, "Window")
+            };
+            _captureSourceKindSelect.SelectedItem =
+                ((IEnumerable<CaptureSourceKindItem>)_captureSourceKindSelect.ItemsSource)
+                .First(item => item.Kind == _captureSourceSelection.Kind);
+            _captureSourceKindSelect.SelectionChanged += (_, _) =>
+            {
+                if (_captureSourceKindSelect.SelectedItem is not CaptureSourceKindItem item)
+                    return;
+
+                _captureSourceSelection.SetKind(item.Kind);
+                ApplyCaptureSourcesForSelectedKind();
+                PersistRunState(_state.CreateSnapshot());
+            };
+
             _inputSelect = this.GetControl<ComboBox>("cbInputSelect");
             _inputSelect.DisplayMemberBinding =
                 new Avalonia.Data.Binding(nameof(VideoDevice.Name));
@@ -117,6 +156,7 @@ namespace Aviscribe.UI
             {
                 if (_inputSelect.SelectedItem is VideoDevice device)
                 {
+                    _captureSourceSelection.Select(device);
                     _captureDeviceId = device.Id;
                     UpdateCropSummary();
                     PersistRunState(_state.CreateSnapshot());
@@ -140,6 +180,7 @@ namespace Aviscribe.UI
                     _state.SetKingdom(item.Kingdom);
                     RefreshMoonSelect();
                     RefreshMoonList();
+                    ShowNextReview();
                 }
             };
 
@@ -156,11 +197,19 @@ namespace Aviscribe.UI
             };
 
             _inputLanguageSelect = this.GetControl<ComboBox>("cbInputLanguageSelect");
-            _inputLanguageSelect.ItemsSource = Enum.GetValues<GameLanguage>();
-            _inputLanguageSelect.SelectedItem = _state.Settings.InputLanguage;
+            var inputLanguageItems = Enum.GetValues<GameLanguage>()
+                .Select(language => new ComboBoxItem
+                {
+                    Content = language,
+                    IsEnabled = GameLanguageCatalog.IsSupportedInputLanguage(language)
+                })
+                .ToList();
+            _inputLanguageSelect.ItemsSource = inputLanguageItems;
+            _inputLanguageSelect.SelectedItem = inputLanguageItems.Single(item =>
+                Equals(item.Content, _state.Settings.InputLanguage));
             _inputLanguageSelect.SelectionChanged += (_, _) =>
             {
-                if (_inputLanguageSelect.SelectedItem is GameLanguage language)
+                if (_inputLanguageSelect.SelectedItem is ComboBoxItem { Content: GameLanguage language })
                 {
                     _state.Settings.InputLanguage = language;
                     if (_processor != null)
@@ -170,11 +219,15 @@ namespace Aviscribe.UI
             };
 
             _outputLanguageSelect = this.GetControl<ComboBox>("cbOutputLanguageSelect");
-            _outputLanguageSelect.ItemsSource = Enum.GetValues<GameLanguage>();
-            _outputLanguageSelect.SelectedItem = _state.Settings.OutputLanguage;
+            var outputLanguageItems = _repo.GetAvailableLanguages()
+                .Select(language => new ComboBoxItem { Content = language })
+                .ToList();
+            _outputLanguageSelect.ItemsSource = outputLanguageItems;
+            _outputLanguageSelect.SelectedItem = outputLanguageItems.Single(item =>
+                Equals(item.Content, _state.Settings.OutputLanguage));
             _outputLanguageSelect.SelectionChanged += (_, _) =>
             {
-                if (_outputLanguageSelect.SelectedItem is GameLanguage language)
+                if (_outputLanguageSelect.SelectedItem is ComboBoxItem { Content: GameLanguage language })
                 {
                     _state.Settings.OutputLanguage = language;
                     _outputWriter.Language = language;
@@ -237,6 +290,28 @@ namespace Aviscribe.UI
             };
             this.GetControl<Button>("btnOpenDiagnostics").Click +=
                 OpenDiagnostics;
+
+            var ocrModeSelect = this.GetControl<ComboBox>("cbOcrModeSelect");
+            var ocrModes = new[]
+            {
+                new OcrModeListItem(OcrMode.Cpu, "CPU (compatible default)"),
+                new OcrModeListItem(OcrMode.WebGpu, "GPU (WebGPU)")
+            };
+            ocrModeSelect.ItemsSource = ocrModes;
+            ocrModeSelect.SelectedItem = ocrModes.First(item => item.Mode == _state.Settings.OcrMode);
+            ocrModeSelect.SelectionChanged += (_, _) =>
+            {
+                if (ocrModeSelect.SelectedItem is not OcrModeListItem item ||
+                    item.Mode == _state.Settings.OcrMode)
+                    return;
+                _state.Settings.OcrMode = item.Mode;
+                RecreateFrameProcessor();
+                _state.NotifySettingsChanged();
+                var status = _ocrService?.RuntimeStatus;
+                SetStatus(status?.IsFallback == true
+                    ? $"GPU OCR unavailable; using CPU: {status.FallbackReason}"
+                    : $"OCR provider changed to {status?.ActiveProvider ?? item.Name}");
+            };
 
             ConfigureHotkeySelect(
                 "cbFocusMoonHotkey",
@@ -332,9 +407,17 @@ namespace Aviscribe.UI
                     _state.Remove(moon);
             };
 
-            this.GetControl<Button>("btnResetKingdom").Click += (_, _) =>
+            this.GetControl<Button>("btnResetKingdom").Click += async (_, _) =>
             {
-                _state.ResetKingdom();
+                if (!await ConfirmResetRunAsync())
+                    return;
+
+                _reviewsByKingdom.Clear();
+                _reviewSignatures.Clear();
+                _activeReview = null;
+                _state.ResetRun();
+                ShowNextReview();
+                SetStatus("Run reset");
             };
 
             this.GetControl<Button>("btnReviewApply").Click += (_, _) =>
@@ -367,8 +450,8 @@ namespace Aviscribe.UI
                 _diagnostics.Information(
                     $"Capture device refresh found {devices.Count} device(s).");
                 SetStatus(devices.Count == 0
-                    ? "No compatible capture devices found"
-                    : $"Found {devices.Count} capture device(s)");
+                    ? "No compatible capture sources found"
+                    : $"Found {devices.Count} capture source(s)");
             }
             catch (OperationCanceledException)
                 when (_closingCancellation.IsCancellationRequested)
@@ -385,16 +468,24 @@ namespace Aviscribe.UI
 
         private void ApplyCaptureDevices(IReadOnlyList<VideoDevice> devices)
         {
+            _allCaptureSources = devices;
+            ApplyCaptureSourcesForSelectedKind();
+        }
+
+        private void ApplyCaptureSourcesForSelectedKind()
+        {
             if (_inputSelect == null)
                 return;
 
-            var selectedId = (_inputSelect.SelectedItem as VideoDevice)?.Id;
-            if (string.IsNullOrWhiteSpace(selectedId))
-                selectedId = _captureDeviceId;
-
-            _inputSelect.ItemsSource = devices;
-            _inputSelect.SelectedItem = devices.FirstOrDefault(device =>
-                string.Equals(device.Id, selectedId, StringComparison.Ordinal));
+            var sources = _captureSourceSelection.Filter(_allCaptureSources);
+            _inputSelect.ItemsSource = sources;
+            _inputSelect.SelectedItem = _captureSourceSelection.Restore(_allCaptureSources);
+            if (_inputSelect.SelectedItem is VideoDevice selected)
+            {
+                _captureSourceSelection.Select(selected);
+                _captureDeviceId = selected.Id;
+                UpdateCropSummary();
+            }
         }
 
         private void InitFrameProcessor()
@@ -405,7 +496,12 @@ namespace Aviscribe.UI
                 _state.Settings.OutputLanguage
             );
 
-            var ocr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
+            var ocr = new OnnxOcrService(
+                AppPaths.OcrModelPath,
+                AppPaths.CharsetPath,
+                _state.Settings.OcrMode,
+                _diagnostics);
+            _ocrService = ocr;
             var detector = LoadTextPresenceDetector();
 
             _processor = new FrameProcessor(
@@ -416,7 +512,11 @@ namespace Aviscribe.UI
                 GetCropForDevice(_captureDeviceId),
                 _diagnostics);
             _processorCaptureDeviceId = _captureDeviceId;
-            _processor.AmbiguousMatchReceived += (_, result) => EnqueueReview(result);
+            _processor.AmbiguousMatchReceived += (_, result) =>
+            {
+                var kingdom = _state.CurrentKingdom;
+                EnqueueReview(kingdom, result);
+            };
         }
 
         private void RecreateFrameProcessor()
@@ -680,6 +780,11 @@ namespace Aviscribe.UI
                 SetStatus("Select a capture source before cropping gameplay");
                 return;
             }
+            if (!selected.IsAvailable)
+            {
+                SetStatus(selected.UnavailableReason);
+                return;
+            }
 
             var window = new GameplayCropWindow(
                 GetCropForDevice(selected.Id),
@@ -893,8 +998,23 @@ namespace Aviscribe.UI
                     return;
 
                 _stateStore.Restore(_state, savedState);
+                foreach (var review in _stateStore.RestoreReviews(savedState))
+                {
+                    GetReviews(review.Kingdom).Add(review.Result);
+                    _reviewSignatures.Add(CreateReviewSignature(review.Kingdom, review.Result));
+                }
                 _writeOverlayEnabled = savedState.WriteOverlay;
                 _captureDeviceId = savedState.CaptureDeviceId;
+                var selectedIds = new Dictionary<CaptureSourceKind, string>();
+                foreach (var item in savedState.CaptureSourceIdsByKind ?? new Dictionary<string, string>())
+                {
+                    if (Enum.TryParse<CaptureSourceKind>(item.Key, ignoreCase: true, out var kind) &&
+                        !string.IsNullOrWhiteSpace(item.Value))
+                        selectedIds[kind] = item.Value;
+                }
+                if (selectedIds.Count == 0 && !string.IsNullOrWhiteSpace(savedState.CaptureDeviceId))
+                    selectedIds[savedState.CaptureSourceKind] = savedState.CaptureDeviceId;
+                _captureSourceSelection = new CaptureSourceSelection(savedState.CaptureSourceKind, selectedIds);
                 lock (_captureConfigurationLock)
                 {
                     _captureCropsByDevice.Clear();
@@ -926,7 +1046,10 @@ namespace Aviscribe.UI
                     _writeOverlayEnabled,
                     _outputWriter.OutputPath,
                     _captureDeviceId,
-                    GetCaptureCropSnapshot());
+                    GetCaptureCropSnapshot(),
+                    _captureSourceSelection.Kind,
+                    _captureSourceSelection.Snapshot(),
+                    GetReviewSnapshot());
             }
             catch (Exception ex)
             {
@@ -935,24 +1058,29 @@ namespace Aviscribe.UI
             }
         }
 
-        private void EnqueueReview(AmbiguousOcrResult result)
+        private void EnqueueReview(string kingdom, AmbiguousOcrResult result)
         {
             Dispatcher.UIThread.Post(() =>
             {
-                var signature = CreateReviewSignature(result);
+                if (string.IsNullOrWhiteSpace(kingdom))
+                    return;
+
+                var signature = CreateReviewSignature(kingdom, result);
                 if (!_reviewSignatures.Add(signature))
                     return;
 
-                _reviewQueue.Enqueue(result);
+                GetReviews(kingdom).Add(result);
+                PersistRunState(_state.CreateSnapshot());
 
-                if (_activeReview == null)
+                if (_state.CurrentKingdom.Equals(kingdom, StringComparison.OrdinalIgnoreCase))
                     ShowNextReview();
             });
         }
 
         private void ShowNextReview()
         {
-            if (_reviewQueue.Count == 0)
+            var reviews = GetReviews(_state.CurrentKingdom);
+            if (reviews.Count == 0)
             {
                 _activeReview = null;
 
@@ -965,7 +1093,7 @@ namespace Aviscribe.UI
                 return;
             }
 
-            _activeReview = _reviewQueue.Dequeue();
+            _activeReview = reviews[0];
 
             if (_reviewPromptText != null)
                 _reviewPromptText.Text = $"{DescribeReviewType(_activeReview.Type)} read: {_activeReview.Text}";
@@ -982,10 +1110,15 @@ namespace Aviscribe.UI
         private void CompleteActiveReview()
         {
             if (_activeReview != null)
-                _reviewSignatures.Remove(CreateReviewSignature(_activeReview));
+            {
+                var kingdom = _state.CurrentKingdom;
+                GetReviews(kingdom).Remove(_activeReview);
+                _reviewSignatures.Remove(CreateReviewSignature(kingdom, _activeReview));
+            }
 
             _activeReview = null;
             ShowNextReview();
+            PersistRunState(_state.CreateSnapshot());
         }
 
         private void ApplyReview(OcrRegionType type, Moon moon)
@@ -1007,10 +1140,68 @@ namespace Aviscribe.UI
             }
         }
 
-        private static string CreateReviewSignature(AmbiguousOcrResult result)
+        private static string CreateReviewSignature(string kingdom, AmbiguousOcrResult result)
         {
-            var ids = string.Join(",", result.Candidates.Select(candidate => candidate.Moon.Id));
-            return $"{result.Type}|{result.Text}|{ids}";
+            var ids = string.Join(",", result.Candidates.Select(candidate =>
+                $"{candidate.Moon.Kingdom}:{candidate.Moon.Id}"));
+            return $"{kingdom}|{result.Type}|{result.Text}|{ids}";
+        }
+
+        private List<AmbiguousOcrResult> GetReviews(string kingdom)
+        {
+            if (!_reviewsByKingdom.TryGetValue(kingdom, out var reviews))
+            {
+                reviews = new List<AmbiguousOcrResult>();
+                _reviewsByKingdom[kingdom] = reviews;
+            }
+
+            return reviews;
+        }
+
+        private IReadOnlyList<KingdomAmbiguousReview> GetReviewSnapshot()
+        {
+            return _reviewsByKingdom
+                .SelectMany(item => item.Value.Select(review =>
+                    new KingdomAmbiguousReview(item.Key, review)))
+                .ToList();
+        }
+
+        private async Task<bool> ConfirmResetRunAsync()
+        {
+            var confirmation = new Avalonia.Controls.Window
+            {
+                Title = "Reset Run?",
+                Width = 420,
+                Height = 170,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+            var resetButton = new Button { Content = "Reset Run" };
+            var cancelButton = new Button { Content = "Cancel" };
+            resetButton.Click += (_, _) => confirmation.Close(true);
+            cancelButton.Click += (_, _) => confirmation.Close(false);
+            confirmation.Content = new StackPanel
+            {
+                Margin = new Thickness(20),
+                Spacing = 16,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "This clears moon state and ambiguous reviews for every kingdom. This cannot be undone.",
+                        TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                    },
+                    new StackPanel
+                    {
+                        Orientation = Avalonia.Layout.Orientation.Horizontal,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                        Spacing = 8,
+                        Children = { cancelButton, resetButton }
+                    }
+                }
+            };
+
+            return await confirmation.ShowDialog<bool>(this);
         }
 
         private static string DescribeReviewType(OcrRegionType type)
@@ -1536,7 +1727,18 @@ namespace Aviscribe.UI
             return new DiagnosticsSnapshot(
                 captureDevice,
                 captureState,
-                sourceAndCrop);
+                sourceAndCrop,
+                _state.Settings.OcrMode == OcrMode.WebGpu ? "GPU (WebGPU)" : "CPU",
+                FormatOcrRuntimeStatus());
+        }
+
+        private string FormatOcrRuntimeStatus()
+        {
+            var status = _ocrService?.RuntimeStatus;
+            if (status == null)
+                return "OCR session is not initialized";
+            var active = $"{status.ActiveProvider} ({status.ActiveDevice})";
+            return status.IsFallback ? $"{active}; fallback: {status.FallbackReason}" : active;
         }
 
         private void SetStatus(string text)
@@ -1588,9 +1790,19 @@ namespace Aviscribe.UI
             public override string ToString() => Label;
         }
 
+        private sealed record CaptureSourceKindItem(CaptureSourceKind Kind, string Label)
+        {
+            public override string ToString() => Label;
+        }
+
         private sealed record ReviewCandidateItem(OcrMatchCandidate Candidate, string Label)
         {
             public override string ToString() => Label;
+        }
+
+        private sealed record OcrModeListItem(OcrMode Mode, string Name)
+        {
+            public override string ToString() => Name;
         }
 
         private enum ManualMoonTarget

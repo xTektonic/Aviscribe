@@ -25,6 +25,8 @@
   <string>14.0</string>
   <key>NSCameraUsageDescription</key>
   <string>Aviscribe uses a selected camera or capture card to recognize gameplay text.</string>
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>Aviscribe captures a window you select to recognize gameplay text.</string>
   <key>NSHighResolutionCapable</key>
   <true/>
 </dict>
