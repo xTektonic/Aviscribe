@@ -37,6 +37,8 @@ namespace Aviscribe.Core
             string overlayOutputPath,
             string captureDeviceId = "",
             IReadOnlyDictionary<string, CaptureCropSettings>? captureCropsByDevice = null,
+            CaptureSourceKind captureSourceKind = CaptureSourceKind.VideoDevice,
+            IReadOnlyDictionary<CaptureSourceKind, string>? captureSourceIdsByKind = null,
             IEnumerable<KingdomAmbiguousReview>? ambiguousReviews = null)
         {
             var state = new SavedRunState
@@ -61,6 +63,14 @@ namespace Aviscribe.Core
                 WriteOverlay = writeOverlay,
                 OverlayOutputPath = overlayOutputPath,
                 CaptureDeviceId = captureDeviceId,
+                CaptureSourceKind = captureSourceKind,
+                CaptureSourceIdsByKind = (captureSourceIdsByKind ??
+                        new Dictionary<CaptureSourceKind, string>())
+                    .Where(item => !string.IsNullOrWhiteSpace(item.Value))
+                    .ToDictionary(
+                        item => item.Key.ToString(),
+                        item => item.Value,
+                        StringComparer.Ordinal),
                 CaptureCropsByDevice = (captureCropsByDevice ??
                         new Dictionary<string, CaptureCropSettings>())
                     .ToDictionary(

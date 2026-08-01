@@ -21,6 +21,9 @@ release gate that CI cannot complete without hardware or credentials.
   whether device loss/restart succeeded.
 - Exercise camera permission granted and denied states on macOS and Windows.
 - Exercise a Linux user with and without `/dev/video*` permission.
+- Capture one visible and one covered window on Windows, macOS, and X11/XWayland.
+- Verify macOS Screen Recording permission denied/granted behavior and restart.
+- Confirm native Wayland without XWayland shows the documented unavailable-source guidance.
 
 ## Credential and branding gate
 

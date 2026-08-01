@@ -2,6 +2,7 @@ using Avalonia;
 using Aviscribe.Capture;
 using Aviscribe.Core;
 using Aviscribe.Core.Diagnostics;
+using Aviscribe.Core.Capture;
 using Aviscribe.UI;
 using System.Runtime.InteropServices;
 
@@ -25,7 +26,9 @@ internal static class Program
 
         return AppBuilder
             .Configure(() => new AviscribeApp(
-                new FlashCapVideoProvider(),
+                new CompositeVideoProvider(
+                    new FlashCapVideoProvider(),
+                    new WindowCaptureProvider()),
                 diagnostics))
             .UsePlatformDetect()
             .WithInterFont();
