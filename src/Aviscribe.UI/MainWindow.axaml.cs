@@ -29,7 +29,8 @@ namespace Aviscribe.UI
         private readonly GameState _state = new();
         private readonly RunStateStore _stateStore;
         private readonly RunOutputWriter _outputWriter = new();
-        private readonly Queue<AmbiguousOcrResult> _reviewQueue = new();
+        private readonly Dictionary<string, List<AmbiguousOcrResult>> _reviewsByKingdom =
+            new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _reviewSignatures = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Bitmap> _moonImageCache = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, CaptureCropSettings> _captureCropsByDevice =
@@ -155,6 +156,7 @@ namespace Aviscribe.UI
                     _state.SetKingdom(item.Kingdom);
                     RefreshMoonSelect();
                     RefreshMoonList();
+                    ShowNextReview();
                 }
             };
 
@@ -359,9 +361,17 @@ namespace Aviscribe.UI
                     _state.Remove(moon);
             };
 
-            this.GetControl<Button>("btnResetKingdom").Click += (_, _) =>
+            this.GetControl<Button>("btnResetKingdom").Click += async (_, _) =>
             {
-                _state.ResetKingdom();
+                if (!await ConfirmResetRunAsync())
+                    return;
+
+                _reviewsByKingdom.Clear();
+                _reviewSignatures.Clear();
+                _activeReview = null;
+                _state.ResetRun();
+                ShowNextReview();
+                SetStatus("Run reset");
             };
 
             this.GetControl<Button>("btnReviewApply").Click += (_, _) =>
@@ -443,7 +453,11 @@ namespace Aviscribe.UI
                 GetCropForDevice(_captureDeviceId),
                 _diagnostics);
             _processorCaptureDeviceId = _captureDeviceId;
-            _processor.AmbiguousMatchReceived += (_, result) => EnqueueReview(result);
+            _processor.AmbiguousMatchReceived += (_, result) =>
+            {
+                var kingdom = _state.CurrentKingdom;
+                EnqueueReview(kingdom, result);
+            };
         }
 
         private void RecreateFrameProcessor()
@@ -920,6 +934,11 @@ namespace Aviscribe.UI
                     return;
 
                 _stateStore.Restore(_state, savedState);
+                foreach (var review in _stateStore.RestoreReviews(savedState))
+                {
+                    GetReviews(review.Kingdom).Add(review.Result);
+                    _reviewSignatures.Add(CreateReviewSignature(review.Kingdom, review.Result));
+                }
                 _writeOverlayEnabled = savedState.WriteOverlay;
                 _captureDeviceId = savedState.CaptureDeviceId;
                 lock (_captureConfigurationLock)
@@ -953,7 +972,8 @@ namespace Aviscribe.UI
                     _writeOverlayEnabled,
                     _outputWriter.OutputPath,
                     _captureDeviceId,
-                    GetCaptureCropSnapshot());
+                    GetCaptureCropSnapshot(),
+                    GetReviewSnapshot());
             }
             catch (Exception ex)
             {
@@ -962,24 +982,29 @@ namespace Aviscribe.UI
             }
         }
 
-        private void EnqueueReview(AmbiguousOcrResult result)
+        private void EnqueueReview(string kingdom, AmbiguousOcrResult result)
         {
             Dispatcher.UIThread.Post(() =>
             {
-                var signature = CreateReviewSignature(result);
+                if (string.IsNullOrWhiteSpace(kingdom))
+                    return;
+
+                var signature = CreateReviewSignature(kingdom, result);
                 if (!_reviewSignatures.Add(signature))
                     return;
 
-                _reviewQueue.Enqueue(result);
+                GetReviews(kingdom).Add(result);
+                PersistRunState(_state.CreateSnapshot());
 
-                if (_activeReview == null)
+                if (_state.CurrentKingdom.Equals(kingdom, StringComparison.OrdinalIgnoreCase))
                     ShowNextReview();
             });
         }
 
         private void ShowNextReview()
         {
-            if (_reviewQueue.Count == 0)
+            var reviews = GetReviews(_state.CurrentKingdom);
+            if (reviews.Count == 0)
             {
                 _activeReview = null;
 
@@ -992,7 +1017,7 @@ namespace Aviscribe.UI
                 return;
             }
 
-            _activeReview = _reviewQueue.Dequeue();
+            _activeReview = reviews[0];
 
             if (_reviewPromptText != null)
                 _reviewPromptText.Text = $"{DescribeReviewType(_activeReview.Type)} read: {_activeReview.Text}";
@@ -1009,10 +1034,15 @@ namespace Aviscribe.UI
         private void CompleteActiveReview()
         {
             if (_activeReview != null)
-                _reviewSignatures.Remove(CreateReviewSignature(_activeReview));
+            {
+                var kingdom = _state.CurrentKingdom;
+                GetReviews(kingdom).Remove(_activeReview);
+                _reviewSignatures.Remove(CreateReviewSignature(kingdom, _activeReview));
+            }
 
             _activeReview = null;
             ShowNextReview();
+            PersistRunState(_state.CreateSnapshot());
         }
 
         private void ApplyReview(OcrRegionType type, Moon moon)
@@ -1034,10 +1064,68 @@ namespace Aviscribe.UI
             }
         }
 
-        private static string CreateReviewSignature(AmbiguousOcrResult result)
+        private static string CreateReviewSignature(string kingdom, AmbiguousOcrResult result)
         {
-            var ids = string.Join(",", result.Candidates.Select(candidate => candidate.Moon.Id));
-            return $"{result.Type}|{result.Text}|{ids}";
+            var ids = string.Join(",", result.Candidates.Select(candidate =>
+                $"{candidate.Moon.Kingdom}:{candidate.Moon.Id}"));
+            return $"{kingdom}|{result.Type}|{result.Text}|{ids}";
+        }
+
+        private List<AmbiguousOcrResult> GetReviews(string kingdom)
+        {
+            if (!_reviewsByKingdom.TryGetValue(kingdom, out var reviews))
+            {
+                reviews = new List<AmbiguousOcrResult>();
+                _reviewsByKingdom[kingdom] = reviews;
+            }
+
+            return reviews;
+        }
+
+        private IReadOnlyList<KingdomAmbiguousReview> GetReviewSnapshot()
+        {
+            return _reviewsByKingdom
+                .SelectMany(item => item.Value.Select(review =>
+                    new KingdomAmbiguousReview(item.Key, review)))
+                .ToList();
+        }
+
+        private async Task<bool> ConfirmResetRunAsync()
+        {
+            var confirmation = new Avalonia.Controls.Window
+            {
+                Title = "Reset Run?",
+                Width = 420,
+                Height = 170,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+            var resetButton = new Button { Content = "Reset Run" };
+            var cancelButton = new Button { Content = "Cancel" };
+            resetButton.Click += (_, _) => confirmation.Close(true);
+            cancelButton.Click += (_, _) => confirmation.Close(false);
+            confirmation.Content = new StackPanel
+            {
+                Margin = new Thickness(20),
+                Spacing = 16,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "This clears moon state and ambiguous reviews for every kingdom. This cannot be undone.",
+                        TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                    },
+                    new StackPanel
+                    {
+                        Orientation = Avalonia.Layout.Orientation.Horizontal,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                        Spacing = 8,
+                        Children = { cancelButton, resetButton }
+                    }
+                }
+            };
+
+            return await confirmation.ShowDialog<bool>(this);
         }
 
         private static string DescribeReviewType(OcrRegionType type)

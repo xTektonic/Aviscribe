@@ -58,7 +58,7 @@
 							<StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6"
 										VerticalAlignment="Center" HorizontalAlignment="Right">
 								<Button Name="btnUpdatePreview" Content="Start / Update" ToolTip.Tip="Start capture using the selected source"/>
-								<Button Name="btnResetKingdom" Content="Reset" ToolTip.Tip="Clear this kingdom's run state"/>
+								<Button Name="btnResetKingdom" Content="Reset Run" ToolTip.Tip="Clear all kingdoms and ambiguous reviews"/>
 							</StackPanel>
 						</Grid>
 

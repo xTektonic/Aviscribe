@@ -18,6 +18,8 @@ namespace Aviscribe.Core
     public class GameState
     {
         private readonly object _sync = new();
+        private readonly Dictionary<string, KingdomStateData> _kingdomStates =
+            new(StringComparer.OrdinalIgnoreCase);
 
         public string CurrentKingdom { get; private set; } = string.Empty;
         public RunSettings Settings { get; } = new();
@@ -48,16 +50,17 @@ namespace Aviscribe.Core
 
         public void SetKingdom(string kingdom)
         {
+            if (string.IsNullOrWhiteSpace(kingdom))
+                return;
+
             var changed = false;
 
             lock (_sync)
             {
-                if (CurrentKingdom != kingdom)
+                if (!CurrentKingdom.Equals(kingdom, StringComparison.OrdinalIgnoreCase))
                 {
                     CurrentKingdom = kingdom;
-                    Pending.Clear();
-                    Collected.Clear();
-                    UncountedCollected.Clear();
+                    ApplyKingdomState(GetOrCreateKingdomState(kingdom));
                     changed = true;
                 }
             }
@@ -73,6 +76,18 @@ namespace Aviscribe.Core
                 Pending.Clear();
                 Collected.Clear();
                 UncountedCollected.Clear();
+            }
+
+            OnChanged();
+        }
+
+        public void ResetRun()
+        {
+            lock (_sync)
+            {
+                _kingdomStates.Clear();
+                var current = GetOrCreateKingdomState(CurrentKingdom);
+                ApplyKingdomState(current);
             }
 
             OnChanged();
@@ -253,17 +268,38 @@ namespace Aviscribe.Core
         {
             lock (_sync)
             {
+                _kingdomStates.Clear();
                 CurrentKingdom = kingdom;
                 Settings.CopyFrom(settings);
-                Collected = DistinctMoons(collected);
-                UncountedCollected = DistinctMoons(uncountedCollected)
-                    .Where(moon => !ContainsMoon(Collected, moon))
-                    .ToList();
-                Pending = DistinctMoons(pending)
-                    .Where(moon =>
-                        !ContainsMoon(Collected, moon) &&
-                        !ContainsMoon(UncountedCollected, moon))
-                    .ToList();
+                var restored = CreateKingdomState(pending, collected, uncountedCollected);
+                _kingdomStates[kingdom] = restored;
+                ApplyKingdomState(restored);
+            }
+
+            OnChanged();
+        }
+
+        public void RestoreRun(
+            string currentKingdom,
+            RunSettings settings,
+            IReadOnlyDictionary<string, KingdomStateSnapshot> kingdomStates)
+        {
+            lock (_sync)
+            {
+                _kingdomStates.Clear();
+                Settings.CopyFrom(settings);
+
+                foreach (var item in kingdomStates.Where(item =>
+                             !string.IsNullOrWhiteSpace(item.Key)))
+                {
+                    _kingdomStates[item.Key] = CreateKingdomState(
+                        item.Value.Pending,
+                        item.Value.Collected,
+                        item.Value.UncountedCollected);
+                }
+
+                CurrentKingdom = currentKingdom;
+                ApplyKingdomState(GetOrCreateKingdomState(currentKingdom));
             }
 
             OnChanged();
@@ -292,7 +328,14 @@ namespace Aviscribe.Core
                     Collected.ToList(),
                     UncountedCollected.ToList(),
                     Collected.Sum(m => m.MoonCountValue),
-                    Collected.Concat(UncountedCollected).Sum(m => m.MoonCountValue));
+                    Collected.Concat(UncountedCollected).Sum(m => m.MoonCountValue),
+                    _kingdomStates.ToDictionary(
+                        item => item.Key,
+                        item => new KingdomStateSnapshot(
+                            item.Value.Pending.ToList(),
+                            item.Value.Collected.ToList(),
+                            item.Value.UncountedCollected.ToList()),
+                        StringComparer.OrdinalIgnoreCase));
             }
         }
 
@@ -329,7 +372,70 @@ namespace Aviscribe.Core
             return left.Id == right.Id &&
                 left.Kingdom.Equals(right.Kingdom, StringComparison.OrdinalIgnoreCase);
         }
+
+        private KingdomStateData GetOrCreateKingdomState(string kingdom)
+        {
+            if (!_kingdomStates.TryGetValue(kingdom, out var state))
+            {
+                state = new KingdomStateData();
+                _kingdomStates[kingdom] = state;
+            }
+
+            return state;
+        }
+
+        private void ApplyKingdomState(KingdomStateData state)
+        {
+            Pending = state.Pending;
+            Collected = state.Collected;
+            UncountedCollected = state.UncountedCollected;
+        }
+
+        private static KingdomStateData CreateKingdomState(
+            IEnumerable<Moon> pending,
+            IEnumerable<Moon> collected,
+            IEnumerable<Moon> uncountedCollected)
+        {
+            var collectedList = DistinctMoons(collected);
+            var uncountedList = DistinctMoons(uncountedCollected)
+                .Where(moon => !ContainsMoon(collectedList, moon))
+                .ToList();
+            var pendingList = DistinctMoons(pending)
+                .Where(moon =>
+                    !ContainsMoon(collectedList, moon) &&
+                    !ContainsMoon(uncountedList, moon))
+                .ToList();
+
+            return new KingdomStateData(pendingList, collectedList, uncountedList);
+        }
+
+        private sealed class KingdomStateData
+        {
+            public KingdomStateData()
+                : this(new List<Moon>(), new List<Moon>(), new List<Moon>())
+            {
+            }
+
+            public KingdomStateData(
+                List<Moon> pending,
+                List<Moon> collected,
+                List<Moon> uncountedCollected)
+            {
+                Pending = pending;
+                Collected = collected;
+                UncountedCollected = uncountedCollected;
+            }
+
+            public List<Moon> Pending { get; }
+            public List<Moon> Collected { get; }
+            public List<Moon> UncountedCollected { get; }
+        }
     }
+
+    public sealed record KingdomStateSnapshot(
+        IReadOnlyList<Moon> Pending,
+        IReadOnlyList<Moon> Collected,
+        IReadOnlyList<Moon> UncountedCollected);
 
     public sealed record GameStateSnapshot(
         string CurrentKingdom,
@@ -350,5 +456,6 @@ namespace Aviscribe.Core
         IReadOnlyList<Moon> Collected,
         IReadOnlyList<Moon> UncountedCollected,
         int CountedMoonCount,
-        int ActualMoonCount);
+        int ActualMoonCount,
+        IReadOnlyDictionary<string, KingdomStateSnapshot> KingdomStates);
 }
