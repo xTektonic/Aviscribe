@@ -100,10 +100,12 @@ namespace Aviscribe.Classifier
 
         private static double RedRatio(Mat image)
         {
+            var width = image.Width;
+            var height = image.Height;
             var redPixels = 0;
-            for (var y = 0; y < image.Height; y++)
+            for (var y = 0; y < height; y++)
             {
-                for (var x = 0; x < image.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -114,7 +116,7 @@ namespace Aviscribe.Classifier
                 }
             }
 
-            return redPixels / (double)Math.Max(1, image.Width * image.Height);
+            return redPixels / (double)Math.Max(1, width * height);
         }
 
         private static void PrintDistribution(string label, StoryMetrics[] storyMetrics)

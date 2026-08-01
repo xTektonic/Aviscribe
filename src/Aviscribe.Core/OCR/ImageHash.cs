@@ -17,13 +17,15 @@ namespace Aviscribe.Core.Ocr
             };
             using var small = gray.Resize(new Size(8, 8), 0, 0, InterpolationFlags.Area);
             var average = Cv2.Mean(small).Val0;
+            var rows = small.Rows;
+            var cols = small.Cols;
 
             ulong hash = 0;
-            for (int y = 0; y < small.Rows; y++)
+            for (int y = 0; y < rows; y++)
             {
-                for (int x = 0; x < small.Cols; x++)
+                for (int x = 0; x < cols; x++)
                 {
-                    var bit = y * small.Cols + x;
+                    var bit = y * cols + x;
                     if (small.At<byte>(y, x) > average)
                         hash |= 1UL << bit;
                 }

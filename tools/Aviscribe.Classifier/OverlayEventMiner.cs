@@ -273,13 +273,15 @@ namespace Aviscribe.Classifier
 
         private static OverlaySignature MeasureSignature(Mat mask)
         {
-            var rowCounts = new int[mask.Height];
+            var maskWidth = mask.Width;
+            var maskHeight = mask.Height;
+            var rowCounts = new int[maskHeight];
             var activePixels = 0;
 
-            for (var y = 0; y < mask.Height; y++)
+            for (var y = 0; y < maskHeight; y++)
             {
                 var rowCount = 0;
-                for (var x = 0; x < mask.Width; x++)
+                for (var x = 0; x < maskWidth; x++)
                 {
                     if (mask.At<byte>(y, x) == 0)
                         continue;
@@ -292,12 +294,12 @@ namespace Aviscribe.Classifier
             }
 
             var lines = new List<OverlayLine>();
-            var rowThreshold = Math.Max(20, mask.Width * 0.025);
+            var rowThreshold = Math.Max(20, maskWidth * 0.025);
             var start = -1;
 
-            for (var y = 0; y <= mask.Height; y++)
+            for (var y = 0; y <= maskHeight; y++)
             {
-                var active = y < mask.Height && rowCounts[y] >= rowThreshold;
+                var active = y < maskHeight && rowCounts[y] >= rowThreshold;
                 if (active && start < 0)
                 {
                     start = y;
@@ -318,13 +320,13 @@ namespace Aviscribe.Classifier
                 if (bottom - top < 8 || bottom - top > 42)
                     return;
 
-                var left = mask.Width;
+                var left = maskWidth;
                 var right = 0;
                 var pixels = 0;
 
                 for (var y = top; y < bottom; y++)
                 {
-                    for (var x = 0; x < mask.Width; x++)
+                    for (var x = 0; x < maskWidth; x++)
                     {
                         if (mask.At<byte>(y, x) == 0)
                             continue;
@@ -335,14 +337,14 @@ namespace Aviscribe.Classifier
                     }
                 }
 
-                var width = right - (left == mask.Width ? right : left);
+                var width = right - (left == maskWidth ? right : left);
                 if (width < 100 || pixels < 160)
                     return;
 
                 lines.Add(new OverlayLine(
                     top / 6,
                     bottom / 6,
-                    (left == mask.Width ? 0 : left) / 12,
+                    (left == maskWidth ? 0 : left) / 12,
                     right / 12,
                     pixels / 120));
             }

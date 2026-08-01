@@ -30,9 +30,9 @@ Restore also requires the private `FlashCap` and `FlashCap.Core` 1.11.9
 packages in `../../LocalNuGet` relative to the repository. `NuGet.Config` maps
 those two package IDs exclusively to that local feed so they cannot silently
 fall back to the public FlashCap packages. CI keeps the packages out of public
-feeds and source control by building them from the pinned fork commit in a
-bootstrap job, then passing the resulting local feed to each platform job as a
-short-lived workflow artifact.
+feeds and source control by building them from the pinned fork commit. The
+resulting local feed is cached by commit and restored by each platform job; it
+is an internal build dependency, not a downloadable application artifact.
 
 On Windows, open `Aviscribe.sln` with Visual Studio 2026 18.x or another
 Visual Studio release that supports .NET 10. Select the shared
@@ -192,7 +192,7 @@ no external capture executable or additional runtime is required.
 AppImage execution commonly requires FUSE 2. If FUSE mounting is unavailable:
 
 ```text
-./Aviscribe-0.1.0-x86_64.AppImage --appimage-extract
+./Aviscribe-0.2.0-x86_64.AppImage --appimage-extract
 ./squashfs-root/AppRun
 ```
 
@@ -242,13 +242,13 @@ Platform packages must be built on their corresponding operating system:
 
 ```text
 # Windows PowerShell; WiX is restored as an SDK package
-./packaging/windows/package.ps1 -Version 0.1.0
+./packaging/windows/package.ps1 -Version 0.2.0
 
 # macOS Apple Silicon; uses codesign, plutil, and hdiutil
-bash packaging/macos/package.sh 0.1.0
+bash packaging/macos/package.sh 0.2.0
 
 # Ubuntu x64; requires dpkg-deb, curl, and AppImage tooling
-bash packaging/linux/package.sh 0.1.0
+bash packaging/linux/package.sh 0.2.0
 ```
 
 Outputs are written to `artifacts/packages`. The Debian and AppImage builds copy

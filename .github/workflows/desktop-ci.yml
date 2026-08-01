@@ -2,9 +2,14 @@ name: Desktop CI
 
 on:
   push:
-    branches: [main, "codex/**"]
+    tags: ["v*"]
   pull_request:
+    branches: [main]
   workflow_dispatch:
+
+concurrency:
+  group: desktop-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -12,22 +17,33 @@ permissions:
 env:
   DOTNET_NOLOGO: "true"
   DOTNET_CLI_TELEMETRY_OPTOUT: "true"
-  AVISCRIBE_VERSION: "0.1.0"
+  AVISCRIBE_VERSION: "0.2.0"
   FLASHCAP_VERSION: "1.11.9"
   FLASHCAP_COMMIT: "ba2de264b0c6bcd77c3ad2b65a83963393631e88"
 
 jobs:
   flashcap-packages:
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
+      - name: Restore patched FlashCap packages
+        id: flashcap-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/../../LocalNuGet
+          key: FlashCap-${{ env.FLASHCAP_VERSION }}-${{ env.FLASHCAP_COMMIT }}
+          enableCrossOsArchive: true
       - uses: actions/setup-dotnet@v5
+        if: steps.flashcap-cache.outputs.cache-hit != 'true'
         with:
           dotnet-version: "10.0.x"
       - name: Build patched FlashCap packages
+        if: steps.flashcap-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $source = Join-Path $env:RUNNER_TEMP "FlashCap"
-          $output = Join-Path $env:RUNNER_TEMP "LocalNuGet"
+          $output = [IO.Path]::GetFullPath(
+            (Join-Path $env:GITHUB_WORKSPACE "../../LocalNuGet"))
           git clone https://github.com/xTektonic/FlashCap.git $source
           git -C $source checkout --detach $env:FLASHCAP_COMMIT
 
@@ -49,25 +65,40 @@ jobs:
               throw "$package was not created."
             }
           }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
-          path: ${{ runner.temp }}/LocalNuGet/*.nupkg
-          if-no-files-found: error
-          retention-days: 1
+      - name: Verify patched FlashCap packages
+        shell: pwsh
+        run: |
+          $output = [IO.Path]::GetFullPath(
+            (Join-Path $env:GITHUB_WORKSPACE "../../LocalNuGet"))
+          foreach ($package in @(
+            "FlashCap.$env:FLASHCAP_VERSION.nupkg",
+            "FlashCap.Core.$env:FLASHCAP_VERSION.nupkg"
+          )) {
+            if (-not (Test-Path (Join-Path $output $package))) {
+              throw "$package is missing from the local feed."
+            }
+          }
 
-  windows-x64:
+  validate:
     needs: flashcap-packages
-    runs-on: windows-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - name: Restore patched FlashCap packages
+        uses: actions/cache/restore@v4
         with:
-          name: FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
-          path: ../../LocalNuGet
+          path: ${{ github.workspace }}/../../LocalNuGet
+          key: FlashCap-${{ env.FLASHCAP_VERSION }}-${{ env.FLASHCAP_COMMIT }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
+      - name: Install test prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libfontconfig1 libice6 libsm6 libx11-6
       - name: Restore
         run: dotnet restore Aviscribe.sln
       - name: Build
@@ -75,19 +106,34 @@ jobs:
       - name: Automated tests
         run: dotnet test Aviscribe.sln --configuration Release --no-build
       - name: Smoke suites
-        shell: pwsh
         run: |
-          $commands = @(
-            "state-smoke",
-            "capture-crop-smoke",
-            "frameprocessor-smoke",
-            "talkatoo-confirmation-smoke",
-            "matcher-smoke"
-          )
-          foreach ($command in $commands) {
-            dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- $command
-            if ($LASTEXITCODE -ne 0) { throw "$command failed." }
-          }
+          for command in \
+            state-smoke \
+            capture-crop-smoke \
+            frameprocessor-smoke \
+            talkatoo-confirmation-smoke \
+            matcher-smoke
+          do
+            dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- "$command"
+          done
+
+  windows-x64:
+    if: github.event_name != 'pull_request'
+    needs: [flashcap-packages, validate]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Restore patched FlashCap packages
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/../../LocalNuGet
+          key: FlashCap-${{ env.FLASHCAP_VERSION }}-${{ env.FLASHCAP_COMMIT }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
       - name: Build Windows installer
         shell: pwsh
         run: ./packaging/windows/package.ps1 -Version $env:AVISCRIBE_VERSION
@@ -119,36 +165,25 @@ jobs:
           name: Aviscribe-${{ env.AVISCRIBE_VERSION }}-win-x64
           path: artifacts/packages/*.msi
           if-no-files-found: error
+          retention-days: 14
 
   macos-arm64:
-    needs: flashcap-packages
+    if: github.event_name != 'pull_request'
+    needs: [flashcap-packages, validate]
     runs-on: macos-14
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - name: Restore patched FlashCap packages
+        uses: actions/cache/restore@v4
         with:
-          name: FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
-          path: ../../LocalNuGet
+          path: ${{ github.workspace }}/../../LocalNuGet
+          key: FlashCap-${{ env.FLASHCAP_VERSION }}-${{ env.FLASHCAP_COMMIT }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
-      - name: Restore
-        run: dotnet restore Aviscribe.sln
-      - name: Build
-        run: dotnet build Aviscribe.sln --configuration Release --no-restore
-      - name: Automated tests
-        run: dotnet test Aviscribe.sln --configuration Release --no-build
-      - name: Smoke suites
-        run: |
-          for command in \
-            state-smoke \
-            capture-crop-smoke \
-            frameprocessor-smoke \
-            talkatoo-confirmation-smoke \
-            matcher-smoke
-          do
-            dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- "$command"
-          done
       - name: Build macOS application and DMG
         run: bash packaging/macos/package.sh "${AVISCRIBE_VERSION}"
       - name: Inspect macOS payload
@@ -170,16 +205,22 @@ jobs:
           name: Aviscribe-${{ env.AVISCRIBE_VERSION }}-osx-arm64
           path: artifacts/packages/*.dmg
           if-no-files-found: error
+          retention-days: 14
 
   linux-x64:
-    needs: flashcap-packages
+    if: github.event_name != 'pull_request'
+    needs: [flashcap-packages, validate]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - name: Restore patched FlashCap packages
+        uses: actions/cache/restore@v4
         with:
-          name: FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
-          path: ../../LocalNuGet
+          path: ${{ github.workspace }}/../../LocalNuGet
+          key: FlashCap-${{ env.FLASHCAP_VERSION }}-${{ env.FLASHCAP_COMMIT }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
@@ -187,23 +228,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes libfontconfig1 libice6 libsm6 libx11-6 xvfb
-      - name: Restore
-        run: dotnet restore Aviscribe.sln
-      - name: Build
-        run: dotnet build Aviscribe.sln --configuration Release --no-restore
-      - name: Automated tests
-        run: dotnet test Aviscribe.sln --configuration Release --no-build
-      - name: Smoke suites
-        run: |
-          for command in \
-            state-smoke \
-            capture-crop-smoke \
-            frameprocessor-smoke \
-            talkatoo-confirmation-smoke \
-            matcher-smoke
-          do
-            dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- "$command"
-          done
       - name: Build Debian and AppImage packages
         run: bash packaging/linux/package.sh "${AVISCRIBE_VERSION}"
       - name: Inspect Linux payload and packages
@@ -235,3 +259,4 @@ jobs:
             artifacts/packages/*.deb
             artifacts/packages/*.AppImage
           if-no-files-found: error
+          retention-days: 14

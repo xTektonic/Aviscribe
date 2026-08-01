@@ -84,15 +84,17 @@ namespace Aviscribe.Classifier
             using var image = new Mat(new Size(1920, 1080), MatType.CV_8UC3, Scalar.Black);
             var bounds = new Rect(666, 862, 649, 48);
             using var crop = new Mat(image, bounds);
+            var width = crop.Width;
+            var height = crop.Height;
 
-            for (var y = 0; y < crop.Height; y++)
+            for (var y = 0; y < height; y++)
             {
-                for (var x = 0; x < crop.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
                     var bright = pattern switch
                     {
-                        0 => x < crop.Width / 2,
-                        1 => x >= crop.Width / 2,
+                        0 => x < width / 2,
+                        1 => x >= width / 2,
                         2 => (x / 12) % 2 == 0,
                         _ => (x / 12) % 2 != 0
                     };

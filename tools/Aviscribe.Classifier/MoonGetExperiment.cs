@@ -54,17 +54,19 @@ namespace Aviscribe.Classifier
 
         internal static MoonGetMetrics Measure(Mat image)
         {
+            var width = image.Width;
+            var height = image.Height;
             using var mask = new Mat(image.Size(), MatType.CV_8UC1, Scalar.Black);
             var darkIntegral = BuildDarkIntegral(image);
-            var rowCounts = new int[image.Height];
+            var rowCounts = new int[height];
             var whitePixels = 0;
             var outlinedPixels = 0;
-            var outlinedColumns = new bool[image.Width];
+            var outlinedColumns = new bool[width];
 
-            for (var y = 0; y < image.Height; y++)
+            for (var y = 0; y < height; y++)
             {
                 var count = 0;
-                for (var x = 0; x < image.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -76,7 +78,7 @@ namespace Aviscribe.Classifier
                         whitePixels++;
                         mask.Set(y, x, 255);
 
-                        if (HasNearbyDarkPixel(darkIntegral, image.Width, image.Height, x, y))
+                        if (HasNearbyDarkPixel(darkIntegral, width, height, x, y))
                         {
                             outlinedPixels++;
                             outlinedColumns[x] = true;
@@ -87,15 +89,15 @@ namespace Aviscribe.Classifier
                 rowCounts[y] = count;
             }
 
-            var rowThreshold = Math.Max(34.0, image.Width * 0.04);
+            var rowThreshold = Math.Max(34.0, width * 0.04);
             var bestStart = 0;
             var bestEnd = 0;
             var bestScore = 0.0;
 
-            for (var start = 0; start < image.Height; start++)
+            for (var start = 0; start < height; start++)
             {
                 var score = 0.0;
-                for (var end = start; end < Math.Min(image.Height, start + 42); end++)
+                for (var end = start; end < Math.Min(height, start + 42); end++)
                 {
                     score += Math.Max(0, rowCounts[end] - rowThreshold);
                     if (end - start + 1 >= 8 && score > bestScore)
@@ -108,10 +110,10 @@ namespace Aviscribe.Classifier
             }
 
             var activeColumns = 0;
-            var left = image.Width;
+            var left = width;
             var right = 0;
 
-            for (var x = 0; x < image.Width; x++)
+            for (var x = 0; x < width; x++)
             {
                 var count = 0;
                 for (var y = bestStart; y < bestEnd; y++)
@@ -132,21 +134,21 @@ namespace Aviscribe.Classifier
                 }
             }
 
-            var spanWidth = right - (left == image.Width ? right : left);
+            var spanWidth = right - (left == width ? right : left);
             var center = bestEnd <= bestStart
                 ? 0
-                : ((bestStart + bestEnd) / 2.0) / Math.Max(1, image.Height);
+                : ((bestStart + bestEnd) / 2.0) / Math.Max(1, height);
 
             var (componentCount, componentArea, componentSpan) = MeasureTextComponents(mask);
 
             return new MoonGetMetrics(
                 whitePixels,
-                whitePixels / (double)Math.Max(1, image.Width * image.Height),
+                whitePixels / (double)Math.Max(1, width * height),
                 bestScore,
                 bestEnd - bestStart,
                 center,
                 activeColumns,
-                left == image.Width ? 0 : left,
+                left == width ? 0 : left,
                 right,
                 spanWidth,
                 componentCount,
@@ -158,12 +160,14 @@ namespace Aviscribe.Classifier
 
         private static int[,] BuildDarkIntegral(Mat image)
         {
-            var integral = new int[image.Height + 1, image.Width + 1];
+            var width = image.Width;
+            var height = image.Height;
+            var integral = new int[height + 1, width + 1];
 
-            for (var y = 0; y < image.Height; y++)
+            for (var y = 0; y < height; y++)
             {
                 var rowSum = 0;
-                for (var x = 0; x < image.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var max = Math.Max(pixel.Item2, Math.Max(pixel.Item1, pixel.Item0));
