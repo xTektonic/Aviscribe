@@ -64,12 +64,14 @@ namespace Aviscribe.Classifier
 
         private static void PrintWideWhiteOverlay(Mat image)
         {
+            var width = image.Width;
+            var height = image.Height;
             var whitePixels = 0;
             var activeColumns = 0;
-            for (var x = 80; x < image.Width; x++)
+            for (var x = 80; x < width; x++)
             {
                 var columnWhitePixels = 0;
-                for (var y = 0; y < image.Height; y++)
+                for (var y = 0; y < height; y++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -94,11 +96,12 @@ namespace Aviscribe.Classifier
 
         private static void PrintWhiteMarkerComponents(Mat image)
         {
+            var rows = image.Rows;
             var iconSearchWidth = Math.Min(image.Width, 92);
             using var whiteMask = new Mat(new Size(iconSearchWidth, image.Height), MatType.CV_8UC1, Scalar.Black);
             var whitePixels = 0;
 
-            for (var y = 0; y < image.Rows; y++)
+            for (var y = 0; y < rows; y++)
             {
                 for (var x = 0; x < iconSearchWidth; x++)
                 {
@@ -135,10 +138,11 @@ namespace Aviscribe.Classifier
 
         private static void PrintIconComponents(Mat image)
         {
+            var rows = image.Rows;
             var iconSearchWidth = Math.Min(image.Width, 88);
             using var iconMask = new Mat(new Size(iconSearchWidth, image.Height), MatType.CV_8UC1, Scalar.Black);
 
-            for (var y = 0; y < image.Rows; y++)
+            for (var y = 0; y < rows; y++)
             {
                 for (var x = 0; x < iconSearchWidth; x++)
                 {
@@ -178,10 +182,12 @@ namespace Aviscribe.Classifier
         private static Metrics Measure(Mat image)
         {
             using var mask = new Mat(image.Size(), MatType.CV_8UC1, Scalar.Black);
+            var imageRows = image.Rows;
+            var imageCols = image.Cols;
 
-            for (var y = 0; y < image.Rows; y++)
+            for (var y = 0; y < imageRows; y++)
             {
-                for (var x = 0; x < image.Cols; x++)
+                for (var x = 0; x < imageCols; x++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -192,12 +198,14 @@ namespace Aviscribe.Classifier
                 }
             }
 
-            var rowCounts = new int[mask.Height];
+            var maskWidth = mask.Width;
+            var maskHeight = mask.Height;
+            var rowCounts = new int[maskHeight];
             var yellowPixels = 0;
-            for (var y = 0; y < mask.Height; y++)
+            for (var y = 0; y < maskHeight; y++)
             {
                 var count = 0;
-                for (var x = 0; x < mask.Width; x++)
+                for (var x = 0; x < maskWidth; x++)
                 {
                     if (mask.At<byte>(y, x) > 0)
                         count++;
@@ -207,14 +215,14 @@ namespace Aviscribe.Classifier
                 yellowPixels += count;
             }
 
-            var threshold = Math.Max(22, mask.Width * 0.045);
+            var threshold = Math.Max(22, maskWidth * 0.045);
             var bestStart = 0;
             var bestEnd = 0;
             var bestScore = 0.0;
-            for (var start = 0; start < mask.Height; start++)
+            for (var start = 0; start < maskHeight; start++)
             {
                 var score = 0.0;
-                for (var end = start; end < Math.Min(mask.Height, start + 34); end++)
+                for (var end = start; end < Math.Min(maskHeight, start + 34); end++)
                 {
                     score += Math.Max(0, rowCounts[end] - threshold);
                     if (end - start + 1 >= 8 && score > bestScore)
@@ -229,10 +237,10 @@ namespace Aviscribe.Classifier
             var activeColumns = 0;
             var longestRun = 0;
             var currentRun = 0;
-            var left = mask.Width;
+            var left = maskWidth;
             var right = 0;
             var fragmentedColumns = 0;
-            for (var x = 0; x < mask.Width; x++)
+            for (var x = 0; x < maskWidth; x++)
             {
                 var count = 0;
                 var transitions = 0;
@@ -268,16 +276,16 @@ namespace Aviscribe.Classifier
             var activeRows = rowCounts.Where(x => x >= threshold).OrderBy(x => x).ToArray();
             return new Metrics(
                 yellowPixels,
-                yellowPixels / (double)Math.Max(1, mask.Width * mask.Height),
+                yellowPixels / (double)Math.Max(1, maskWidth * maskHeight),
                 bestStart,
                 bestEnd,
                 bestEnd - bestStart,
                 bestScore,
                 activeColumns,
                 longestRun,
-                left == mask.Width ? 0 : left,
+                left == maskWidth ? 0 : left,
                 right,
-                right - (left == mask.Width ? right : left),
+                right - (left == maskWidth ? right : left),
                 rowCounts.Length == 0 ? 0 : rowCounts.Max(),
                 activeRows.Length == 0 ? 0 : activeRows[activeRows.Length / 2],
                 fragmentedColumns);

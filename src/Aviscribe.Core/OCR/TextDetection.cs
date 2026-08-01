@@ -228,14 +228,16 @@ namespace Aviscribe.Core.Ocr
 
         private static YellowTextMetrics MeasureYellowText(Mat mask)
         {
-            var rowCounts = new int[mask.Height];
+            var width = mask.Width;
+            var height = mask.Height;
+            var rowCounts = new int[height];
             var yellowPixels = 0;
 
-            for (var y = 0; y < mask.Height; y++)
+            for (var y = 0; y < height; y++)
             {
                 var count = 0;
 
-                for (var x = 0; x < mask.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
                     if (mask.At<byte>(y, x) > 0)
                         count++;
@@ -245,15 +247,15 @@ namespace Aviscribe.Core.Ocr
                 yellowPixels += count;
             }
 
-            var rowThreshold = Math.Max(18.0, mask.Width * 0.04);
+            var rowThreshold = Math.Max(18.0, width * 0.04);
             var bandTop = 0;
             var bandBottom = 0;
             var bestBandScore = 0.0;
 
-            for (var start = 0; start < mask.Height; start++)
+            for (var start = 0; start < height; start++)
             {
                 var score = 0.0;
-                for (var end = start; end < Math.Min(mask.Height, start + 34); end++)
+                for (var end = start; end < Math.Min(height, start + 34); end++)
                 {
                     score += Math.Max(0, rowCounts[end] - rowThreshold);
 
@@ -269,11 +271,11 @@ namespace Aviscribe.Core.Ocr
             var activeColumns = 0;
             var longestColumnRun = 0;
             var currentColumnRun = 0;
-            var left = mask.Width;
+            var left = width;
             var right = 0;
             var fragmentedColumns = 0;
 
-            for (var x = 0; x < mask.Width; x++)
+            for (var x = 0; x < width; x++)
             {
                 var count = 0;
                 var transitions = 0;
@@ -310,8 +312,8 @@ namespace Aviscribe.Core.Ocr
 
             var activeRows = rowCounts.Where(x => x >= rowThreshold).OrderBy(x => x).ToArray();
             var medianActiveRow = activeRows.Length == 0 ? 0 : activeRows[activeRows.Length / 2];
-            var totalPixels = Math.Max(1, mask.Width * mask.Height);
-            var spanWidth = right - (left == mask.Width ? right : left);
+            var totalPixels = Math.Max(1, width * height);
+            var spanWidth = right - (left == width ? right : left);
             var yellowRatio = yellowPixels / (double)totalPixels;
             var activeColumnDensity = activeColumns / (double)Math.Max(1, spanWidth);
 
@@ -427,13 +429,15 @@ namespace Aviscribe.Core.Ocr
 
         private static BrightYellowTextMetrics MeasureBrightYellowText(Mat mask, Mat image)
         {
-            var rowCounts = new int[mask.Height];
+            var width = mask.Width;
+            var height = mask.Height;
+            var rowCounts = new int[height];
             var brightPixels = 0;
 
-            for (var y = 0; y < mask.Height; y++)
+            for (var y = 0; y < height; y++)
             {
                 var count = 0;
-                for (var x = 0; x < mask.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
                     if (mask.At<byte>(y, x) > 0)
                         count++;
@@ -443,15 +447,15 @@ namespace Aviscribe.Core.Ocr
                 brightPixels += count;
             }
 
-            var rowThreshold = Math.Max(14.0, mask.Width * 0.028);
+            var rowThreshold = Math.Max(14.0, width * 0.028);
             var bandTop = 0;
             var bandBottom = 0;
             var bestBandScore = 0.0;
 
-            for (var start = 0; start < mask.Height; start++)
+            for (var start = 0; start < height; start++)
             {
                 var score = 0.0;
-                for (var end = start; end < Math.Min(mask.Height, start + 34); end++)
+                for (var end = start; end < Math.Min(height, start + 34); end++)
                 {
                     score += Math.Max(0, rowCounts[end] - rowThreshold);
 
@@ -468,13 +472,13 @@ namespace Aviscribe.Core.Ocr
             var longestColumnRun = 0;
             var currentColumnRun = 0;
             var fragmentedColumns = 0;
-            var darkSupportedColumns = new bool[mask.Width];
+            var darkSupportedColumns = new bool[width];
             var darkSupportedPixels = 0;
-            var left = mask.Width;
+            var left = width;
             var right = 0;
             var darkIntegral = BuildDarkIntegral(image, maxValue: 120);
 
-            for (var x = 0; x < mask.Width; x++)
+            for (var x = 0; x < width; x++)
             {
                 var count = 0;
                 var transitions = 0;
@@ -517,14 +521,14 @@ namespace Aviscribe.Core.Ocr
                 }
             }
 
-            var spanWidth = right - (left == mask.Width ? right : left);
+            var spanWidth = right - (left == width ? right : left);
             var center = bandBottom <= bandTop
                 ? 0
-                : ((bandTop + bandBottom) / 2.0) / Math.Max(1, mask.Height);
+                : ((bandTop + bandBottom) / 2.0) / Math.Max(1, height);
 
             return new BrightYellowTextMetrics(
                 brightPixels,
-                brightPixels / (double)Math.Max(1, mask.Width * mask.Height),
+                brightPixels / (double)Math.Max(1, width * height),
                 bestBandScore,
                 bandBottom - bandTop,
                 center,
@@ -538,11 +542,12 @@ namespace Aviscribe.Core.Ocr
 
         private static bool HasTalkatooMoonMarker(Mat image)
         {
+            var imageHeight = image.Height;
             var iconSearchWidth = Math.Min(image.Width, 92);
-            using var markerMask = new Mat(new Size(iconSearchWidth, image.Height), MatType.CV_8UC1, Scalar.Black);
+            using var markerMask = new Mat(new Size(iconSearchWidth, imageHeight), MatType.CV_8UC1, Scalar.Black);
             var markerPixels = 0;
 
-            for (var y = 0; y < image.Height; y++)
+            for (var y = 0; y < imageHeight; y++)
             {
                 for (var x = 0; x < iconSearchWidth; x++)
                 {
@@ -561,7 +566,7 @@ namespace Aviscribe.Core.Ocr
                 }
             }
 
-            if (markerPixels < 80 || markerPixels > iconSearchWidth * image.Height * 0.98)
+            if (markerPixels < 80 || markerPixels > iconSearchWidth * imageHeight * 0.98)
                 return false;
 
             using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new Size(3, 3));
@@ -588,7 +593,7 @@ namespace Aviscribe.Core.Ocr
                 if (area < 120 || area > 4500)
                     continue;
 
-                if (width < 10 || width > 92 || height < 10 || height > image.Height)
+                if (width < 10 || width > 92 || height < 10 || height > imageHeight)
                     continue;
 
                 if (aspectRatio < 0.25 || aspectRatio > 3.5)
@@ -597,7 +602,7 @@ namespace Aviscribe.Core.Ocr
                 if (fill < 0.20)
                     continue;
 
-                if (centerX < 5 || centerX > 82 || centerY < 4 || centerY > image.Height - 2)
+                if (centerX < 5 || centerX > 82 || centerY < 4 || centerY > imageHeight - 2)
                     continue;
 
                 return true;
@@ -608,10 +613,11 @@ namespace Aviscribe.Core.Ocr
 
         private static bool HasLeftMarkerMass(Mat image)
         {
+            var imageHeight = image.Height;
             var iconSearchWidth = Math.Min(image.Width, 96);
-            using var markerMask = new Mat(new Size(iconSearchWidth, image.Height), MatType.CV_8UC1, Scalar.Black);
+            using var markerMask = new Mat(new Size(iconSearchWidth, imageHeight), MatType.CV_8UC1, Scalar.Black);
 
-            for (var y = 0; y < image.Height; y++)
+            for (var y = 0; y < imageHeight; y++)
             {
                 for (var x = 0; x < iconSearchWidth; x++)
                 {
@@ -660,11 +666,12 @@ namespace Aviscribe.Core.Ocr
 
         private static bool HasWhiteTalkatooMoonMarker(Mat image)
         {
+            var imageHeight = image.Height;
             var iconSearchWidth = Math.Min(image.Width, 96);
-            using var whiteMask = new Mat(new Size(iconSearchWidth, image.Height), MatType.CV_8UC1, Scalar.Black);
+            using var whiteMask = new Mat(new Size(iconSearchWidth, imageHeight), MatType.CV_8UC1, Scalar.Black);
             var whitePixels = 0;
 
-            for (var y = 0; y < image.Height; y++)
+            for (var y = 0; y < imageHeight; y++)
             {
                 for (var x = 0; x < iconSearchWidth; x++)
                 {
@@ -703,13 +710,13 @@ namespace Aviscribe.Core.Ocr
                 if (area < 160 || area > 2400)
                     continue;
 
-                if (width < 12 || width > 70 || height < 12 || height > image.Height)
+                if (width < 12 || width > 70 || height < 12 || height > imageHeight)
                     continue;
 
                 if (fill < 0.18)
                     continue;
 
-                if (x > 90 || y > image.Height - 8)
+                if (x > 90 || y > imageHeight - 8)
                     continue;
 
                 return true;
@@ -720,14 +727,16 @@ namespace Aviscribe.Core.Ocr
 
         private static WhiteSupportMetrics MeasureTextWhiteSupport(Mat image)
         {
+            var width = image.Width;
+            var height = image.Height;
             var whitePixels = 0;
             var activeColumns = 0;
 
-            for (var x = 80; x < image.Width; x++)
+            for (var x = 80; x < width; x++)
             {
                 var columnWhitePixels = 0;
 
-                for (var y = 0; y < image.Height; y++)
+                for (var y = 0; y < height; y++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -759,10 +768,12 @@ namespace Aviscribe.Core.Ocr
         private static Mat CreateYellowGlyphMask(Mat image)
         {
             var mask = new Mat(image.Size(), MatType.CV_8UC1, Scalar.Black);
+            var rows = image.Rows;
+            var cols = image.Cols;
 
-            for (var y = 0; y < image.Rows; y++)
+            for (var y = 0; y < rows; y++)
             {
-                for (var x = 0; x < image.Cols; x++)
+                for (var x = 0; x < cols; x++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -789,10 +800,12 @@ namespace Aviscribe.Core.Ocr
         private static Mat CreateBrightYellowGlyphMask(Mat image)
         {
             var mask = new Mat(image.Size(), MatType.CV_8UC1, Scalar.Black);
+            var rows = image.Rows;
+            var cols = image.Cols;
 
-            for (var y = 0; y < image.Rows; y++)
+            for (var y = 0; y < rows; y++)
             {
-                for (var x = 80; x < image.Cols; x++)
+                for (var x = 80; x < cols; x++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -1126,18 +1139,20 @@ namespace Aviscribe.Core.Ocr
         private static bool HasLargeMoonGetCelebrationMass(Mat image)
         {
             const int step = 4;
-            var sampledWidth = (image.Width + step - 1) / step;
-            var sampledHeight = (image.Height + step - 1) / step;
+            var width = image.Width;
+            var height = image.Height;
+            var sampledWidth = (width + step - 1) / step;
+            var sampledHeight = (height + step - 1) / step;
             var rowCounts = new int[sampledHeight];
             var activeColumns = new bool[sampledWidth];
             var whitePixels = 0;
 
-            for (var y = 0; y < image.Height; y += step)
+            for (var y = 0; y < height; y += step)
             {
                 var sampledY = y / step;
                 var rowCount = 0;
 
-                for (var x = 0; x < image.Width; x += step)
+                for (var x = 0; x < width; x += step)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -1194,18 +1209,20 @@ namespace Aviscribe.Core.Ocr
 
             var darkIntegral = BuildDarkIntegral(image, maxValue: 105);
             const int step = 2;
-            var sampledWidth = (image.Width + step - 1) / step;
-            var sampledHeight = (image.Height + step - 1) / step;
+            var width = image.Width;
+            var height = image.Height;
+            var sampledWidth = (width + step - 1) / step;
+            var sampledHeight = (height + step - 1) / step;
             var rowCounts = new int[sampledHeight];
             var outlinedPixels = 0;
             var activeColumns = new bool[sampledWidth];
 
-            for (var y = 0; y < image.Height; y += step)
+            for (var y = 0; y < height; y += step)
             {
                 var rowCount = 0;
                 var sampledY = y / step;
 
-                for (var x = 0; x < image.Width; x += step)
+                for (var x = 0; x < width; x += step)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -1215,7 +1232,7 @@ namespace Aviscribe.Core.Ocr
                     if (!IsMoonGetTextPixel(r, g, b))
                         continue;
 
-                    if (!HasNearbyDarkPixel(darkIntegral, image.Width, image.Height, x, y, radius: 3))
+                    if (!HasNearbyDarkPixel(darkIntegral, width, height, x, y, radius: 3))
                         continue;
 
                     rowCount++;
@@ -1259,19 +1276,21 @@ namespace Aviscribe.Core.Ocr
         public static MoonGetSeparatorMetrics AnalyzeMoonGetSeparatorLayout(Mat image)
         {
             const int step = 2;
-            var sampledWidth = (image.Width + step - 1) / step;
-            var sampledHeight = (image.Height + step - 1) / step;
+            var width = image.Width;
+            var height = image.Height;
+            var sampledWidth = (width + step - 1) / step;
+            var sampledHeight = (height + step - 1) / step;
             var rowCounts = new int[sampledHeight];
             var strongWhiteRowCounts = new int[sampledHeight];
             var activeColumnsAboveLine = new bool[sampledWidth];
 
-            for (var y = 0; y < image.Height; y += step)
+            for (var y = 0; y < height; y += step)
             {
                 var sampledY = y / step;
                 var rowCount = 0;
                 var strongWhiteRowCount = 0;
 
-                for (var x = 0; x < image.Width; x += step)
+                for (var x = 0; x < width; x += step)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -1411,7 +1430,7 @@ namespace Aviscribe.Core.Ocr
                     continue;
 
                 var sourceY = y * step;
-                for (var x = 0; x < image.Width; x += step)
+                for (var x = 0; x < width; x += step)
                 {
                     var pixel = image.At<Vec3b>(sourceY, x);
                     var b = pixel.Item0;
@@ -1554,11 +1573,13 @@ namespace Aviscribe.Core.Ocr
 
         private static double MeasurePaleNeutralRatio(Mat image)
         {
+            var width = image.Width;
+            var height = image.Height;
             var palePixels = 0;
 
-            for (var y = 0; y < image.Height; y += 3)
+            for (var y = 0; y < height; y += 3)
             {
-                for (var x = 0; x < image.Width; x += 3)
+                for (var x = 0; x < width; x += 3)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -1572,24 +1593,26 @@ namespace Aviscribe.Core.Ocr
                 }
             }
 
-            var sampledWidth = (image.Width + 2) / 3;
-            var sampledHeight = (image.Height + 2) / 3;
+            var sampledWidth = (width + 2) / 3;
+            var sampledHeight = (height + 2) / 3;
             return palePixels / (double)Math.Max(1, sampledWidth * sampledHeight);
         }
 
         private static MoonGetTextMetrics MeasureMoonGetText(Mat image)
         {
+            var width = image.Width;
+            var height = image.Height;
             using var mask = new Mat(image.Size(), MatType.CV_8UC1, Scalar.Black);
             var darkIntegral = BuildDarkIntegral(image);
-            var rowCounts = new int[image.Height];
-            var outlinedColumns = new bool[image.Width];
+            var rowCounts = new int[height];
+            var outlinedColumns = new bool[width];
             var whitePixels = 0;
             var outlinedPixels = 0;
 
-            for (var y = 0; y < image.Height; y++)
+            for (var y = 0; y < height; y++)
             {
                 var rowCount = 0;
-                for (var x = 0; x < image.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -1603,7 +1626,7 @@ namespace Aviscribe.Core.Ocr
                     rowCount++;
                     whitePixels++;
 
-                    if (HasNearbyDarkPixel(darkIntegral, image.Width, image.Height, x, y))
+                    if (HasNearbyDarkPixel(darkIntegral, width, height, x, y))
                     {
                         outlinedPixels++;
                         outlinedColumns[x] = true;
@@ -1613,15 +1636,15 @@ namespace Aviscribe.Core.Ocr
                 rowCounts[y] = rowCount;
             }
 
-            var rowThreshold = Math.Max(34.0, image.Width * 0.04);
+            var rowThreshold = Math.Max(34.0, width * 0.04);
             var bandTop = 0;
             var bandBottom = 0;
             var bestBandScore = 0.0;
 
-            for (var start = 0; start < image.Height; start++)
+            for (var start = 0; start < height; start++)
             {
                 var score = 0.0;
-                for (var end = start; end < Math.Min(image.Height, start + 42); end++)
+                for (var end = start; end < Math.Min(height, start + 42); end++)
                 {
                     score += Math.Max(0, rowCounts[end] - rowThreshold);
                     if (end - start + 1 >= 8 && score > bestBandScore)
@@ -1634,10 +1657,10 @@ namespace Aviscribe.Core.Ocr
             }
 
             var activeColumns = 0;
-            var left = image.Width;
+            var left = width;
             var right = 0;
 
-            for (var x = 0; x < image.Width; x++)
+            for (var x = 0; x < width; x++)
             {
                 var count = 0;
                 for (var y = bandTop; y < bandBottom; y++)
@@ -1655,14 +1678,14 @@ namespace Aviscribe.Core.Ocr
             }
 
             var (componentCount, componentArea, componentSpan) = MeasureMoonGetTextComponents(mask);
-            var spanWidth = right - (left == image.Width ? right : left);
+            var spanWidth = right - (left == width ? right : left);
             var center = bandBottom <= bandTop
                 ? 0
-                : ((bandTop + bandBottom) / 2.0) / Math.Max(1, image.Height);
+                : ((bandTop + bandBottom) / 2.0) / Math.Max(1, height);
 
             return new MoonGetTextMetrics(
                 whitePixels,
-                whitePixels / (double)Math.Max(1, image.Width * image.Height),
+                whitePixels / (double)Math.Max(1, width * height),
                 bestBandScore,
                 bandBottom - bandTop,
                 center,
@@ -1719,12 +1742,14 @@ namespace Aviscribe.Core.Ocr
 
         private static int[,] BuildDarkIntegral(Mat image, int maxValue = 95)
         {
-            var integral = new int[image.Height + 1, image.Width + 1];
+            var width = image.Width;
+            var height = image.Height;
+            var integral = new int[height + 1, width + 1];
 
-            for (var y = 0; y < image.Height; y++)
+            for (var y = 0; y < height; y++)
             {
                 var rowSum = 0;
-                for (var x = 0; x < image.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var max = Math.Max(pixel.Item2, Math.Max(pixel.Item1, pixel.Item0));
@@ -1839,11 +1864,13 @@ namespace Aviscribe.Core.Ocr
 
         private static double MeasureRedCelebrationRatio(Mat image)
         {
+            var width = image.Width;
+            var height = image.Height;
             var redPixels = 0;
 
-            for (var y = 0; y < image.Height; y++)
+            for (var y = 0; y < height; y++)
             {
-                for (var x = 0; x < image.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -1855,7 +1882,7 @@ namespace Aviscribe.Core.Ocr
                 }
             }
 
-            return redPixels / (double)Math.Max(1, image.Width * image.Height);
+            return redPixels / (double)Math.Max(1, width * height);
         }
 
         public static bool HasMoonTextHeuristic(Mat image)

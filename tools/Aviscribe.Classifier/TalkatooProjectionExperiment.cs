@@ -76,12 +76,14 @@ namespace Aviscribe.Classifier
         internal static TalkatooProjectionMetrics Measure(Mat image)
         {
             using var mask = new Mat(image.Size(), MatType.CV_8UC1, Scalar.Black);
+            var rows = image.Rows;
+            var cols = image.Cols;
             var colorDeltaSum = 0.0;
             var colorDeltaCount = 0;
 
-            for (var y = 0; y < image.Rows; y++)
+            for (var y = 0; y < rows; y++)
             {
-                for (var x = 0; x < image.Cols; x++)
+                for (var x = 0; x < cols; x++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var b = pixel.Item0;
@@ -102,12 +104,14 @@ namespace Aviscribe.Classifier
 
         private static TalkatooProjectionMetrics MeasureMask(Mat mask, double meanRMinusG)
         {
-            var rowCounts = new int[mask.Height];
+            var width = mask.Width;
+            var height = mask.Height;
+            var rowCounts = new int[height];
             var yellowPixels = 0;
-            for (var y = 0; y < mask.Height; y++)
+            for (var y = 0; y < height; y++)
             {
                 var count = 0;
-                for (var x = 0; x < mask.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
                     if (mask.At<byte>(y, x) > 0)
                         count++;
@@ -117,15 +121,15 @@ namespace Aviscribe.Classifier
                 yellowPixels += count;
             }
 
-            var rowThreshold = Math.Max(18.0, mask.Width * 0.04);
+            var rowThreshold = Math.Max(18.0, width * 0.04);
             var bestStart = 0;
             var bestEnd = 0;
             var bestScore = 0.0;
 
-            for (var start = 0; start < mask.Height; start++)
+            for (var start = 0; start < height; start++)
             {
                 var score = 0.0;
-                for (var end = start; end < Math.Min(mask.Height, start + 34); end++)
+                for (var end = start; end < Math.Min(height, start + 34); end++)
                 {
                     score += Math.Max(0, rowCounts[end] - rowThreshold);
                     if (end - start + 1 >= 8 && score > bestScore)
@@ -140,11 +144,11 @@ namespace Aviscribe.Classifier
             var activeColumns = 0;
             var longestColumnRun = 0;
             var currentColumnRun = 0;
-            var left = mask.Width;
+            var left = width;
             var right = 0;
             var fragmentedColumns = 0;
 
-            for (var x = 0; x < mask.Width; x++)
+            for (var x = 0; x < width; x++)
             {
                 var count = 0;
                 var transitions = 0;
@@ -184,13 +188,13 @@ namespace Aviscribe.Classifier
 
             return new TalkatooProjectionMetrics(
                 yellowPixels,
-                yellowPixels / (double)Math.Max(1, mask.Width * mask.Height),
+                yellowPixels / (double)Math.Max(1, width * height),
                 bestScore,
                 activeColumns,
                 longestColumnRun,
-                left == mask.Width ? 0 : left,
+                left == width ? 0 : left,
                 right,
-                right - (left == mask.Width ? right : left),
+                right - (left == width ? right : left),
                 rowCounts.Length == 0 ? 0 : rowCounts.Max(),
                 medianActiveRow,
                 fragmentedColumns,

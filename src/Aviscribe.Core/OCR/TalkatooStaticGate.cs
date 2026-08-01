@@ -69,17 +69,19 @@ namespace Aviscribe.Core.Ocr
 
         private static byte[] CreateYellowMask(Mat image, out int yellowPixels)
         {
-            var mask = new byte[image.Width * image.Height];
+            var width = image.Width;
+            var height = image.Height;
+            var mask = new byte[width * height];
             yellowPixels = 0;
 
-            for (var y = 0; y < image.Height; y++)
+            for (var y = 0; y < height; y++)
             {
-                for (var x = 0; x < image.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
                     if (!IsYellow(image.At<Vec3b>(y, x)))
                         continue;
 
-                    mask[y * image.Width + x] = 1;
+                    mask[y * width + x] = 1;
                     yellowPixels++;
                 }
             }
@@ -89,11 +91,13 @@ namespace Aviscribe.Core.Ocr
 
         private static List<Rect> FindMarkerCandidates(Mat image)
         {
+            var width = image.Width;
+            var height = image.Height;
             using var whiteMask = new Mat(image.Size(), MatType.CV_8UC1, Scalar.Black);
 
-            for (var y = 0; y < image.Height; y++)
+            for (var y = 0; y < height; y++)
             {
-                for (var x = 0; x < image.Width; x++)
+                for (var x = 0; x < width; x++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
                     var maximum = Math.Max(pixel.Item2, Math.Max(pixel.Item1, pixel.Item0));
