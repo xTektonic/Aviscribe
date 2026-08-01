@@ -11,7 +11,7 @@
       <Button Name="btnRefreshDiagnostics" Grid.Column="1" Content="Refresh"/>
     </Grid>
 
-    <Grid Grid.Row="1" ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+    <Grid Grid.Row="1" ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
           ColumnSpacing="10" RowSpacing="5">
       <TextBlock Text="Application"/>
       <TextBlock Name="txtApplication" Grid.Column="1" TextWrapping="Wrap"/>
@@ -23,8 +23,12 @@
       <TextBlock Name="txtCaptureState" Grid.Row="3" Grid.Column="1" TextWrapping="Wrap"/>
       <TextBlock Grid.Row="4" Text="Source / active crop"/>
       <TextBlock Name="txtSourceCrop" Grid.Row="4" Grid.Column="1" TextWrapping="Wrap"/>
-      <TextBlock Grid.Row="5" Text="Log directory"/>
-      <TextBlock Name="txtLogDirectory" Grid.Row="5" Grid.Column="1" TextWrapping="Wrap"/>
+      <TextBlock Grid.Row="5" Text="Requested OCR mode"/>
+      <TextBlock Name="txtRequestedOcrMode" Grid.Row="5" Grid.Column="1" TextWrapping="Wrap"/>
+      <TextBlock Grid.Row="6" Text="Active OCR provider"/>
+      <TextBlock Name="txtActiveOcrProvider" Grid.Row="6" Grid.Column="1" TextWrapping="Wrap"/>
+      <TextBlock Grid.Row="7" Text="Log directory"/>
+      <TextBlock Name="txtLogDirectory" Grid.Row="7" Grid.Column="1" TextWrapping="Wrap"/>
     </Grid>
 
     <Grid Grid.Row="2" RowDefinitions="Auto,*" RowSpacing="6">

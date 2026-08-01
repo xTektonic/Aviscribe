@@ -83,6 +83,15 @@ regression and audit commands remain available through
 `dotnet run --project tools/Aviscribe.Classifier -- --help`; they require local
 test footage and are intentionally not part of hardware-independent CI.
 
+OCR uses CPU by default. **Settings → Diagnostics → OCR processor** offers an
+opt-in **GPU (WebGPU)** mode that is persisted and recreates the OCR session.
+Supported graph nodes run on a high-performance WebGPU adapter while remaining
+shape nodes use CPU. Initialization or inference failures recreate a CPU-only
+session and appear with the requested and active providers in Diagnostics.
+The first GPU inference may spend about two seconds warming shaders. See
+[docs/gpu-ocr-research.md](docs/gpu-ocr-research.md) for benchmarks and package
+details. This is cross-vendor acceleration, not a CUDA-specific fast path.
+
 ## Capture and crop behavior
 
 Choose **Video Device** or **Window** under **Settings → Capture Source**, then
