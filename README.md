@@ -195,7 +195,7 @@ PipeWire, and `libpipewire-0.3.so.0`. No external capture executable is used.
 AppImage execution commonly requires FUSE 2. If FUSE mounting is unavailable:
 
 ```text
-./Aviscribe-0.3.1-x86_64.AppImage --appimage-extract
+./Aviscribe-0.3.2-x86_64.AppImage --appimage-extract
 ./squashfs-root/AppRun
 ```
 
@@ -245,13 +245,13 @@ Platform packages must be built on their corresponding operating system:
 
 ```text
 # Windows PowerShell; WiX is restored as an SDK package
-./packaging/windows/package.ps1 -Version 0.3.1
+./packaging/windows/package.ps1 -Version 0.3.2
 
 # macOS Apple Silicon; uses codesign, plutil, and hdiutil
-bash packaging/macos/package.sh 0.3.1
+bash packaging/macos/package.sh 0.3.2
 
 # Ubuntu x64; requires dpkg-deb, curl, and AppImage tooling
-bash packaging/linux/package.sh 0.3.1
+bash packaging/linux/package.sh 0.3.2
 ```
 
 Outputs are written to `artifacts/packages`. The Debian and AppImage builds copy
