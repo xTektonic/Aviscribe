@@ -17,6 +17,8 @@ namespace Aviscribe.Core
 
     public class GameState
     {
+        public const string InitialKingdom = "Cascade";
+
         private readonly object _sync = new();
         private readonly Dictionary<string, KingdomStateData> _kingdomStates =
             new(StringComparer.OrdinalIgnoreCase);
@@ -85,12 +87,26 @@ namespace Aviscribe.Core
         {
             lock (_sync)
             {
-                _kingdomStates.Clear();
-                var current = GetOrCreateKingdomState(CurrentKingdom);
-                ApplyKingdomState(current);
+                ResetRunState();
             }
 
             OnChanged();
+        }
+
+        public bool SetIncludePostGameKingdoms(bool includePostGameKingdoms)
+        {
+            lock (_sync)
+            {
+                if (Settings.IncludePostGameKingdoms == includePostGameKingdoms)
+                    return false;
+
+                Settings.IncludePostGameKingdoms = includePostGameKingdoms;
+                if (!includePostGameKingdoms)
+                    ResetRunState();
+            }
+
+            OnChanged();
+            return true;
         }
 
         public void AddPending(Moon moon)
@@ -390,6 +406,13 @@ namespace Aviscribe.Core
             Pending = state.Pending;
             Collected = state.Collected;
             UncountedCollected = state.UncountedCollected;
+        }
+
+        private void ResetRunState()
+        {
+            _kingdomStates.Clear();
+            CurrentKingdom = InitialKingdom;
+            ApplyKingdomState(GetOrCreateKingdomState(InitialKingdom));
         }
 
         private static KingdomStateData CreateKingdomState(
