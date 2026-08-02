@@ -14,7 +14,7 @@
     <ListBox Name="lstCaptureSources" Grid.Row="1">
       <ListBox.ItemTemplate>
         <DataTemplate>
-          <Grid ColumnDefinitions="110,*" Margin="6">
+          <Grid ColumnDefinitions="110,*" Margin="6" IsEnabled="{Binding Device.IsAvailable}">
             <TextBlock Text="{Binding KindLabel}" Opacity="0.65" VerticalAlignment="Center"/>
             <StackPanel Grid.Column="1" Spacing="2">
               <TextBlock Text="{Binding Device.Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
@@ -25,8 +25,8 @@
       </ListBox.ItemTemplate>
     </ListBox>
     <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-      <TextBlock Name="txtEmptySources" VerticalAlignment="Center" Opacity="0.7"
-                 Text="No compatible capture sources were found." IsVisible="False"/>
+      <TextBlock Name="txtPickerStatus" VerticalAlignment="Center" Opacity="0.7"
+                 TextWrapping="Wrap"/>
       <Button Name="btnCancel" Grid.Column="1" Content="Cancel"/>
       <Button Name="btnChoose" Grid.Column="2" Content="Choose" IsDefault="True"/>
     </Grid>

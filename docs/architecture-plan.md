@@ -26,7 +26,8 @@ Maintained projects stay portable and map directly to their namespaces:
 
 - `src/Aviscribe.Core`: moon data, run state, OCR, matching, and frame processing
 - `src/Aviscribe.Core.Capture`: capture contracts, owned frames, and crop models
-- `src/Aviscribe.Capture`: shared FlashCap capture for DirectShow, AVFoundation, and V4L2
+- `src/Aviscribe.Capture`: shared video-device capture plus native platform window capture,
+  including XDG ScreenCast portal/PipeWire sessions on Wayland
 - `src/Aviscribe.UI`: platform-neutral Avalonia views and controls
 - `src/Aviscribe.Desktop`: the single cross-platform GUI entry point
 

@@ -7,7 +7,8 @@ gameplay text, and maintains pending, counted, and uncounted moon state.
 The maintained application is one Avalonia desktop program. Video-device capture
 is provided by FlashCap through DirectShow on Windows, AVFoundation on macOS,
 and V4L2 on Linux. Window capture uses an in-process platform adapter: Win32
-window capture on Windows, CoreGraphics on macOS, and X11/XWayland on Linux.
+window capture on Windows, CoreGraphics on macOS, X11 for X11/XWayland windows,
+and the XDG ScreenCast portal with PipeWire for native Wayland windows.
 Both paths deliver the same owned BGR frame contract to crop, OCR, and preview.
 
 ## Supported platforms
@@ -26,14 +27,22 @@ NixOS-specific packaging is not provided.
 Install the .NET 10 SDK. The repository pins the expected SDK feature band in
 `global.json`.
 
-Restore also requires the private `FlashCap` and `FlashCap.Core` 1.11.9
-packages in `../../LocalNuGet` relative to the repository. `NuGet.Config` maps
-those two package IDs exclusively to that local feed so they cannot silently
-fall back to the public FlashCap packages. CI keeps the packages out of public
-feeds and source control by building them from the pinned fork commit. The
-resulting local feed is passed to each platform job as a one-day workflow
-artifact. It is an internal build dependency rather than an application
-installer.
+Restore also requires the private `FlashCap` and `FlashCap.Core` 1.11.9 packages
+and `PipeWire.NET` 0.2.1-alpha-aviscribe.1 in `../../LocalNuGet` relative to the
+repository. `NuGet.Config` maps those package IDs to that local feed. CI builds
+FlashCap from its pinned fork commit. It builds PipeWire.NET from the pinned
+`xTektonic/PipeWire.NET` fork commit
+`263081ab3d5117c487cf8174548d98c38f4d32e8`, which adds portal-FD connection
+and a CPU-readable buffer policy. The packages stay out of source control and
+are passed to platform jobs as one-day workflow artifacts.
+
+Build the pinned PipeWire.NET package for local development with:
+
+```powershell
+git clone https://github.com/xTektonic/PipeWire.NET.git ../PipeWire.NET
+git -C ../PipeWire.NET checkout --detach 263081ab3d5117c487cf8174548d98c38f4d32e8
+dotnet pack ../PipeWire.NET/src/PipeWire.NET/PipeWire.NET.csproj --configuration Release --output ../../LocalNuGet -p:TargetFrameworks=net10.0 -p:MinVerVersionOverride=0.2.1-alpha-aviscribe.1 -p:PackageVersion=0.2.1-alpha-aviscribe.1
+```
 
 On Windows, open `Aviscribe.sln` with Visual Studio 2026 18.x or another
 Visual Studio release that supports .NET 10. Select the shared
@@ -57,7 +66,7 @@ The solution contains:
 
 - `src/Aviscribe.Core`: game state, matching, OCR, persistence, and frame processing
 - `src/Aviscribe.Core.Capture`: capture contracts, owned frames, and crop models
-- `src/Aviscribe.Capture`: the shared FlashCap implementation
+- `src/Aviscribe.Capture`: shared video-device and platform window capture
 - `src/Aviscribe.UI`: platform-neutral Avalonia views and controls
 - `src/Aviscribe.Desktop`: the single GUI entry point and dependency composition
 - `tools/Aviscribe.Classifier`: audits, experiments, and smoke/regression commands
@@ -182,15 +191,26 @@ that may be holding the device.
 
 Choose **Choose Capture Source…** for a unified list of video devices and
 windows. X11 and XWayland windows are listed directly through `libX11`. In a
-Wayland session, choose **Choose a Wayland window…**, then start capture to open
-the compositor's secure window picker. Aviscribe receives the selected window
-through the XDG ScreenCast portal and PipeWire; native Wayland applications do
-not expose a window list to Aviscribe.
+Wayland session, choose **Choose a Wayland window…**. The source dialog remains
+open while the compositor's secure window picker runs and closes only after a
+capture session has been prepared. Aviscribe receives the selected window through
+the XDG ScreenCast portal's authorized PipeWire connection; native Wayland
+applications do not expose a window list directly to Aviscribe.
 
 Covered-window behavior depends on the compositor. Minimized windows generally
 cannot be captured through X11. Linux packaging already depends on `libx11-6`;
 Wayland capture requires a working `xdg-desktop-portal` ScreenCast backend,
-PipeWire, and `libpipewire-0.3.so.0`. No external capture executable is used.
+PipeWire, and `libpipewire-0.3.so.0`. GNOME and KDE normally supply capable
+backends. Some wlroots backends expose monitor capture but not individual windows;
+Aviscribe detects that capability and disables the Wayland window entry instead
+of silently offering a monitor. No external capture executable is used.
+
+On NixOS, enable PipeWire and `xdg.portal`, then select the portal backend intended
+for the active desktop or compositor. A running portal service alone is not
+sufficient: its ScreenCast interface must advertise the `WINDOW` source type.
+The Diagnostics window and Linux log distinguish a missing service, a backend
+without window support, user cancellation, portal rejection, PipeWire connection
+failure, and a stream that produces no readable frames.
 
 AppImage execution commonly requires FUSE 2. If FUSE mounting is unavailable:
 

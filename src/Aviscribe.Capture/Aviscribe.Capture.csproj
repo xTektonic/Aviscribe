@@ -7,11 +7,12 @@
   <ItemGroup>
     <PackageReference Include="FlashCap" Version="1.11.9" />
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
-    <PackageReference Include="PipeWire.NET" Version="0.2.1-alpha" />
+    <PackageReference Include="PipeWire.NET" Version="[0.2.1-alpha-aviscribe.1]" />
     <PackageReference Include="Tmds.DBus" Version="0.94.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Aviscribe.Core.Capture\Aviscribe.Core.Capture.csproj" />
+    <ProjectReference Include="..\Aviscribe.Core\Aviscribe.Core.csproj" />
   </ItemGroup>
 </Project>
