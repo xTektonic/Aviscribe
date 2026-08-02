@@ -31,6 +31,7 @@ namespace Aviscribe.Core
         {
             var route = new List<string>
             {
+                "Mushroom",
                 "Cap",
                 "Cascade",
                 "Sand",
@@ -45,7 +46,6 @@ namespace Aviscribe.Core
                 "Ruined",
                 "Bowsers",
                 "Moon",
-                "Mushroom",
                 "Dark",
                 "Darker"
             };
