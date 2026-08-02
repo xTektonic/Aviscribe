@@ -207,7 +207,7 @@ internal sealed class WaylandScreenCastPortal : IAsyncDisposable
         IDictionary<string, object> Results);
 
     [DBusInterface("org.freedesktop.portal.ScreenCast")]
-    private interface IScreenCast : IDBusObject
+    internal interface IScreenCast : IDBusObject
     {
         Task<ObjectPath> CreateSessionAsync(IDictionary<string, object> options);
         Task<ObjectPath> SelectSourcesAsync(
@@ -220,14 +220,14 @@ internal sealed class WaylandScreenCastPortal : IAsyncDisposable
     }
 
     [DBusInterface("org.freedesktop.portal.Request")]
-    private interface IRequest : IDBusObject
+    internal interface IRequest : IDBusObject
     {
         Task<IDisposable> WatchResponseAsync(
             Action<(uint Response, IDictionary<string, object> Results)> handler);
     }
 
     [DBusInterface("org.freedesktop.portal.Session")]
-    private interface ISession : IDBusObject
+    internal interface ISession : IDBusObject
     {
         Task CloseAsync();
     }

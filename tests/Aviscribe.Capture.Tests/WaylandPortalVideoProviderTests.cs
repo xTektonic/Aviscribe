@@ -1,11 +1,25 @@
 using Aviscribe.Core.Capture;
 using System.Runtime.Versioning;
+using Tmds.DBus;
 
 namespace Aviscribe.Capture.Tests;
 
 [SupportedOSPlatform("linux")]
 public sealed class WaylandPortalVideoProviderTests
 {
+    [Fact]
+    public void DbusProxyContractsAreAccessibleToGeneratedAssembly()
+    {
+        using var connection = new Connection(
+            "unix:path=/tmp/aviscribe-dbus-proxy-test");
+
+        var proxy = connection.CreateProxy<WaylandScreenCastPortal.IScreenCast>(
+            "org.freedesktop.portal.Desktop",
+            new ObjectPath("/org/freedesktop/portal/desktop"));
+
+        Assert.NotNull(proxy);
+    }
+
     [Fact]
     public void AdvertisesSingleInteractiveWindowSource()
     {
