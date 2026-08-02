@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version="${1:-0.3.0}"
+version="${1:-0.3.1}"
 configuration="${CONFIGURATION:-Release}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 artifacts_root="${ARTIFACTS_DIR:-${repo_root}/artifacts}"

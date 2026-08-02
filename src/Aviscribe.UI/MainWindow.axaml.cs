@@ -71,6 +71,7 @@ namespace Aviscribe.UI
         private TextBlock? _cropSummaryText;
         private TextBlock? _selectedCaptureSourceText;
         private VideoDevice? _selectedCaptureSource;
+        private IVideoCapture? _preparedCapture;
         private TabControl? _mainTabs;
         private bool _processorRunning;
         private bool _writeOverlayEnabled = true;
@@ -439,12 +440,39 @@ namespace Aviscribe.UI
                 if (selected == null)
                     return;
 
+                IVideoCapture? preparedCapture = null;
+                try
+                {
+                    if (selected.RequiresInteractiveSelection)
+                    {
+                        SetStatus($"Choose a {SourceKindLabel(selected.Kind).ToLowerInvariant()}");
+                        preparedCapture = await _videoProvider.OpenCaptureAsync(
+                            selected.Id,
+                            cancellationToken: _closingCancellation.Token);
+                        selected = preparedCapture.Device;
+                    }
+
+                    await ReplacePreparedCaptureAsync(
+                        preparedCapture,
+                        _closingCancellation.Token);
+                    preparedCapture = null;
+                }
+                finally
+                {
+                    if (preparedCapture != null)
+                        await preparedCapture.DisposeAsync();
+                }
+
                 SelectCaptureSource(selected, persist: true);
                 SetStatus($"Selected {selected.Name}");
             }
             catch (OperationCanceledException)
                 when (_closingCancellation.IsCancellationRequested)
             {
+            }
+            catch (OperationCanceledException)
+            {
+                SetStatus("Window selection cancelled");
             }
             catch (Exception ex)
             {
@@ -468,6 +496,27 @@ namespace Aviscribe.UI
 
         private static string SourceKindLabel(CaptureSourceKind kind) =>
             kind == CaptureSourceKind.Window ? "Window" : "Video device";
+
+        private async Task ReplacePreparedCaptureAsync(
+            IVideoCapture? capture,
+            CancellationToken cancellationToken)
+        {
+            await _captureLifecycleGate
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            try
+            {
+                var previous = _preparedCapture;
+                _preparedCapture = null;
+                if (previous != null)
+                    await previous.DisposeAsync().ConfigureAwait(false);
+                _preparedCapture = capture;
+            }
+            finally
+            {
+                _captureLifecycleGate.Release();
+            }
+        }
 
         private void InitFrameProcessor()
         {
@@ -586,13 +635,27 @@ namespace Aviscribe.UI
             await _captureLifecycleGate
                 .WaitAsync(cancellationToken)
                 .ConfigureAwait(false);
+            IVideoCapture? preparedCapture = null;
             try
             {
-                if (_currentDevice?.Id == selected.Id &&
+                if (_preparedCapture == null &&
+                    _currentDevice?.Id == selected.Id &&
                     _video?.State == CaptureState.Running &&
                     _processorRunning)
                 {
                     return;
+                }
+
+                preparedCapture = _preparedCapture;
+                _preparedCapture = null;
+                if (preparedCapture != null &&
+                    !string.Equals(
+                        preparedCapture.Device.Id,
+                        selected.Id,
+                        StringComparison.Ordinal))
+                {
+                    await preparedCapture.DisposeAsync().ConfigureAwait(false);
+                    preparedCapture = null;
                 }
 
                 await StopCaptureCoreAsync(
@@ -614,10 +677,12 @@ namespace Aviscribe.UI
                     _processor.UpdateCrop(GetCropForDevice(selected.Id));
                 }
 
-                var capture = await _videoProvider.OpenCaptureAsync(
-                    selected.Id,
-                    cancellationToken: cancellationToken)
-                    .ConfigureAwait(false);
+                var capture = preparedCapture ??
+                    await _videoProvider.OpenCaptureAsync(
+                        selected.Id,
+                        cancellationToken: cancellationToken)
+                        .ConfigureAwait(false);
+                preparedCapture = null;
                 _currentDevice = capture.Device;
                 _selectedCaptureSource = capture.Device;
                 _video = capture;
@@ -658,7 +723,15 @@ namespace Aviscribe.UI
             }
             finally
             {
-                _captureLifecycleGate.Release();
+                try
+                {
+                    if (preparedCapture != null)
+                        await preparedCapture.DisposeAsync().ConfigureAwait(false);
+                }
+                finally
+                {
+                    _captureLifecycleGate.Release();
+                }
             }
         }
 
@@ -689,6 +762,8 @@ namespace Aviscribe.UI
 
             var capture = _video;
             _video = null;
+            var preparedCapture = _preparedCapture;
+            _preparedCapture = null;
             try
             {
                 if (capture != null)
@@ -707,12 +782,21 @@ namespace Aviscribe.UI
                         await capture.DisposeAsync().ConfigureAwait(false);
                     }
                 }
+
             }
             finally
             {
-                _processor?.Stop();
-                _processorRunning = false;
-                _currentDevice = null;
+                try
+                {
+                    if (preparedCapture != null)
+                        await preparedCapture.DisposeAsync().ConfigureAwait(false);
+                }
+                finally
+                {
+                    _processor?.Stop();
+                    _processorRunning = false;
+                    _currentDevice = null;
+                }
             }
         }
 

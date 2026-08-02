@@ -8,6 +8,7 @@ namespace Aviscribe.Core.Capture
         public string Name { get; set; } = "";
         public string Backend { get; set; } = "";
         public CaptureSourceKind Kind { get; set; } = CaptureSourceKind.VideoDevice;
+        public bool RequiresInteractiveSelection { get; set; }
         public bool IsAvailable { get; set; } = true;
         public string UnavailableReason { get; set; } = "";
         public IReadOnlyList<VideoFormat> Capabilities { get; set; } = [];
