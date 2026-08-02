@@ -58,6 +58,20 @@ public sealed class CompositeVideoProvider : IVideoProvider
 
     public ValueTask<IVideoCapture> OpenCaptureAsync(string deviceId, string? formatId = null, CancellationToken cancellationToken = default)
     {
+        return OpenCaptureAsync(
+            deviceId,
+            formatId,
+            CaptureOpenOptions.Default,
+            cancellationToken);
+    }
+
+    public ValueTask<IVideoCapture> OpenCaptureAsync(
+        string deviceId,
+        string? formatId,
+        CaptureOpenOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
         cancellationToken.ThrowIfCancellationRequested();
         IVideoProvider owner;
         lock (_sync)
@@ -66,7 +80,7 @@ public sealed class CompositeVideoProvider : IVideoProvider
                 throw new InvalidOperationException("The selected capture source is no longer available. Refresh the source list and select it again.");
         }
 
-        return owner.OpenCaptureAsync(deviceId, formatId, cancellationToken);
+        return owner.OpenCaptureAsync(deviceId, formatId, options, cancellationToken);
     }
 
     private void ApplySources(

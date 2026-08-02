@@ -24,5 +24,15 @@ namespace Aviscribe.Core.Capture
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult(GetVideoCapture(deviceId, formatId));
         }
+
+        ValueTask<IVideoCapture> OpenCaptureAsync(
+            string deviceId,
+            string? formatId,
+            CaptureOpenOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            return OpenCaptureAsync(deviceId, formatId, cancellationToken);
+        }
     }
 }

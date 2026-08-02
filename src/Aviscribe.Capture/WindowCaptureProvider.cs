@@ -1,4 +1,5 @@
 using Aviscribe.Core.Capture;
+using Aviscribe.Core.Diagnostics;
 using OpenCvSharp;
 
 namespace Aviscribe.Capture;
@@ -83,14 +84,14 @@ public sealed class WindowCaptureProvider : IVideoProvider
 
 public static class PlatformWindowCaptureProvider
 {
-    public static IVideoProvider Create()
+    public static IVideoProvider Create(IAppDiagnostics? diagnostics = null)
     {
         if (OperatingSystem.IsLinux() &&
             !string.IsNullOrWhiteSpace(
                 Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
         {
             return new CompositeVideoProvider(
-                new WaylandPortalVideoProvider(),
+                new WaylandPortalVideoProvider(diagnostics),
                 new WindowCaptureProvider(new X11WindowCaptureBackend()));
         }
 

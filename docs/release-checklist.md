@@ -23,7 +23,9 @@ release gate that CI cannot complete without hardware or credentials.
 - Exercise a Linux user with and without `/dev/video*` permission.
 - Capture one visible and one covered window on Windows, macOS, and X11/XWayland.
 - Verify macOS Screen Recording permission denied/granted behavior and restart.
-- Confirm native Wayland without XWayland shows the documented unavailable-source guidance.
+- Confirm native Wayland opens the compositor window picker and receives preview frames.
+- Confirm a portal backend without the `WINDOW` capability shows the documented
+  unavailable-source guidance while XWayland windows remain selectable.
 
 ## Credential and branding gate
 
