@@ -21,6 +21,23 @@ public sealed class WaylandPortalVideoProviderTests
     }
 
     [Fact]
+    public void AcceptsTypedAndStringPortalObjectPaths()
+    {
+        const string expected = "/org/freedesktop/portal/desktop/session/1_42/aviscribe";
+
+        Assert.True(WaylandScreenCastPortal.TryGetObjectPath(
+            new ObjectPath(expected), out var typedPath));
+        Assert.Equal(expected, typedPath.ToString());
+
+        Assert.True(WaylandScreenCastPortal.TryGetObjectPath(
+            expected, out var stringPath));
+        Assert.Equal(expected, stringPath.ToString());
+
+        Assert.False(WaylandScreenCastPortal.TryGetObjectPath(
+            "not/an/object/path", out _));
+    }
+
+    [Fact]
     public void AdvertisesSingleInteractiveWindowSource()
     {
         if (!OperatingSystem.IsLinux())

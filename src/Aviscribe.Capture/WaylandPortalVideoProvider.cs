@@ -93,7 +93,7 @@ internal sealed class WaylandScreenCastPortal : IAsyncDisposable
                 cancellationToken).ConfigureAwait(false);
             EnsureAccepted(createResponse, "create a screen-cast session");
             if (!createResponse.Results.TryGetValue("session_handle", out var sessionValue) ||
-                sessionValue is not ObjectPath sessionPath)
+                !TryGetObjectPath(sessionValue, out var sessionPath))
                 throw new InvalidOperationException("The Wayland portal did not return a session.");
 
             var selectToken = NewToken("select");
@@ -189,6 +189,32 @@ internal sealed class WaylandScreenCastPortal : IAsyncDisposable
             nodeId = Convert.ToUInt32(item1, System.Globalization.CultureInfo.InvariantCulture);
             return nodeId != 0;
         }
+        return false;
+    }
+
+    internal static bool TryGetObjectPath(object? value, out ObjectPath objectPath)
+    {
+        if (value is ObjectPath typedPath)
+        {
+            objectPath = typedPath;
+            return true;
+        }
+
+        // ScreenCast.CreateSession historically returns session_handle as a
+        // string even though it identifies a D-Bus object path.
+        if (value is string text && text.StartsWith("/", StringComparison.Ordinal))
+        {
+            try
+            {
+                objectPath = new ObjectPath(text);
+                return true;
+            }
+            catch (ArgumentException)
+            {
+            }
+        }
+
+        objectPath = default;
         return false;
     }
 
