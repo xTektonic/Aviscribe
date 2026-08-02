@@ -12,6 +12,8 @@ namespace Aviscribe.Core
     {
         private static readonly HashSet<string> PostGameKingdoms = new(StringComparer.OrdinalIgnoreCase)
         {
+            "Cloud",
+            "Ruined",
             "Mushroom",
             "Dark",
             "Darker"
@@ -109,12 +111,14 @@ namespace Aviscribe.Core
             return Query(new MoonQueryOptions
             {
                 Kingdom = kingdom,
-                IncludeStory = false,
+                IncludeStory = true,
                 IncludeNonStory = true,
                 IncludeHintArt = true,
                 IncludePostGameKingdoms = settings.IncludePostGameKingdoms,
                 MatchCollectionKingdom = false
-            });
+            })
+                .Where(moon => !moon.IsStory || IsMushroomRematchMultiMoon(moon))
+                .ToList();
         }
 
         public List<Moon> GetCollectionCandidates(string kingdom, RunSettings settings)
@@ -128,6 +132,13 @@ namespace Aviscribe.Core
                 IncludePostGameKingdoms = settings.IncludePostGameKingdoms,
                 MatchCollectionKingdom = true
             });
+        }
+
+        private static bool IsMushroomRematchMultiMoon(Moon moon)
+        {
+            return moon.Kingdom.Equals("Mushroom", StringComparison.OrdinalIgnoreCase) &&
+                moon.IsStory &&
+                moon.IsMulti;
         }
     }
 }

@@ -58,6 +58,7 @@ public sealed class RunStatePersistenceTests
             Assert.Equal(cascade[0].Id, Assert.Single(restored.Pending).Id);
 
             restored.ResetRun();
+            Assert.Equal(GameState.InitialKingdom, restored.CurrentKingdom);
             Assert.Empty(restored.Pending);
             restored.SetKingdom("Sand");
             Assert.Empty(restored.Pending);
@@ -69,6 +70,50 @@ public sealed class RunStatePersistenceTests
                 Assert.Empty(kingdom.Collected);
                 Assert.Empty(kingdom.UncountedCollected);
             });
+        });
+    }
+
+    [Fact]
+    public void EnablingPostgameModePreservesRunState()
+    {
+        var state = new GameState();
+        var cascade = Candidates("Cascade", state.Settings);
+        state.SetKingdom("Cascade");
+        state.MoveToCollected(cascade[0]);
+
+        var changed = state.SetIncludePostGameKingdoms(true);
+
+        Assert.True(changed);
+        Assert.True(state.Settings.IncludePostGameKingdoms);
+        Assert.Equal("Cascade", state.CurrentKingdom);
+        Assert.Equal(cascade[0].Id, Assert.Single(state.Collected).Id);
+    }
+
+    [Fact]
+    public void DisablingPostgameModeResetsEveryKingdomAndSelectsCascade()
+    {
+        var state = new GameState();
+        state.SetIncludePostGameKingdoms(true);
+        var cascade = Candidates("Cascade", state.Settings);
+        var mushroom = Candidates("Mushroom", state.Settings);
+        state.SetKingdom("Cascade");
+        state.MoveToPending(cascade[0]);
+        state.SetKingdom("Mushroom");
+        state.MoveToCollected(mushroom[0]);
+
+        var changed = state.SetIncludePostGameKingdoms(false);
+
+        Assert.True(changed);
+        Assert.False(state.Settings.IncludePostGameKingdoms);
+        Assert.Equal(GameState.InitialKingdom, state.CurrentKingdom);
+        Assert.Empty(state.Pending);
+        Assert.Empty(state.Collected);
+        Assert.Empty(state.UncountedCollected);
+        Assert.All(state.CreateSnapshot().KingdomStates.Values, kingdom =>
+        {
+            Assert.Empty(kingdom.Pending);
+            Assert.Empty(kingdom.Collected);
+            Assert.Empty(kingdom.UncountedCollected);
         });
     }
 
