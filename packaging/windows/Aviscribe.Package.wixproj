@@ -3,7 +3,7 @@
     <InstallerPlatform>x64</InstallerPlatform>
     <OutputType>Package</OutputType>
     <OutputName>Aviscribe-$(AppVersion)-win-x64</OutputName>
-    <AppVersion Condition="'$(AppVersion)' == ''">0.3.0</AppVersion>
+    <AppVersion Condition="'$(AppVersion)' == ''">0.3.1</AppVersion>
     <PublishDir Condition="'$(PublishDir)' == ''">..\..\artifacts\publish\win-x64</PublishDir>
     <DefineConstants>
       PublishDir=$(PublishDir);
