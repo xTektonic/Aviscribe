@@ -33,15 +33,14 @@ repository. `NuGet.Config` maps those package IDs to that local feed. CI builds
 FlashCap from its pinned fork commit. It builds PipeWire.NET from the pinned
 `xTektonic/PipeWire.NET` fork commit
 `263081ab3d5117c487cf8174548d98c38f4d32e8`, which adds portal-FD connection
-and a CPU-readable buffer policy. The packages stay out of source control and
-are passed to platform jobs as one-day workflow artifacts.
+and a CPU-readable buffer policy. The packages stay out of source control. CI
+rebuilds the local feed inside each job that consumes it, so dependency packages
+do not use workflow artifact storage.
 
-Build the pinned PipeWire.NET package for local development with:
+Build all three pinned packages for local development with:
 
 ```powershell
-git clone https://github.com/xTektonic/PipeWire.NET.git ../PipeWire.NET
-git -C ../PipeWire.NET checkout --detach 263081ab3d5117c487cf8174548d98c38f4d32e8
-dotnet pack ../PipeWire.NET/src/PipeWire.NET/PipeWire.NET.csproj --configuration Release --output ../../LocalNuGet -p:TargetFrameworks=net10.0 -p:MinVerVersionOverride=0.2.1-alpha-aviscribe.1 -p:PackageVersion=0.2.1-alpha-aviscribe.1
+./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
 ```
 
 On Windows, open `Aviscribe.sln` with Visual Studio 2026 18.x or another
