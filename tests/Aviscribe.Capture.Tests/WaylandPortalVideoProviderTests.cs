@@ -17,6 +17,7 @@ public sealed class WaylandPortalVideoProviderTests
         var source = Assert.Single(provider.GetDevices());
         Assert.Equal(WaylandPortalVideoProvider.DeviceId, source.Id);
         Assert.Equal(CaptureSourceKind.Window, source.Kind);
+        Assert.True(source.RequiresInteractiveSelection);
         Assert.True(source.IsAvailable);
         Assert.Contains("Choose", source.Name, StringComparison.Ordinal);
     }

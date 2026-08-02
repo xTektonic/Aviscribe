@@ -19,6 +19,7 @@ internal sealed class WaylandPortalVideoProvider : IVideoProvider
         Name = "Choose a Wayland window…",
         Backend = "Wayland portal / PipeWire",
         Kind = CaptureSourceKind.Window,
+        RequiresInteractiveSelection = true,
         Capabilities =
         [
             new VideoFormat(1920, 1080, "BGR", 30, 1, "Portal-selected window")
