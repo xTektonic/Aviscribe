@@ -79,6 +79,7 @@ namespace Aviscribe.UI
         private CaptureSourceSelection _captureSourceSelection = new();
         private IReadOnlyList<VideoDevice> _allCaptureSources = [];
         private bool _updatingLists;
+        private bool _updatingIncludePostGameCheck;
         private bool _dragStarted;
         private bool _suppressListClick;
         private Avalonia.Point _dragStartPoint;
@@ -210,13 +211,36 @@ namespace Aviscribe.UI
 
             _includePostGameCheck = this.GetControl<CheckBox>("chkIncludePostGame");
             _includePostGameCheck.IsChecked = _state.Settings.IncludePostGameKingdoms;
-            _includePostGameCheck.IsCheckedChanged += (_, _) =>
+            _includePostGameCheck.IsCheckedChanged += async (_, _) =>
             {
-                _state.Settings.IncludePostGameKingdoms = _includePostGameCheck.IsChecked == true;
-                RefreshKingdoms();
+                if (_updatingIncludePostGameCheck)
+                    return;
+
+                var includePostGameKingdoms = _includePostGameCheck.IsChecked == true;
+                if (includePostGameKingdoms == _state.Settings.IncludePostGameKingdoms)
+                    return;
+
+                if (!includePostGameKingdoms && !await ConfirmDisablePostGameAsync())
+                {
+                    _updatingIncludePostGameCheck = true;
+                    _includePostGameCheck.IsChecked = true;
+                    _updatingIncludePostGameCheck = false;
+                    return;
+                }
+
+                if (!includePostGameKingdoms)
+                    ClearAmbiguousReviews();
+
+                _state.SetIncludePostGameKingdoms(includePostGameKingdoms);
+                RefreshKingdoms(includePostGameKingdoms
+                    ? null
+                    : GameState.InitialKingdom);
                 RefreshMoonSelect();
                 RefreshMoonList();
-                _state.NotifySettingsChanged();
+                ShowNextReview();
+                SetStatus(includePostGameKingdoms
+                    ? "Postgame kingdoms enabled"
+                    : "Postgame kingdoms disabled; run reset");
             };
 
             var woodedBeforeLakeCheck = this.GetControl<CheckBox>("chkWoodedBeforeLake");
@@ -383,10 +407,11 @@ namespace Aviscribe.UI
                 if (!await ConfirmResetRunAsync())
                     return;
 
-                _reviewsByKingdom.Clear();
-                _reviewSignatures.Clear();
-                _activeReview = null;
+                ClearAmbiguousReviews();
                 _state.ResetRun();
+                RefreshKingdoms(GameState.InitialKingdom);
+                RefreshMoonSelect();
+                RefreshMoonList();
                 ShowNextReview();
                 SetStatus("Run reset");
             };
@@ -989,13 +1014,15 @@ namespace Aviscribe.UI
             });
         }
 
-        private void RefreshKingdoms()
+        private void RefreshKingdoms(string? preferredKingdom = null)
         {
             if (_kingdomSelect == null)
                 return;
 
             var kingdoms = _repo.GetKingdoms(_state.Settings);
-            var current = (_kingdomSelect.SelectedItem as KingdomListItem)?.Kingdom;
+            var current = preferredKingdom;
+            if (string.IsNullOrWhiteSpace(current))
+                current = (_kingdomSelect.SelectedItem as KingdomListItem)?.Kingdom;
             if (string.IsNullOrWhiteSpace(current))
                 current = _state.CurrentKingdom;
 
@@ -1252,17 +1279,43 @@ namespace Aviscribe.UI
                 .ToList();
         }
 
+        private void ClearAmbiguousReviews()
+        {
+            _reviewsByKingdom.Clear();
+            _reviewSignatures.Clear();
+            _activeReview = null;
+        }
+
         private async Task<bool> ConfirmResetRunAsync()
+        {
+            return await ConfirmRunResetAsync(
+                "Reset Run?",
+                "This clears moon state and ambiguous reviews for every kingdom. This cannot be undone.",
+                "Reset Run");
+        }
+
+        private async Task<bool> ConfirmDisablePostGameAsync()
+        {
+            return await ConfirmRunResetAsync(
+                "Disable Postgame Kingdoms?",
+                "Switching back to a normal run clears moon state and ambiguous reviews for every kingdom, then returns to Cascade. This cannot be undone.",
+                "Disable and Reset");
+        }
+
+        private async Task<bool> ConfirmRunResetAsync(
+            string title,
+            string message,
+            string confirmButtonText)
         {
             var confirmation = new Avalonia.Controls.Window
             {
-                Title = "Reset Run?",
+                Title = title,
                 Width = 420,
                 Height = 170,
                 CanResize = false,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner
             };
-            var resetButton = new Button { Content = "Reset Run" };
+            var resetButton = new Button { Content = confirmButtonText };
             var cancelButton = new Button { Content = "Cancel" };
             resetButton.Click += (_, _) => confirmation.Close(true);
             cancelButton.Click += (_, _) => confirmation.Close(false);
@@ -1274,7 +1327,7 @@ namespace Aviscribe.UI
                 {
                     new TextBlock
                     {
-                        Text = "This clears moon state and ambiguous reviews for every kingdom. This cannot be undone.",
+                        Text = message,
                         TextWrapping = Avalonia.Media.TextWrapping.Wrap
                     },
                     new StackPanel
