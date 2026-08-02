@@ -429,42 +429,41 @@ namespace Aviscribe.UI
                 var devices = await _videoProvider.RefreshAsync(
                     _closingCancellation.Token);
                 _allCaptureSources = devices;
-                var selectableSources = devices.Where(source =>
-                    source.IsAvailable ||
-                    !devices.Any(candidate =>
-                        candidate.Kind == source.Kind && candidate.IsAvailable));
                 var chooser = new CaptureSourcePickerWindow(
-                    selectableSources.ToArray(),
-                    _selectedCaptureSource?.Id);
-                var selected = await chooser.ShowDialog<VideoDevice?>(this);
-                if (selected == null)
+                    _videoProvider,
+                    devices,
+                    _selectedCaptureSource?.Id,
+                    new CaptureOpenOptions
+                    {
+                        ParentWindowIdentifier = CreatePortalParentWindowIdentifier(
+                            TryGetPlatformHandle())
+                    },
+                    _diagnostics,
+                    _closingCancellation.Token);
+                var choice = await chooser.ShowDialog<CaptureSourcePickerResult?>(this);
+                if (choice == null)
                     return;
 
-                IVideoCapture? preparedCapture = null;
-                try
+                await using (choice)
                 {
-                    if (selected.RequiresInteractiveSelection)
+                    var selected = choice.Device;
+                    IVideoCapture? preparedCapture = choice.TakePreparedCapture();
+                    try
                     {
-                        SetStatus($"Choose a {SourceKindLabel(selected.Kind).ToLowerInvariant()}");
-                        preparedCapture = await _videoProvider.OpenCaptureAsync(
-                            selected.Id,
-                            cancellationToken: _closingCancellation.Token);
-                        selected = preparedCapture.Device;
+                        await ReplacePreparedCaptureAsync(
+                            preparedCapture,
+                            _closingCancellation.Token);
+                        preparedCapture = null;
+                    }
+                    finally
+                    {
+                        if (preparedCapture != null)
+                            await preparedCapture.DisposeAsync();
                     }
 
-                    await ReplacePreparedCaptureAsync(
-                        preparedCapture,
-                        _closingCancellation.Token);
-                    preparedCapture = null;
+                    SelectCaptureSource(selected, persist: true);
+                    SetStatus($"Selected {selected.Name}");
                 }
-                finally
-                {
-                    if (preparedCapture != null)
-                        await preparedCapture.DisposeAsync();
-                }
-
-                SelectCaptureSource(selected, persist: true);
-                SetStatus($"Selected {selected.Name}");
             }
             catch (OperationCanceledException)
                 when (_closingCancellation.IsCancellationRequested)
@@ -496,6 +495,19 @@ namespace Aviscribe.UI
 
         private static string SourceKindLabel(CaptureSourceKind kind) =>
             kind == CaptureSourceKind.Window ? "Window" : "Video device";
+
+        internal static string? CreatePortalParentWindowIdentifier(
+            IPlatformHandle? handle)
+        {
+            if (handle == null ||
+                handle.Handle == IntPtr.Zero ||
+                !string.Equals(handle.HandleDescriptor, "XID", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            return $"x11:{unchecked((ulong)handle.Handle.ToInt64()):x}";
+        }
 
         private async Task ReplacePreparedCaptureAsync(
             IVideoCapture? capture,

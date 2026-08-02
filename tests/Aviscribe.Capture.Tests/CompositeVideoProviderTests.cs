@@ -22,6 +22,28 @@ public sealed class CompositeVideoProviderTests
         Assert.Equal(window.Id, capture.Device.Id);
         Assert.Equal(0, cameraProvider.OpenCount);
         Assert.Equal(1, windowProvider.OpenCount);
+        Assert.Same(CaptureOpenOptions.Default, windowProvider.LastOptions);
+    }
+
+    [Fact]
+    public async Task ForwardsCaptureOpenOptionsToOwningProvider()
+    {
+        var source = Source("window:1", CaptureSourceKind.Window);
+        var owner = new StubProvider(source);
+        IVideoProvider provider = new CompositeVideoProvider(owner);
+        await provider.RefreshAsync(TestContext.Current.CancellationToken);
+        var options = new CaptureOpenOptions
+        {
+            ParentWindowIdentifier = "x11:abc"
+        };
+
+        await using var capture = await provider.OpenCaptureAsync(
+            source.Id,
+            formatId: null,
+            options: options,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Same(options, owner.LastOptions);
     }
 
     private static VideoDevice Source(string id, CaptureSourceKind kind) =>
@@ -36,11 +58,22 @@ public sealed class CompositeVideoProviderTests
     private sealed class StubProvider(VideoDevice source) : IVideoProvider
     {
         public int OpenCount { get; private set; }
+        public CaptureOpenOptions? LastOptions { get; private set; }
         public IReadOnlyList<VideoDevice> GetDevices() => [source];
         public IVideoCapture GetVideoCapture(string deviceId, string? formatId = null)
         {
             OpenCount++;
             return new StubCapture(source);
+        }
+
+        public ValueTask<IVideoCapture> OpenCaptureAsync(
+            string deviceId,
+            string? formatId,
+            CaptureOpenOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            LastOptions = options;
+            return ValueTask.FromResult(GetVideoCapture(deviceId, formatId));
         }
     }
 

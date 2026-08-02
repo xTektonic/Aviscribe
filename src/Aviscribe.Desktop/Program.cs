@@ -28,7 +28,7 @@ internal static class Program
             .Configure(() => new AviscribeApp(
                 new CompositeVideoProvider(
                     new FlashCapVideoProvider(),
-                    PlatformWindowCaptureProvider.Create()),
+                    PlatformWindowCaptureProvider.Create(diagnostics)),
                 diagnostics))
             .UsePlatformDetect()
             .WithInterFont();
