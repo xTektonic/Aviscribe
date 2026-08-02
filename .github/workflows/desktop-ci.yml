@@ -18,108 +18,19 @@ env:
   DOTNET_NOLOGO: "true"
   DOTNET_CLI_TELEMETRY_OPTOUT: "true"
   AVISCRIBE_VERSION: "0.3.2"
-  FLASHCAP_VERSION: "1.11.9"
-  FLASHCAP_COMMIT: "ba2de264b0c6bcd77c3ad2b65a83963393631e88"
-  PIPEWIRE_NET_VERSION: "0.2.1-alpha-aviscribe.1"
-  PIPEWIRE_NET_COMMIT: "263081ab3d5117c487cf8174548d98c38f4d32e8"
 
 jobs:
-  flashcap-packages:
-    runs-on: windows-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: "10.0.x"
-      - name: Build patched FlashCap packages
-        shell: pwsh
-        run: |
-          $source = Join-Path $env:RUNNER_TEMP "FlashCap"
-          $output = Join-Path $env:RUNNER_TEMP "LocalNuGet"
-          git clone https://github.com/xTektonic/FlashCap.git $source
-          git -C $source checkout --detach $env:FLASHCAP_COMMIT
-
-          foreach ($project in @("FlashCap.Core", "FlashCap")) {
-            dotnet pack (Join-Path $source "$project/$project.csproj") `
-              --configuration Release `
-              --output $output `
-              -p:Version=$env:FLASHCAP_VERSION `
-              -p:PackageVersion=$env:FLASHCAP_VERSION
-            if ($LASTEXITCODE -ne 0) { throw "$project pack failed." }
-          }
-
-          $expected = @(
-            "FlashCap.$env:FLASHCAP_VERSION.nupkg",
-            "FlashCap.Core.$env:FLASHCAP_VERSION.nupkg"
-          )
-          foreach ($package in $expected) {
-            if (-not (Test-Path (Join-Path $output $package))) {
-              throw "$package was not created."
-            }
-          }
-      - name: Upload internal FlashCap feed
-        uses: actions/upload-artifact@v4
-        with:
-          name: _internal-FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
-          path: ${{ runner.temp }}/LocalNuGet/*.nupkg
-          if-no-files-found: error
-          retention-days: 1
-
-  pipewire-net-package:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: "10.0.x"
-      - name: Build pinned PipeWire.NET package
-        shell: pwsh
-        run: |
-          $source = Join-Path $env:RUNNER_TEMP "PipeWire.NET"
-          $output = Join-Path $env:RUNNER_TEMP "LocalNuGet"
-          git clone https://github.com/xTektonic/PipeWire.NET.git $source
-          if ($LASTEXITCODE -ne 0) { throw "PipeWire.NET clone failed." }
-          git -C $source checkout --detach $env:PIPEWIRE_NET_COMMIT
-          if ($LASTEXITCODE -ne 0) { throw "PipeWire.NET checkout failed." }
-
-          dotnet pack (Join-Path $source "src/PipeWire.NET/PipeWire.NET.csproj") `
-            --configuration Release `
-            --output $output `
-            -p:TargetFrameworks=net10.0 `
-            -p:MinVerVersionOverride=$env:PIPEWIRE_NET_VERSION `
-            -p:Version=$env:PIPEWIRE_NET_VERSION `
-            -p:PackageVersion=$env:PIPEWIRE_NET_VERSION
-          if ($LASTEXITCODE -ne 0) { throw "PipeWire.NET pack failed." }
-
-          $package = Join-Path $output "PipeWire.NET.$env:PIPEWIRE_NET_VERSION.nupkg"
-          if (-not (Test-Path $package)) { throw "PipeWire.NET package was not created." }
-      - name: Upload internal PipeWire.NET feed
-        uses: actions/upload-artifact@v4
-        with:
-          name: _internal-PipeWire.NET-${{ env.PIPEWIRE_NET_VERSION }}-local-feed
-          path: ${{ runner.temp }}/LocalNuGet/*.nupkg
-          if-no-files-found: error
-          retention-days: 1
-
   validate:
-    needs: [flashcap-packages, pipewire-net-package]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - name: Download internal FlashCap feed
-        uses: actions/download-artifact@v5
-        with:
-          name: _internal-FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
-          path: ../../LocalNuGet
-      - name: Download internal PipeWire.NET feed
-        uses: actions/download-artifact@v5
-        with:
-          name: _internal-PipeWire.NET-${{ env.PIPEWIRE_NET_VERSION }}-local-feed
-          path: ../../LocalNuGet
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
+      - name: Build pinned local NuGet feed
+        shell: pwsh
+        run: ./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
       - name: Install test prerequisites
         run: |
           sudo apt-get update
@@ -143,25 +54,18 @@ jobs:
           done
 
   windows-x64:
-    if: github.event_name != 'pull_request'
-    needs: [flashcap-packages, pipewire-net-package, validate]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: validate
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
-      - name: Download internal FlashCap feed
-        uses: actions/download-artifact@v5
-        with:
-          name: _internal-FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
-          path: ../../LocalNuGet
-      - name: Download internal PipeWire.NET feed
-        uses: actions/download-artifact@v5
-        with:
-          name: _internal-PipeWire.NET-${{ env.PIPEWIRE_NET_VERSION }}-local-feed
-          path: ../../LocalNuGet
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
+      - name: Build pinned local NuGet feed
+        shell: pwsh
+        run: ./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
       - name: Build Windows installer
         shell: pwsh
         run: ./packaging/windows/package.ps1 -Version $env:AVISCRIBE_VERSION
@@ -196,25 +100,18 @@ jobs:
           retention-days: 14
 
   macos-arm64:
-    if: github.event_name != 'pull_request'
-    needs: [flashcap-packages, pipewire-net-package, validate]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: validate
     runs-on: macos-14
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
-      - name: Download internal FlashCap feed
-        uses: actions/download-artifact@v5
-        with:
-          name: _internal-FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
-          path: ../../LocalNuGet
-      - name: Download internal PipeWire.NET feed
-        uses: actions/download-artifact@v5
-        with:
-          name: _internal-PipeWire.NET-${{ env.PIPEWIRE_NET_VERSION }}-local-feed
-          path: ../../LocalNuGet
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
+      - name: Build pinned local NuGet feed
+        shell: pwsh
+        run: ./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
       - name: Build macOS application and DMG
         run: bash packaging/macos/package.sh "${AVISCRIBE_VERSION}"
       - name: Inspect macOS payload
@@ -239,25 +136,18 @@ jobs:
           retention-days: 14
 
   linux-x64:
-    if: github.event_name != 'pull_request'
-    needs: [flashcap-packages, pipewire-net-package, validate]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
-      - name: Download internal FlashCap feed
-        uses: actions/download-artifact@v5
-        with:
-          name: _internal-FlashCap-${{ env.FLASHCAP_VERSION }}-local-feed
-          path: ../../LocalNuGet
-      - name: Download internal PipeWire.NET feed
-        uses: actions/download-artifact@v5
-        with:
-          name: _internal-PipeWire.NET-${{ env.PIPEWIRE_NET_VERSION }}-local-feed
-          path: ../../LocalNuGet
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
+      - name: Build pinned local NuGet feed
+        shell: pwsh
+        run: ./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
       - name: Install runtime and package prerequisites
         run: |
           sudo apt-get update
