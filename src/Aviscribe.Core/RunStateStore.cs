@@ -52,6 +52,7 @@ namespace Aviscribe.Core
                     OutputLanguage = snapshot.OutputLanguage,
                     WoodedBeforeLake = snapshot.WoodedBeforeLake,
                     SeasideBeforeSnow = snapshot.SeasideBeforeSnow,
+                    AutomaticallySwitchKingdoms = snapshot.AutomaticallySwitchKingdoms,
                     ShowPendingMoonImages = snapshot.ShowPendingMoonImages,
                     DebugLogging = snapshot.DebugLogging,
                     OcrMode = snapshot.OcrMode,
