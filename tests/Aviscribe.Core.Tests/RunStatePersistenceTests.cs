@@ -40,6 +40,7 @@ public sealed class RunStatePersistenceTests
         WithTemporaryStateFile((path, store) =>
         {
             var state = new GameState();
+            state.Settings.AutomaticallySwitchKingdoms = true;
             var cascade = Candidates("Cascade", state.Settings);
             var sand = Candidates("Sand", state.Settings);
             state.SetKingdom("Cascade");
@@ -53,6 +54,7 @@ public sealed class RunStatePersistenceTests
             store.Restore(restored, saved);
 
             Assert.Equal("Sand", restored.CurrentKingdom);
+            Assert.True(restored.Settings.AutomaticallySwitchKingdoms);
             Assert.Equal(sand[0].Id, Assert.Single(restored.Collected).Id);
             restored.SetKingdom("Cascade");
             Assert.Equal(cascade[0].Id, Assert.Single(restored.Pending).Id);

@@ -42,6 +42,9 @@ public static class AppPaths
     public static string LinearDetectorModelPath =>
         Path.Combine(DataFolder, "linear-detector.json");
 
+    public static string KingdomIconTemplateFolder =>
+        Path.Combine(DataFolder, "KingdomIcons");
+
     public static string PendingOutputPath =>
         Path.Combine(UserDataFolder, "pending-moons.txt");
 

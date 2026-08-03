@@ -1,4 +1,5 @@
 using Aviscribe.Classifier;
+using Aviscribe.Core;
 using Aviscribe.Core.Ocr;
 
 var command = args.Length > 0 ? args[0].ToLowerInvariant() : "summary";
@@ -135,6 +136,35 @@ try
             }
 
             VideoSampler.WriteFrames(args[1], args[2], args.Skip(3).Select(int.Parse));
+            break;
+        }
+
+        case "inspect-kingdom":
+        {
+            if (args.Length < 3)
+            {
+                Console.Error.WriteLine(
+                    "Usage: inspect-kingdom <templateDirectory> <imagePath> [imagePath...]");
+                return 1;
+            }
+
+            KingdomDetectionInspector.Print(args[1], args.Skip(2));
+            break;
+        }
+
+        case "kingdom-video-regression":
+        {
+            var videoPath = args.Length > 1
+                ? args[1]
+                : Path.Combine(
+                    DatasetPaths.DefaultDataRoot,
+                    "talkatoo_all_moons.mp4");
+            var templateDirectory = args.Length > 2
+                ? args[2]
+                : AppPaths.KingdomIconTemplateFolder;
+            KingdomDetectionVideoRegressionSuite.Run(
+                videoPath,
+                templateDirectory);
             break;
         }
 
@@ -619,6 +649,8 @@ static void PrintUsage()
     Console.WriteLine("  video-info <videoPath>");
     Console.WriteLine("  sample-video-grid <videoPath> <outputDir> [stepSeconds] [maxSamples]");
     Console.WriteLine("  extract-video-frames <videoPath> <outputDir> <frame> [frame...]");
+    Console.WriteLine("  inspect-kingdom <templateDirectory> <imagePath> [imagePath...]");
+    Console.WriteLine("  kingdom-video-regression [videoPath] [templateDirectory]");
     Console.WriteLine("  mine-video-events <videoPath> <outputDir> <Talkatoo|MoonGet|StoryMoon> <startFrame> <maxFrames> [stride] [maxRuns] [kingdom]");
     Console.WriteLine("  suspicious-video-events <videoPath> <outputDir> <Talkatoo|MoonGet|StoryMoon> <startFrame> <maxFrames> [stride] [maxSaved] [minimumScore] [kingdom]");
     Console.WriteLine("  ocr-oracle-video-audit <videoPath> <outputDir> <Talkatoo|MoonGet|StoryMoon> <startFrame> <maxFrames> [stride] [maxSaved] [minimumScore] [kingdom]");
