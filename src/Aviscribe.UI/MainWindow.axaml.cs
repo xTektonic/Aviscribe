@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Aviscribe.Core;
 using Aviscribe.Core.Capture;
 using Aviscribe.Core.Diagnostics;
+using Aviscribe.Core.KingdomDetection;
 using Aviscribe.Core.Ocr;
 using OpenCvSharp;
 using System;
@@ -267,6 +268,20 @@ namespace Aviscribe.UI
             {
                 _state.Settings.ShowPendingMoonImages = showPendingImagesCheck.IsChecked == true;
                 _state.NotifySettingsChanged();
+            };
+
+            var automaticallySwitchKingdomsCheck =
+                this.GetControl<CheckBox>("chkAutomaticallySwitchKingdoms");
+            automaticallySwitchKingdomsCheck.IsChecked =
+                _state.Settings.AutomaticallySwitchKingdoms;
+            automaticallySwitchKingdomsCheck.IsCheckedChanged += (_, _) =>
+            {
+                var enabled = automaticallySwitchKingdomsCheck.IsChecked == true;
+                _state.Settings.AutomaticallySwitchKingdoms = enabled;
+                _state.NotifySettingsChanged();
+                SetStatus(enabled
+                    ? "Automatic kingdom switching enabled"
+                    : "Automatic kingdom switching disabled");
             };
 
             var debugLoggingCheck =
@@ -570,6 +585,7 @@ namespace Aviscribe.UI
                 _diagnostics);
             _ocrService = ocr;
             var detector = LoadTextPresenceDetector();
+            var kingdomDetector = LoadKingdomDetector();
 
             _processor = new FrameProcessor(
                 ocr,
@@ -577,7 +593,8 @@ namespace Aviscribe.UI
                 _state,
                 detector,
                 GetCropForDevice(_captureDeviceId),
-                _diagnostics);
+                _diagnostics,
+                kingdomDetector);
             _processorCaptureDeviceId = _captureDeviceId;
             _processor.AmbiguousMatchReceived += (_, result) =>
             {
@@ -603,6 +620,22 @@ namespace Aviscribe.UI
         private ITextPresenceDetector LoadTextPresenceDetector()
         {
             return new HeuristicTextPresenceDetector();
+        }
+
+        private IKingdomDetector? LoadKingdomDetector()
+        {
+            try
+            {
+                return new TemplateKingdomDetector(
+                    AppPaths.KingdomIconTemplateFolder);
+            }
+            catch (Exception ex)
+            {
+                _diagnostics.Error(
+                    "Automatic kingdom detection could not be initialized.",
+                    ex);
+                return null;
+            }
         }
 
         private void OnFrame(VideoFrame frame)
@@ -983,6 +1016,7 @@ namespace Aviscribe.UI
                     _actualCountText.Text = snapshot.ActualMoonCount.ToString();
 
                 UpdateKingdomHeader(snapshot.CurrentKingdom);
+                SynchronizeKingdomSelection(snapshot.CurrentKingdom);
 
                 if (_pendingList != null)
                 {
@@ -1032,6 +1066,26 @@ namespace Aviscribe.UI
                 items.FirstOrDefault(item => string.Equals(item.Kingdom, current, StringComparison.OrdinalIgnoreCase)) ??
                 items.FirstOrDefault(item => string.Equals(item.Kingdom, "Cascade", StringComparison.OrdinalIgnoreCase)) ??
                 items.FirstOrDefault();
+        }
+
+        private void SynchronizeKingdomSelection(string kingdom)
+        {
+            if (_kingdomSelect?.ItemsSource is not IEnumerable<KingdomListItem> items)
+                return;
+
+            var selected = _kingdomSelect.SelectedItem as KingdomListItem;
+            if (selected?.Kingdom.Equals(
+                    kingdom,
+                    StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return;
+            }
+
+            var match = items.FirstOrDefault(item => item.Kingdom.Equals(
+                kingdom,
+                StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+                _kingdomSelect.SelectedItem = match;
         }
 
         private KingdomListItem CreateKingdomListItem(string kingdom)
