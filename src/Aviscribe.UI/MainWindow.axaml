@@ -161,6 +161,9 @@
 								<TextBlock Text="Category"/>
 								<ComboBox Name="cbCategorySelect"/>
 								<CheckBox Name="chkIncludePostGame" Content="Include postgame kingdoms"/>
+								<CheckBox Name="chkAutomaticallySwitchKingdoms"
+										  Content="Automatically switch kingdoms from the HUD"
+										  ToolTip.Tip="Uses the regional-coin symbol when the gameplay HUD is visible. Unsupported kingdoms still require manual selection."/>
 								<CheckBox Name="chkShowPendingImages" Content="Show images for pending moons"/>
 							</StackPanel>
 						</Border>

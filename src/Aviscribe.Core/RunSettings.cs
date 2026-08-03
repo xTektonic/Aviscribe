@@ -9,6 +9,7 @@ namespace Aviscribe.Core
         public GameLanguage OutputLanguage { get; set; } = GameLanguage.English;
         public bool WoodedBeforeLake { get; set; } = true;
         public bool SeasideBeforeSnow { get; set; } = true;
+        public bool AutomaticallySwitchKingdoms { get; set; }
         public bool ShowPendingMoonImages { get; set; }
         public bool DebugLogging { get; set; }
         public OcrMode OcrMode { get; set; } = OcrMode.Cpu;
@@ -30,6 +31,7 @@ namespace Aviscribe.Core
                 OutputLanguage = OutputLanguage,
                 WoodedBeforeLake = WoodedBeforeLake,
                 SeasideBeforeSnow = SeasideBeforeSnow,
+                AutomaticallySwitchKingdoms = AutomaticallySwitchKingdoms,
                 ShowPendingMoonImages = ShowPendingMoonImages,
                 DebugLogging = DebugLogging,
                 OcrMode = OcrMode,
@@ -49,6 +51,7 @@ namespace Aviscribe.Core
             OutputLanguage = settings.OutputLanguage;
             WoodedBeforeLake = settings.WoodedBeforeLake;
             SeasideBeforeSnow = settings.SeasideBeforeSnow;
+            AutomaticallySwitchKingdoms = settings.AutomaticallySwitchKingdoms;
             ShowPendingMoonImages = settings.ShowPendingMoonImages;
             DebugLogging = settings.DebugLogging;
             OcrMode = settings.OcrMode;

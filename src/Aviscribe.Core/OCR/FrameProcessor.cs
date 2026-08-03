@@ -1,6 +1,7 @@
 ﻿using OpenCvSharp;
 using Aviscribe.Core.Capture;
 using Aviscribe.Core.Diagnostics;
+using Aviscribe.Core.KingdomDetection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -39,6 +40,8 @@ namespace Aviscribe.Core.Ocr
         private readonly Queue<OcrWorkItem> _ocrQueue = new();
         private readonly HashSet<ConfirmationKey> _queuedOrInFlightConfirmations = new();
         private readonly ITextPresenceDetector _textDetector;
+        private readonly IKingdomDetector? _kingdomDetector;
+        private readonly KingdomDetectionTracker _kingdomDetectionTracker = new();
         private CaptureCropSettings _cropSettings;
 
         private readonly OcrRegion[] _regions;
@@ -51,13 +54,15 @@ namespace Aviscribe.Core.Ocr
             GameState state,
             ITextPresenceDetector? textDetector = null,
             CaptureCropSettings? cropSettings = null,
-            IAppDiagnostics? diagnostics = null)
+            IAppDiagnostics? diagnostics = null,
+            IKingdomDetector? kingdomDetector = null)
         {
             _ocr = ocr;
             _matcher = matcher;
             _state = state;
             _diagnostics = diagnostics ?? NullAppDiagnostics.Instance;
             _textDetector = textDetector ?? new HeuristicTextPresenceDetector();
+            _kingdomDetector = kingdomDetector;
             _cropSettings = (cropSettings ?? CaptureCropSettings.Default).Clone();
             _observedKingdom = state.CurrentKingdom;
 
@@ -219,19 +224,21 @@ namespace Aviscribe.Core.Ocr
                     source,
                     cropSettings))
             {
-                ProcessReferenceFrame(source);
+                ProcessReferenceFrame(source, frame.Timestamp);
                 return;
             }
 
             using var normalized = GameplayFrameNormalizer.Normalize(
                 source,
                 cropSettings);
-            ProcessReferenceFrame(normalized);
+            ProcessReferenceFrame(normalized, frame.Timestamp);
         }
 
-        private void ProcessReferenceFrame(Mat mat)
+        private void ProcessReferenceFrame(Mat mat, DateTime timestamp)
         {
             _processedFrameCount++;
+            ResetRegionStateIfKingdomChanged();
+            InspectKingdom(mat, timestamp);
             ResetRegionStateIfKingdomChanged();
 
             var kingdom = _state.CurrentKingdom;
@@ -694,8 +701,75 @@ namespace Aviscribe.Core.Ocr
             ClearOcrQueue(recordUnresolved: true);
             _talkatooConfirmation.Reset();
             _collectionConfirmation.Reset();
+            _kingdomDetectionTracker.ResetCandidate();
             _suppressTalkatooUntilFrame = 0;
             _observedKingdom = currentKingdom;
+        }
+
+        private void InspectKingdom(Mat mat, DateTime timestamp)
+        {
+            var settings = _state.Settings.Clone();
+            if (!settings.AutomaticallySwitchKingdoms || _kingdomDetector == null)
+            {
+                _kingdomDetectionTracker.Reset();
+                return;
+            }
+
+            if (!_kingdomDetectionTracker.ShouldInspect(timestamp))
+                return;
+
+            KingdomDetectionResult result;
+            try
+            {
+                result = _kingdomDetector.Detect(mat);
+            }
+            catch (Exception ex)
+            {
+                _kingdomDetectionTracker.ResetCandidate();
+                _diagnostics.Error(
+                    "Automatic kingdom detection failed for a frame.",
+                    ex);
+                return;
+            }
+
+            if (result.IsMatch &&
+                result.Kingdom != null &&
+                !IsKingdomEnabled(result.Kingdom, settings))
+            {
+                _kingdomDetectionTracker.ResetCandidate();
+                _diagnostics.Debug(
+                    $"KINGDOM DETECTION ignored {result.Kingdom}; " +
+                    "the kingdom is disabled by the current run settings.");
+                return;
+            }
+
+            _diagnostics.Debug(
+                result.IsMatch
+                    ? $"KINGDOM DETECTION {result.Kingdom}: " +
+                      $"{result.Score:0.000} (margin " +
+                      $"{result.Score - result.RunnerUpScore:0.000})"
+                    : $"KINGDOM DETECTION {result.Status}: " +
+                      $"{result.Score:0.000} (runner-up " +
+                      $"{result.RunnerUpScore:0.000})");
+
+            var confirmed = _kingdomDetectionTracker.Observe(
+                result,
+                timestamp,
+                _state.CurrentKingdom);
+            if (confirmed == null)
+                return;
+
+            _state.SetKingdom(confirmed);
+            _diagnostics.Information(
+                $"Automatically switched to {confirmed} from the HUD symbol.");
+        }
+
+        private static bool IsKingdomEnabled(
+            string kingdom,
+            RunSettings settings)
+        {
+            return settings.IncludePostGameKingdoms ||
+                KingdomRoute.GetRequirement(kingdom) > 0;
         }
 
         private void RecordConfirmationOutcome(OcrWorkItem item, bool resolved)
@@ -779,6 +853,8 @@ namespace Aviscribe.Core.Ocr
             Stop();
             if (_ocr is IDisposable disposableOcr)
                 disposableOcr.Dispose();
+            if (_kingdomDetector is IDisposable disposableKingdomDetector)
+                disposableKingdomDetector.Dispose();
         }
 
         private readonly record struct OcrWorkItem(
