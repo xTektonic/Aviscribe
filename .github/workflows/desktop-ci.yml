@@ -17,7 +17,7 @@ permissions:
 env:
   DOTNET_NOLOGO: "true"
   DOTNET_CLI_TELEMETRY_OPTOUT: "true"
-  AVISCRIBE_VERSION: "0.3.2"
+  AVISCRIBE_VERSION: "0.3.4"
 
 jobs:
   validate:
