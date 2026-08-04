@@ -16,18 +16,9 @@ internal sealed class X11WindowCaptureBackend : IWindowCaptureBackend
 
     public IReadOnlyList<WindowCaptureTarget> EnumerateTargets()
     {
-        var isWaylandSession =
-            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"));
-        if (isWaylandSession &&
-            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISPLAY")))
-        {
-            return [Unavailable(
-                "Native Wayland window capture is not available yet. Start Aviscribe through XWayland, or use a Video Device source. Portal/PipeWire support can be added through the window-capture adapter without changing OCR.")];
-        }
-
         var display = XOpenDisplay(0);
         if (display == 0)
-            return [Unavailable("Could not connect to an X11 display. On Wayland, start Aviscribe through XWayland or use a Video Device source.")];
+            return [Unavailable("Could not connect to an X11 display.")];
 
         try
         {
@@ -62,17 +53,7 @@ internal sealed class X11WindowCaptureBackend : IWindowCaptureBackend
                 .OrderBy(target => target.Name, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             if (result.Length == 0)
-                return [Unavailable("No capturable X11/XWayland windows were found. Native Wayland windows are not currently visible to Aviscribe.")];
-
-            if (isWaylandSession)
-            {
-                return
-                [
-                    .. result,
-                    Unavailable(
-                        "Only X11/XWayland windows are listed in this Wayland session. Native Wayland windows require portal/PipeWire capture, which is not available yet.")
-                ];
-            }
+                return [Unavailable("No capturable X11/XWayland windows were found.")];
 
             return result;
         }

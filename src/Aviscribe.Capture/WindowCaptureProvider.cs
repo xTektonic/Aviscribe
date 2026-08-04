@@ -90,8 +90,15 @@ public static class PlatformWindowCaptureProvider
             !string.IsNullOrWhiteSpace(
                 Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
         {
+            var portalProvider = new WaylandPortalVideoProvider(diagnostics);
+            if (string.IsNullOrWhiteSpace(
+                    Environment.GetEnvironmentVariable("DISPLAY")))
+            {
+                return portalProvider;
+            }
+
             return new CompositeVideoProvider(
-                new WaylandPortalVideoProvider(diagnostics),
+                portalProvider,
                 new WindowCaptureProvider(new X11WindowCaptureBackend()));
         }
 
