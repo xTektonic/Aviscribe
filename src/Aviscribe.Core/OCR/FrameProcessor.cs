@@ -737,20 +737,26 @@ namespace Aviscribe.Core.Ocr
                 !IsKingdomEnabled(result.Kingdom, settings))
             {
                 _kingdomDetectionTracker.ResetCandidate();
-                _diagnostics.Debug(
-                    $"KINGDOM DETECTION ignored {result.Kingdom}; " +
-                    "the kingdom is disabled by the current run settings.");
+                if (result.Score != 0)
+                {
+                    _diagnostics.Debug(
+                        $"KINGDOM DETECTION ignored {result.Kingdom}; " +
+                        "the kingdom is disabled by the current run settings.");
+                }
                 return;
             }
 
-            _diagnostics.Debug(
-                result.IsMatch
-                    ? $"KINGDOM DETECTION {result.Kingdom}: " +
-                      $"{result.Score:0.000} (margin " +
-                      $"{result.Score - result.RunnerUpScore:0.000})"
-                    : $"KINGDOM DETECTION {result.Status}: " +
-                      $"{result.Score:0.000} (runner-up " +
-                      $"{result.RunnerUpScore:0.000})");
+            if (result.Score != 0)
+            {
+                _diagnostics.Debug(
+                    result.IsMatch
+                        ? $"KINGDOM DETECTION {result.Kingdom}: " +
+                          $"{result.Score:0.000} (margin " +
+                          $"{result.Score - result.RunnerUpScore:0.000})"
+                        : $"KINGDOM DETECTION {result.Status}: " +
+                          $"{result.Score:0.000} (runner-up " +
+                          $"{result.RunnerUpScore:0.000})");
+            }
 
             var confirmed = _kingdomDetectionTracker.Observe(
                 result,
