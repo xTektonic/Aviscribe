@@ -75,6 +75,22 @@ The legacy Windows-only application and Accord capture projects are retained
 temporarily for parity reference but are not part of the maintained solution or
 release path.
 
+## User interface and first-run setup
+
+On first launch, Aviscribe shows a one-screen Quick Start covering the three
+essentials: choose a capture source, check the gameplay preview and crop, then
+start capture and manage the run. The guide can be reopened later under
+**Settings > Help**. Its version is stored separately from run progress, so
+resetting a run does not show first-run help again.
+
+The **Run** screen is reserved for live run management: Pending, Counted,
+Wrong / Uncounted, Kingdom Moons, and Needs Review remain visible together.
+Setup, run configuration, hotkey, theme, and diagnostic options are grouped by
+task under **Settings**. Hover or keyboard-focus unfamiliar settings to see a
+short explanation of their effect. The Theme section can follow the system or
+force light or dark mode, and can use the operating-system accent color or a
+persisted built-in accent color. The operating-system accent is the default.
+
 ### Smoke and regression commands
 
 Run these after the automated tests:
@@ -92,7 +108,7 @@ regression and audit commands remain available through
 `dotnet run --project tools/Aviscribe.Classifier -- --help`; they require local
 test footage and are intentionally not part of hardware-independent CI.
 
-OCR uses CPU by default. **Settings → Diagnostics → OCR processor** offers an
+OCR uses CPU by default. **Settings → Setup → OCR processor** offers an
 opt-in **GPU (WebGPU)** mode that is persisted and recreates the OCR session.
 Supported graph nodes run on a high-performance WebGPU adapter while remaining
 shape nodes use CPU. Initialization or inference failures recreate a CPU-only
@@ -223,18 +239,17 @@ be added later.
 
 ## Diagnostics and privacy
 
-Enable debug logging under **Settings → Diagnostics**, then open the diagnostics
-window to see:
+Open **Settings → Help → Diagnostics** to see:
 
-- Application, runtime, operating system, and architecture
+- Aviscribe version, application, runtime, operating system, and architecture
 - Selected capture device, backend, format, and state
 - Source dimensions, active crop, and normalization target
 - Recent errors and diagnostic log entries
 - The log directory and an action to open it
 
-Informational logging is the default. Debug logging is an explicit persisted
-opt-in. OCR enqueue, recognized text, match decisions, and collection outcomes
-are included only while debug logging is enabled. The diagnostics window is
+Detailed logging is always enabled. Logs include capture and configuration
+events, OCR enqueue and recognized text, match decisions, collection outcomes,
+manual corrections, and review actions. The diagnostics window is
 modeless, remains open while the main window is used, and refreshes recent
 entries automatically. Logs rotate at 5 MiB with ten files retained. Aviscribe
 never automatically saves captured frames, and logs avoid native device

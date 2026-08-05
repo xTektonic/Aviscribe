@@ -2,9 +2,13 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Styling;
+using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Aviscribe.Core;
 using Aviscribe.Core.Capture;
 using Aviscribe.Core.Diagnostics;
@@ -29,6 +33,8 @@ namespace Aviscribe.UI
         private readonly MoonRepository _repo;
         private readonly GameState _state = new();
         private readonly RunStateStore _stateStore;
+        private readonly AppPreferencesStore _preferencesStore = new();
+        private AppPreferences _preferences = new();
         private readonly RunOutputWriter _outputWriter = new();
         private readonly Dictionary<string, List<AmbiguousOcrResult>> _reviewsByKingdom =
             new(StringComparer.OrdinalIgnoreCase);
@@ -40,6 +46,7 @@ namespace Aviscribe.UI
         private readonly RawFrameSnapshotBroker _snapshotBroker = new();
         private readonly SemaphoreSlim _captureLifecycleGate = new(1, 1);
         private readonly CancellationTokenSource _closingCancellation = new();
+        private IPlatformSettings? _platformSettings;
 
         private FrameProcessor? _processor;
         private OnnxOcrService? _ocrService;
@@ -74,6 +81,7 @@ namespace Aviscribe.UI
         private VideoDevice? _selectedCaptureSource;
         private IVideoCapture? _preparedCapture;
         private TabControl? _mainTabs;
+        private TabControl? _settingsTabs;
         private bool _processorRunning;
         private bool _writeOverlayEnabled = true;
         private string _captureDeviceId = string.Empty;
@@ -107,14 +115,18 @@ namespace Aviscribe.UI
             _diagnostics = diagnostics ?? NullAppDiagnostics.Instance;
             _repo = MoonRepository.LoadDefault();
             _stateStore = new RunStateStore(_repo);
+            LoadAppPreferences();
+            ApplyThemePreference();
+            ApplyAccentColorPreference();
             LoadSavedRunState();
             NormalizeLanguageSettings();
-            _diagnostics.DebugEnabled = _state.Settings.DebugLogging;
             _outputWriter.Language = _state.Settings.OutputLanguage;
             InitControls();
             InitFrameProcessor();
             _state.Changed += (_, _) => UpdateRunState();
             UpdateRunState();
+            Opened += InitializePlatformAppearance;
+            Opened += ShowFirstRunQuickStart;
         }
 
         private void NormalizeLanguageSettings()
@@ -151,6 +163,7 @@ namespace Aviscribe.UI
                 if (_kingdomSelect.SelectedItem is KingdomListItem item)
                 {
                     _state.SetKingdom(item.Kingdom);
+                    _diagnostics.Information($"Current kingdom changed to {item.Kingdom}.");
                     RefreshMoonSelect();
                     RefreshMoonList();
                     ShowNextReview();
@@ -165,6 +178,7 @@ namespace Aviscribe.UI
                 if (categorySelect.SelectedItem is RunCategory category)
                 {
                     _state.Settings.Category = category;
+                    _diagnostics.Information($"Run category changed to {category}.");
                     _state.NotifySettingsChanged();
                 }
             };
@@ -185,6 +199,7 @@ namespace Aviscribe.UI
                 if (_inputLanguageSelect.SelectedItem is ComboBoxItem { Content: GameLanguage language })
                 {
                     _state.Settings.InputLanguage = language;
+                    _diagnostics.Information($"Game text language changed to {language}.");
                     if (_processor != null)
                         RecreateFrameProcessor();
                     _state.NotifySettingsChanged();
@@ -203,6 +218,7 @@ namespace Aviscribe.UI
                 if (_outputLanguageSelect.SelectedItem is ComboBoxItem { Content: GameLanguage language })
                 {
                     _state.Settings.OutputLanguage = language;
+                    _diagnostics.Information($"Display language changed to {language}.");
                     _outputWriter.Language = language;
                     RefreshMoonSelect();
                     RefreshMoonList();
@@ -233,6 +249,9 @@ namespace Aviscribe.UI
                     ClearAmbiguousReviews();
 
                 _state.SetIncludePostGameKingdoms(includePostGameKingdoms);
+                _diagnostics.Information(includePostGameKingdoms
+                    ? "Postgame kingdoms enabled."
+                    : "Postgame kingdoms disabled and run state reset.");
                 RefreshKingdoms(includePostGameKingdoms
                     ? null
                     : GameState.InitialKingdom);
@@ -249,6 +268,7 @@ namespace Aviscribe.UI
             woodedBeforeLakeCheck.IsCheckedChanged += (_, _) =>
             {
                 _state.Settings.WoodedBeforeLake = woodedBeforeLakeCheck.IsChecked == true;
+                _diagnostics.Information($"Route order changed: Wooded before Lake = {_state.Settings.WoodedBeforeLake}.");
                 RefreshKingdoms();
                 _state.NotifySettingsChanged();
             };
@@ -258,6 +278,7 @@ namespace Aviscribe.UI
             seasideBeforeSnowCheck.IsCheckedChanged += (_, _) =>
             {
                 _state.Settings.SeasideBeforeSnow = seasideBeforeSnowCheck.IsChecked == true;
+                _diagnostics.Information($"Route order changed: Seaside before Snow = {_state.Settings.SeasideBeforeSnow}.");
                 RefreshKingdoms();
                 _state.NotifySettingsChanged();
             };
@@ -267,6 +288,7 @@ namespace Aviscribe.UI
             showPendingImagesCheck.IsCheckedChanged += (_, _) =>
             {
                 _state.Settings.ShowPendingMoonImages = showPendingImagesCheck.IsChecked == true;
+                _diagnostics.Information($"Pending moon images = {_state.Settings.ShowPendingMoonImages}.");
                 _state.NotifySettingsChanged();
             };
 
@@ -278,28 +300,60 @@ namespace Aviscribe.UI
             {
                 var enabled = automaticallySwitchKingdomsCheck.IsChecked == true;
                 _state.Settings.AutomaticallySwitchKingdoms = enabled;
+                _diagnostics.Information($"Automatic kingdom switching = {enabled}.");
                 _state.NotifySettingsChanged();
                 SetStatus(enabled
                     ? "Automatic kingdom switching enabled"
                     : "Automatic kingdom switching disabled");
             };
 
-            var debugLoggingCheck =
-                this.GetControl<CheckBox>("chkDebugLogging");
-            debugLoggingCheck.IsChecked = _state.Settings.DebugLogging;
-            debugLoggingCheck.IsCheckedChanged += (_, _) =>
-            {
-                var enabled = debugLoggingCheck.IsChecked == true;
-                _state.Settings.DebugLogging = enabled;
-                _diagnostics.DebugEnabled = enabled;
-                _diagnostics.Information(
-                    enabled
-                        ? "Debug logging enabled."
-                        : "Debug logging disabled.");
-                _state.NotifySettingsChanged();
-            };
             this.GetControl<Button>("btnOpenDiagnostics").Click +=
                 OpenDiagnostics;
+            this.GetControl<Button>("btnOpenQuickStart").Click +=
+                OpenQuickStart;
+            this.GetControl<Button>("btnOpenDiscord").Click +=
+                OpenDiscord;
+
+            var themeSelect = this.GetControl<ComboBox>("cbThemeSelect");
+            themeSelect.ItemsSource = Enum.GetValues<AppThemePreference>();
+            themeSelect.SelectedItem = _preferences.Theme;
+            themeSelect.SelectionChanged += (_, _) =>
+            {
+                if (themeSelect.SelectedItem is not AppThemePreference theme ||
+                    theme == _preferences.Theme)
+                    return;
+
+                _preferences.Theme = theme;
+                ApplyThemePreference();
+                PersistAppPreferences();
+                _diagnostics.Information($"Application theme changed to {theme}.");
+            };
+
+            var accentColorSelect = this.GetControl<ComboBox>("cbAccentColorSelect");
+            var accentColors = new[]
+            {
+                new AccentColorListItem(AccentColorPreference.System, "System accent"),
+                new AccentColorListItem(AccentColorPreference.Blue, "Blue"),
+                new AccentColorListItem(AccentColorPreference.Teal, "Teal"),
+                new AccentColorListItem(AccentColorPreference.Green, "Green"),
+                new AccentColorListItem(AccentColorPreference.Orange, "Orange"),
+                new AccentColorListItem(AccentColorPreference.Red, "Red"),
+                new AccentColorListItem(AccentColorPreference.Purple, "Purple")
+            };
+            accentColorSelect.ItemsSource = accentColors;
+            accentColorSelect.SelectedItem = accentColors.First(item =>
+                item.Preference == _preferences.AccentColor);
+            accentColorSelect.SelectionChanged += (_, _) =>
+            {
+                if (accentColorSelect.SelectedItem is not AccentColorListItem item ||
+                    item.Preference == _preferences.AccentColor)
+                    return;
+
+                _preferences.AccentColor = item.Preference;
+                ApplyAccentColorPreference();
+                PersistAppPreferences();
+                _diagnostics.Information($"Application accent color changed to {item.Name}.");
+            };
 
             var ocrModeSelect = this.GetControl<ComboBox>("cbOcrModeSelect");
             var ocrModes = new[]
@@ -315,6 +369,7 @@ namespace Aviscribe.UI
                     item.Mode == _state.Settings.OcrMode)
                     return;
                 _state.Settings.OcrMode = item.Mode;
+                _diagnostics.Information($"Requested OCR processor changed to {item.Name}.");
                 RecreateFrameProcessor();
                 _state.NotifySettingsChanged();
                 var status = _ocrService?.RuntimeStatus;
@@ -343,7 +398,6 @@ namespace Aviscribe.UI
                 "cbRemoveHotkey",
                 _state.Settings.RemoveMoonHotkey,
                 key => _state.Settings.RemoveMoonHotkey = key);
-
             // Get image preview control
             _previewImage = this.FindControl<Image>("imgPreview");
             _countedCountText = this.FindControl<TextBlock>("txtCountedCount");
@@ -363,11 +417,13 @@ namespace Aviscribe.UI
             _moonNumberText = this.FindControl<TextBox>("txtMoonNumber");
             _cropSummaryText = this.FindControl<TextBlock>("txtCropSummary");
             _mainTabs = this.FindControl<TabControl>("tabMain");
+            _settingsTabs = this.FindControl<TabControl>("tabSettings");
             UpdateCropSummary();
 
             if (_overlayPathText != null)
             {
                 _overlayPathText.Text = _outputWriter.OutputPath;
+                _overlayPathText.IsEnabled = _writeOverlayEnabled;
                 _overlayPathText.TextChanged += (_, _) =>
                 {
                     _outputWriter.OutputPath = _overlayPathText.Text ?? string.Empty;
@@ -375,6 +431,8 @@ namespace Aviscribe.UI
                     WriteOverlayOutput(snapshot);
                     PersistRunState(snapshot);
                 };
+                _overlayPathText.LostFocus += (_, _) =>
+                    _diagnostics.Information("Overlay output path updated.");
             }
 
             if (_writeOverlayCheck != null)
@@ -383,6 +441,9 @@ namespace Aviscribe.UI
                 _writeOverlayCheck.IsCheckedChanged += (_, _) =>
                 {
                     _writeOverlayEnabled = _writeOverlayCheck.IsChecked == true;
+                    _diagnostics.Information($"Overlay output enabled = {_writeOverlayEnabled}.");
+                    if (_overlayPathText != null)
+                        _overlayPathText.IsEnabled = _writeOverlayEnabled;
                     var snapshot = _state.CreateSnapshot();
                     WriteOverlayOutput(snapshot);
                     PersistRunState(snapshot);
@@ -424,6 +485,7 @@ namespace Aviscribe.UI
 
                 ClearAmbiguousReviews();
                 _state.ResetRun();
+                _diagnostics.Information("Run reset by the user.");
                 RefreshKingdoms(GameState.InitialKingdom);
                 RefreshMoonSelect();
                 RefreshMoonList();
@@ -440,7 +502,12 @@ namespace Aviscribe.UI
                 }
             };
 
-            this.GetControl<Button>("btnReviewDismiss").Click += (_, _) => CompleteActiveReview();
+            this.GetControl<Button>("btnReviewDismiss").Click += (_, _) =>
+            {
+                if (_activeReview != null)
+                    _diagnostics.Information($"Dismissed {_activeReview.Type} review in {_state.CurrentKingdom}.");
+                CompleteActiveReview();
+            };
 
             RefreshKingdoms();
 
@@ -502,7 +569,10 @@ namespace Aviscribe.UI
                     }
 
                     SelectCaptureSource(selected, persist: true);
-                    SetStatus($"Selected {selected.Name}");
+                    Interlocked.Exchange(ref _previewRequested, 1);
+                    await EnsureCaptureStartedAsync(
+                        selected,
+                        _closingCancellation.Token);
                 }
             }
             catch (OperationCanceledException)
@@ -530,7 +600,11 @@ namespace Aviscribe.UI
                     $"{SourceKindLabel(selected.Kind)} — {selected.Name}";
             UpdateCropSummary();
             if (persist)
+            {
+                _diagnostics.Information(
+                    $"Capture source selected: {SourceKindLabel(selected.Kind)} {selected.Name}.");
                 PersistRunState(_state.CreateSnapshot());
+            }
         }
 
         private static string SourceKindLabel(CaptureSourceKind kind) =>
@@ -1090,11 +1164,7 @@ namespace Aviscribe.UI
 
         private KingdomListItem CreateKingdomListItem(string kingdom)
         {
-            var requirement = KingdomRoute.GetRequirement(kingdom);
-            var label = _state.Settings.IncludePostGameKingdoms
-                ? kingdom
-                : $"{kingdom} ({requirement})";
-            return new KingdomListItem(kingdom, label);
+            return new KingdomListItem(kingdom, kingdom);
         }
 
         private void RefreshMoonSelect()
@@ -1154,6 +1224,172 @@ namespace Aviscribe.UI
             _requirementText.Text = _state.Settings.IncludePostGameKingdoms
                 ? "Postgame mode"
                 : requirement.ToString();
+        }
+
+        private void LoadAppPreferences()
+        {
+            try
+            {
+                _preferences = _preferencesStore.Load(AppPaths.AppPreferencesPath);
+            }
+            catch (Exception ex)
+            {
+                _preferences = new AppPreferences();
+                _diagnostics.Error("Could not load application preferences.", ex);
+            }
+        }
+
+        private void ApplyThemePreference()
+        {
+            if (Application.Current == null)
+                return;
+
+            Application.Current.RequestedThemeVariant = _preferences.Theme switch
+            {
+                AppThemePreference.Light => ThemeVariant.Light,
+                AppThemePreference.Dark => ThemeVariant.Dark,
+                _ => ThemeVariant.Default
+            };
+        }
+
+        private void InitializePlatformAppearance(object? sender, EventArgs args)
+        {
+            var platformSettings = this.GetPlatformSettings();
+            if (ReferenceEquals(_platformSettings, platformSettings))
+                return;
+
+            if (_platformSettings != null)
+                _platformSettings.ColorValuesChanged -= OnPlatformColorValuesChanged;
+
+            _platformSettings = platformSettings;
+            if (_platformSettings != null)
+                _platformSettings.ColorValuesChanged += OnPlatformColorValuesChanged;
+
+            ApplyAccentColorPreference();
+        }
+
+        private void OnPlatformColorValuesChanged(
+            object? sender,
+            PlatformColorValues values)
+        {
+            if (_preferences.AccentColor == AccentColorPreference.System)
+                ApplyAccentColor(values.AccentColor1);
+        }
+
+        private void ApplyAccentColorPreference()
+        {
+            var accentColor = _preferences.AccentColor switch
+            {
+                AccentColorPreference.Blue => Color.Parse("#0067C0"),
+                AccentColorPreference.Teal => Color.Parse("#008F8C"),
+                AccentColorPreference.Green => Color.Parse("#168A57"),
+                AccentColorPreference.Orange => Color.Parse("#C65D00"),
+                AccentColorPreference.Red => Color.Parse("#C42B1C"),
+                AccentColorPreference.Purple => Color.Parse("#6D5CE7"),
+                _ => _platformSettings?.GetColorValues().AccentColor1
+            };
+
+            if (accentColor.HasValue)
+                ApplyAccentColor(accentColor.Value);
+        }
+
+        private static void ApplyAccentColor(Color accentColor)
+        {
+            var fluentTheme = Application.Current?.Styles
+                .OfType<FluentTheme>()
+                .FirstOrDefault();
+            if (fluentTheme == null)
+                return;
+
+            SetPaletteAccent(fluentTheme, ThemeVariant.Light, accentColor);
+            SetPaletteAccent(fluentTheme, ThemeVariant.Dark, accentColor);
+        }
+
+        private static void SetPaletteAccent(
+            FluentTheme fluentTheme,
+            ThemeVariant themeVariant,
+            Color accentColor)
+        {
+            if (!fluentTheme.Palettes.TryGetValue(themeVariant, out var palette))
+            {
+                palette = new ColorPaletteResources();
+                fluentTheme.Palettes[themeVariant] = palette;
+            }
+
+            palette.Accent = accentColor;
+        }
+
+        private void PersistAppPreferences()
+        {
+            try
+            {
+                _preferencesStore.Save(AppPaths.AppPreferencesPath, _preferences);
+            }
+            catch (Exception ex)
+            {
+                _diagnostics.Error("Could not save application preferences.", ex);
+                SetStatus($"Could not save application preferences: {ex.Message}");
+            }
+        }
+
+        private async void ShowFirstRunQuickStart(object? sender, EventArgs args)
+        {
+            if (Design.IsDesignMode ||
+                _preferences.QuickStartVersionSeen >= AppPreferences.CurrentQuickStartVersion)
+                return;
+
+            await ShowQuickStartAsync();
+        }
+
+        private async void OpenQuickStart(object? sender, RoutedEventArgs args)
+        {
+            _diagnostics.Information("Quick Start opened from Settings.");
+            await ShowQuickStartAsync();
+        }
+
+        private async void OpenDiscord(object? sender, RoutedEventArgs args)
+        {
+            const string discordInvite = "https://discord.gg/HzFWsA4y5n";
+            try
+            {
+                var topLevel = TopLevel.GetTopLevel(this);
+                if (topLevel == null ||
+                    !await topLevel.Launcher.LaunchUriAsync(new Uri(discordInvite)))
+                {
+                    SetStatus("Could not open the Discord invite");
+                    return;
+                }
+
+                _diagnostics.Information("Aviscribe Discord invite opened.");
+            }
+            catch (Exception ex)
+            {
+                _diagnostics.Error("Could not open the Discord invite.", ex);
+                SetStatus($"Could not open the Discord invite: {ex.Message}");
+            }
+        }
+
+        private async Task ShowQuickStartAsync()
+        {
+            var quickStart = new QuickStartWindow();
+            var openSettings = await quickStart.ShowDialog<bool>(this);
+            _diagnostics.Information(openSettings
+                ? "Quick Start closed with Open Settings."
+                : "Quick Start closed.");
+
+            if (_preferences.QuickStartVersionSeen < AppPreferences.CurrentQuickStartVersion)
+            {
+                _preferences.QuickStartVersionSeen = AppPreferences.CurrentQuickStartVersion;
+                PersistAppPreferences();
+            }
+
+            if (openSettings)
+            {
+                if (_mainTabs != null)
+                    _mainTabs.SelectedIndex = 1;
+                if (_settingsTabs != null)
+                    _settingsTabs.SelectedIndex = 0;
+            }
         }
 
         private void LoadSavedRunState()
@@ -1290,6 +1526,8 @@ namespace Aviscribe.UI
 
         private void ApplyReview(OcrRegionType type, Moon moon)
         {
+            _diagnostics.Information(
+                $"Applied {type} review as {moon.Kingdom} #{moon.Id} ({moon.English}).");
             switch (type)
             {
                 case OcrRegionType.Talkatoo:
@@ -1364,21 +1602,29 @@ namespace Aviscribe.UI
             var confirmation = new Avalonia.Controls.Window
             {
                 Title = title,
-                Width = 420,
-                Height = 170,
+                Width = 460,
+                Height = 205,
                 CanResize = false,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ShowInTaskbar = false
             };
             var resetButton = new Button { Content = confirmButtonText };
+            resetButton.Classes.Add("danger");
             var cancelButton = new Button { Content = "Cancel" };
             resetButton.Click += (_, _) => confirmation.Close(true);
             cancelButton.Click += (_, _) => confirmation.Close(false);
             confirmation.Content = new StackPanel
             {
-                Margin = new Thickness(20),
-                Spacing = 16,
+                Margin = new Thickness(24),
+                Spacing = 12,
                 Children =
                 {
+                    new TextBlock
+                    {
+                        Text = title,
+                        FontSize = 20,
+                        FontWeight = Avalonia.Media.FontWeight.SemiBold
+                    },
                     new TextBlock
                     {
                         Text = message,
@@ -1464,6 +1710,7 @@ namespace Aviscribe.UI
                 if (select.SelectedItem is Key key)
                 {
                     update(key.ToString());
+                    _diagnostics.Information($"Hotkey {controlName} changed to {key}.");
                     _state.NotifySettingsChanged();
                 }
             };
@@ -1502,8 +1749,7 @@ namespace Aviscribe.UI
             if (_moonNumberText?.IsFocused != true)
                 return;
 
-            if (e.Key == ParseHotkey(_state.Settings.MoveToPendingHotkey, Key.P) ||
-                e.Key == Key.Enter)
+            if (e.Key == ParseHotkey(_state.Settings.MoveToPendingHotkey, Key.P))
             {
                 ApplyMoonNumberCommand(ManualMoonTarget.Pending);
                 e.Handled = true;
@@ -1518,8 +1764,7 @@ namespace Aviscribe.UI
                 ApplyMoonNumberCommand(ManualMoonTarget.Uncounted);
                 e.Handled = true;
             }
-            else if (e.Key == ParseHotkey(_state.Settings.RemoveMoonHotkey, Key.X) ||
-                     e.Key == Key.Delete)
+            else if (e.Key == ParseHotkey(_state.Settings.RemoveMoonHotkey, Key.X))
             {
                 ApplyMoonNumberCommand(ManualMoonTarget.All);
                 e.Handled = true;
@@ -1580,6 +1825,9 @@ namespace Aviscribe.UI
                     SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} removed");
                     break;
             }
+
+            _diagnostics.Information(
+                $"Manual moon update: {_state.CurrentKingdom} #{moonNumber} -> {target}.");
 
             _moonNumberText.Focus();
             _moonNumberText.SelectAll();
@@ -1944,6 +2192,11 @@ namespace Aviscribe.UI
         protected override void OnClosed(EventArgs e)
         {
             _diagnostics.Information("Aviscribe is shutting down.");
+            if (_platformSettings != null)
+            {
+                _platformSettings.ColorValuesChanged -= OnPlatformColorValuesChanged;
+                _platformSettings = null;
+            }
             _diagnosticsWindow?.Close();
             _diagnosticsWindow = null;
             _closingCancellation.Cancel();
@@ -1989,6 +2242,13 @@ namespace Aviscribe.UI
         }
 
         private sealed record OcrModeListItem(OcrMode Mode, string Name)
+        {
+            public override string ToString() => Name;
+        }
+
+        private sealed record AccentColorListItem(
+            AccentColorPreference Preference,
+            string Name)
         {
             public override string ToString() => Name;
         }

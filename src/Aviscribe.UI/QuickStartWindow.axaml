@@ -1,0 +1,71 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Aviscribe.UI.QuickStartWindow"
+        Title="Quick Start"
+        Width="620" Height="500"
+        MinWidth="540" MinHeight="460"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+  <Grid Margin="28" RowDefinitions="Auto,*,Auto" RowSpacing="24">
+    <StackPanel Spacing="6">
+      <TextBlock Classes="eyebrow" Text="WELCOME TO AVISCRIBE"/>
+      <TextBlock Classes="pageTitle" Text="Set up once, then focus on your run"/>
+      <TextBlock Classes="bodyMuted"
+                 Text="Aviscribe watches your game feed, translates supported moon text, and keeps your run lists up to date."
+                 TextWrapping="Wrap"/>
+    </StackPanel>
+
+    <StackPanel Grid.Row="1" Spacing="12">
+      <Border Classes="card compact">
+        <Grid ColumnDefinitions="42,*" ColumnSpacing="14">
+          <Border Width="34" Height="34" CornerRadius="17" Background="{DynamicResource SystemControlHighlightAccentBrush}">
+            <TextBlock Text="1" Foreground="White" FontWeight="Bold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <StackPanel Grid.Column="1" Spacing="3">
+            <TextBlock Classes="sectionTitle" Text="Choose what Aviscribe should watch"/>
+            <TextBlock Classes="bodyMuted" Text="In Settings, choose your capture card, camera, virtual camera, or game window."
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Border Classes="card compact">
+        <Grid ColumnDefinitions="42,*" ColumnSpacing="14">
+          <Border Width="34" Height="34" CornerRadius="17" Background="{DynamicResource SystemControlHighlightAccentBrush}">
+            <TextBlock Text="2" Foreground="White" FontWeight="Bold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <StackPanel Grid.Column="1" Spacing="3">
+            <TextBlock Classes="sectionTitle" Text="Check the preview"/>
+            <TextBlock Classes="bodyMuted" Text="Make sure gameplay fills the preview. Use Crop Gameplay if it does not."
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Border Classes="card compact">
+        <Grid ColumnDefinitions="42,*" ColumnSpacing="14">
+          <Border Width="34" Height="34" CornerRadius="17" Background="{DynamicResource SystemControlHighlightAccentBrush}">
+            <TextBlock Text="3" Foreground="White" FontWeight="Bold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <StackPanel Grid.Column="1" Spacing="3">
+            <TextBlock Classes="sectionTitle" Text="Start capture and manage the run"/>
+            <TextBlock Classes="bodyMuted" Text="The Run screen keeps Pending, Counted, Wrong, Kingdom Moons, and Needs Review together."
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+    </StackPanel>
+
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+      <TextBlock Classes="caption" Text="You can reopen this guide from Settings → Help."
+                 VerticalAlignment="Center"/>
+      <Button Name="btnClose" Grid.Column="1" Content="Got it" MinWidth="96"/>
+      <Button Name="btnOpenSettings" Grid.Column="2" Classes="primary"
+              Content="Open Settings" MinWidth="132" IsDefault="True"/>
+    </Grid>
+  </Grid>
+</Window>
