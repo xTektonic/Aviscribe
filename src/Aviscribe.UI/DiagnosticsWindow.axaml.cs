@@ -71,8 +71,9 @@ public partial class DiagnosticsWindow : Window
             entryAssembly?.GetName().Version?.ToString() ??
             "unknown";
 
+        this.GetControl<TextBlock>("txtVersion").Text = version;
         this.GetControl<TextBlock>("txtApplication").Text =
-            $"Aviscribe {version}";
+            entryAssembly?.GetName().Name ?? "Aviscribe";
         this.GetControl<TextBlock>("txtRuntime").Text =
             $"{RuntimeInformation.FrameworkDescription}; " +
             $"{RuntimeInformation.OSDescription}; " +

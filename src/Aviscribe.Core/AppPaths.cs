@@ -51,6 +51,9 @@ public static class AppPaths
     public static string RunStatePath =>
         Path.Combine(UserDataFolder, "run-state.json");
 
+    public static string AppPreferencesPath =>
+        Path.Combine(UserDataFolder, "preferences.json");
+
     public static AppPlatform CurrentPlatform()
     {
         if (OperatingSystem.IsWindows())

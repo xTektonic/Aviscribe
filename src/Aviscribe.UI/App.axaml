@@ -2,9 +2,92 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Aviscribe.UI.AviscribeApp"
              RequestedThemeVariant="Default">
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <SolidColorBrush x:Key="SuccessBrush">#2E9B68</SolidColorBrush>
+      <SolidColorBrush x:Key="SuccessSoftBrush">#202E9B68</SolidColorBrush>
+      <SolidColorBrush x:Key="WarningBrush">#D99227</SolidColorBrush>
+      <SolidColorBrush x:Key="WarningSoftBrush">#20D99227</SolidColorBrush>
+      <SolidColorBrush x:Key="DangerBrush">#C65353</SolidColorBrush>
+      <SolidColorBrush x:Key="DangerSoftBrush">#20C65353</SolidColorBrush>
+      <SolidColorBrush x:Key="SurfaceBorderBrush">#287F8490</SolidColorBrush>
+      <SolidColorBrush x:Key="SurfaceSoftBrush">#0D7F8490</SolidColorBrush>
+    </ResourceDictionary>
+  </Application.Resources>
 
-    <Application.Styles>
-        <FluentTheme />
-    </Application.Styles>
+  <Application.Styles>
+    <FluentTheme />
+
+    <Style Selector="Window">
+      <Setter Property="FontFamily" Value="Inter, Segoe UI, sans-serif"/>
+    </Style>
+
+    <Style Selector="TextBlock.pageTitle">
+      <Setter Property="FontSize" Value="24"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.sectionTitle">
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.eyebrow">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Foreground" Value="{DynamicResource SystemControlHighlightAccentBrush}"/>
+      <Setter Property="LetterSpacing" Value="1.1"/>
+    </Style>
+    <Style Selector="TextBlock.bodyMuted">
+      <Setter Property="Opacity" Value="0.72"/>
+      <Setter Property="LineHeight" Value="20"/>
+    </Style>
+    <Style Selector="TextBlock.caption">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Opacity" Value="0.66"/>
+    </Style>
+    <Style Selector="TextBlock.metric">
+      <Setter Property="FontSize" Value="28"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+
+    <Style Selector="Border.card">
+      <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="16"/>
+    </Style>
+    <Style Selector="Border.card.compact">
+      <Setter Property="Padding" Value="13"/>
+    </Style>
+    <Style Selector="Border.soft">
+      <Setter Property="Background" Value="{DynamicResource SurfaceSoftBrush}"/>
+      <Setter Property="CornerRadius" Value="7"/>
+      <Setter Property="Padding" Value="12,9"/>
+    </Style>
+
+    <Style Selector="Button">
+      <Setter Property="MinHeight" Value="34"/>
+      <Setter Property="Padding" Value="14,6"/>
+      <Setter Property="CornerRadius" Value="6"/>
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{DynamicResource SystemControlHighlightAccentBrush}"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.danger">
+      <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+    </Style>
+
+    <Style Selector="ComboBox">
+      <Setter Property="MinHeight" Value="34"/>
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="MinHeight" Value="34"/>
+    </Style>
+
+    <Style Selector="ToolTip">
+      <Setter Property="MaxWidth" Value="360"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+  </Application.Styles>
 </Application>

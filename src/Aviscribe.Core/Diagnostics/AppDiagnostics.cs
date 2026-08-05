@@ -17,7 +17,6 @@ public sealed record DiagnosticEntry(
 
 public interface IAppDiagnostics : IDisposable
 {
-    bool DebugEnabled { get; set; }
     string LogDirectory { get; }
     IReadOnlyList<DiagnosticEntry> RecentEntries { get; }
 
@@ -46,7 +45,6 @@ public sealed class FileAppDiagnostics : IAppDiagnostics
         _writer = OpenWriter(_currentLogPath);
     }
 
-    public bool DebugEnabled { get; set; }
     public string LogDirectory { get; }
 
     public IReadOnlyList<DiagnosticEntry> RecentEntries
@@ -63,8 +61,7 @@ public sealed class FileAppDiagnostics : IAppDiagnostics
 
     public void Debug(string message)
     {
-        if (DebugEnabled)
-            Write(DiagnosticLevel.Debug, message);
+        Write(DiagnosticLevel.Debug, message);
     }
 
     public void Information(string message)
@@ -177,7 +174,6 @@ public sealed class NullAppDiagnostics : IAppDiagnostics
     {
     }
 
-    public bool DebugEnabled { get; set; }
     public string LogDirectory => string.Empty;
     public IReadOnlyList<DiagnosticEntry> RecentEntries => [];
     public void Debug(string message) { }
