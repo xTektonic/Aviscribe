@@ -54,7 +54,6 @@ namespace Aviscribe.Core
                     SeasideBeforeSnow = snapshot.SeasideBeforeSnow,
                     AutomaticallySwitchKingdoms = snapshot.AutomaticallySwitchKingdoms,
                     ShowPendingMoonImages = snapshot.ShowPendingMoonImages,
-                    DebugLogging = snapshot.DebugLogging,
                     OcrMode = snapshot.OcrMode,
                     FocusMoonNumberHotkey = snapshot.FocusMoonNumberHotkey,
                     MoveToPendingHotkey = snapshot.MoveToPendingHotkey,
