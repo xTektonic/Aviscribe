@@ -256,7 +256,7 @@ Set the version used by the application, CI, and all platform packages from the
 repository root:
 
 ```powershell
-./tools/set-version.ps1 0.4.0
+./tools/set-version.ps1 0.5.0
 ```
 
 The script accepts a stable `major.minor.patch` version and does not perform any
@@ -274,13 +274,13 @@ Platform packages must be built on their corresponding operating system:
 
 ```text
 # Windows PowerShell; WiX is restored as an SDK package
-./packaging/windows/package.ps1 -Version 0.4.0
+./packaging/windows/package.ps1 -Version 0.5.0
 
 # macOS Apple Silicon; uses codesign, plutil, and hdiutil
-bash packaging/macos/package.sh 0.4.0
+bash packaging/macos/package.sh 0.5.0
 
 # Ubuntu x64; requires dpkg-deb, curl, and AppImage tooling
-bash packaging/linux/package.sh 0.4.0
+bash packaging/linux/package.sh 0.5.0
 ```
 
 Outputs are written to `artifacts/packages`. The Debian and AppImage builds copy
