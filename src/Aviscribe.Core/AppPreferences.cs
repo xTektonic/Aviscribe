@@ -2,7 +2,7 @@ namespace Aviscribe.Core;
 
 public sealed class AppPreferences
 {
-    public const int CurrentQuickStartVersion = 1;
+    public const int CurrentQuickStartVersion = 2;
 
     public int QuickStartVersionSeen { get; set; }
     public AppThemePreference Theme { get; set; } = AppThemePreference.System;

@@ -77,9 +77,9 @@ release path.
 
 ## User interface and first-run setup
 
-On first launch, Aviscribe shows a one-screen Quick Start covering the three
-essentials: choose a capture source, check the gameplay preview and crop, then
-start capture and manage the run. The guide can be reopened later under
+On first launch, Aviscribe shows a one-screen Quick Start covering initial
+setup, language selection, run configuration, and how automatic results are
+managed from the Run screen. The guide can be reopened later under
 **Settings > Help**. Its version is stored separately from run progress, so
 resetting a run does not show first-run help again.
 

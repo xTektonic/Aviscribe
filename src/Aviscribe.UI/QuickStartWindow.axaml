@@ -2,70 +2,78 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Aviscribe.UI.QuickStartWindow"
         Title="Quick Start"
-        Width="620" Height="500"
-        MinWidth="540" MinHeight="460"
+        Width="780" Height="560"
+        MinWidth="720" MinHeight="520"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
-  <Grid Margin="28" RowDefinitions="Auto,*,Auto" RowSpacing="24">
+  <Grid Margin="28" RowDefinitions="Auto,*,Auto" RowSpacing="20">
     <StackPanel Spacing="6">
       <TextBlock Classes="eyebrow" Text="WELCOME TO AVISCRIBE"/>
-      <TextBlock Classes="pageTitle" Text="Set up once, then focus on your run"/>
+      <TextBlock Classes="pageTitle" Text="Set up the translator, then let it work"/>
       <TextBlock Classes="bodyMuted"
-                 Text="Aviscribe watches your game feed, translates supported moon text, and keeps your run lists up to date."
+                 Text="Aviscribe reads supported moon text automatically while you view and manage the run from one screen."
                  TextWrapping="Wrap"/>
     </StackPanel>
 
-    <StackPanel Grid.Row="1" Spacing="12">
+    <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="14">
       <Border Classes="card compact">
-        <Grid ColumnDefinitions="42,*" ColumnSpacing="14">
-          <Border Width="34" Height="34" CornerRadius="17" Background="{DynamicResource SystemControlHighlightAccentBrush}">
-            <TextBlock Text="1" Foreground="White" FontWeight="Bold"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-          </Border>
-          <StackPanel Grid.Column="1" Spacing="3">
-            <TextBlock Classes="sectionTitle" Text="Choose what Aviscribe should watch"/>
-            <TextBlock Classes="bodyMuted" Text="In Settings, choose your capture card, camera, virtual camera, or game window."
+        <StackPanel Spacing="10">
+          <TextBlock Classes="eyebrow" Text="BEFORE YOUR RUN"/>
+          <StackPanel Spacing="3">
+            <TextBlock Classes="sectionTitle" Text="1. Capture the game"/>
+            <TextBlock Classes="bodyMuted"
+                       Text="In Settings &gt; Setup, choose a capture source and confirm that the full gameplay area appears in the preview."
                        TextWrapping="Wrap"/>
           </StackPanel>
-        </Grid>
+          <Separator/>
+          <StackPanel Spacing="3">
+            <TextBlock Classes="sectionTitle" Text="2. Choose your languages"/>
+            <TextBlock Classes="bodyMuted"
+                       Text="Game text language must match the game. Display language controls the names shown in Aviscribe."
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+          <Separator/>
+          <StackPanel Spacing="3">
+            <TextBlock Classes="sectionTitle" Text="3. Check the other settings"/>
+            <TextBlock Classes="bodyMuted"
+                       Text="Review the remaining Setup options, then check Run Configuration for the category and route options for this run."
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+        </StackPanel>
       </Border>
 
-      <Border Classes="card compact">
-        <Grid ColumnDefinitions="42,*" ColumnSpacing="14">
-          <Border Width="34" Height="34" CornerRadius="17" Background="{DynamicResource SystemControlHighlightAccentBrush}">
-            <TextBlock Text="2" Foreground="White" FontWeight="Bold"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-          </Border>
-          <StackPanel Grid.Column="1" Spacing="3">
-            <TextBlock Classes="sectionTitle" Text="Check the preview"/>
-            <TextBlock Classes="bodyMuted" Text="Make sure gameplay fills the preview. Use Crop Gameplay if it does not."
+      <Border Grid.Column="1" Classes="card compact">
+        <StackPanel Spacing="10">
+          <TextBlock Classes="eyebrow" Text="DURING A RUN"/>
+          <StackPanel Spacing="3">
+            <TextBlock Classes="sectionTitle" Text="1. Start capture"/>
+            <TextBlock Classes="bodyMuted"
+                       Text="On the Run screen, select the current kingdom if needed and click Start Capture. Supported moon reads are handled automatically."
                        TextWrapping="Wrap"/>
           </StackPanel>
-        </Grid>
-      </Border>
-
-      <Border Classes="card compact">
-        <Grid ColumnDefinitions="42,*" ColumnSpacing="14">
-          <Border Width="34" Height="34" CornerRadius="17" Background="{DynamicResource SystemControlHighlightAccentBrush}">
-            <TextBlock Text="3" Foreground="White" FontWeight="Bold"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-          </Border>
-          <StackPanel Grid.Column="1" Spacing="3">
-            <TextBlock Classes="sectionTitle" Text="Start capture and manage the run"/>
-            <TextBlock Classes="bodyMuted" Text="The Run screen keeps Pending, Counted, Wrong, Kingdom Moons, and Needs Review together."
+          <Separator/>
+          <StackPanel Spacing="5">
+            <TextBlock Classes="sectionTitle" Text="2. Check and correct the lists"/>
+            <TextBlock Classes="bodyMuted"
+                       Text="Pending holds detected moons. Counted and Wrong / Uncounted show their final result."
+                       TextWrapping="Wrap"/>
+            <TextBlock Classes="bodyMuted"
+                       Text="Click items or drag them between lists to make corrections. Kingdom Moons lets you add a moon manually, while Needs Review asks you to resolve an uncertain read."
                        TextWrapping="Wrap"/>
           </StackPanel>
-        </Grid>
+        </StackPanel>
       </Border>
-    </StackPanel>
+    </Grid>
 
     <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
-      <TextBlock Classes="caption" Text="You can reopen this guide from Settings → Help."
+      <TextBlock Classes="caption" Text="You can reopen this guide from Settings > Help."
                  VerticalAlignment="Center"/>
-      <Button Name="btnClose" Grid.Column="1" Content="Got it" MinWidth="96"/>
+      <Button Name="btnClose" Grid.Column="1" Content="Got it" MinWidth="96"
+              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
       <Button Name="btnOpenSettings" Grid.Column="2" Classes="primary"
-              Content="Open Settings" MinWidth="132" IsDefault="True"/>
+              Content="Open Settings" MinWidth="132" IsDefault="True"
+              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
     </Grid>
   </Grid>
 </Window>
