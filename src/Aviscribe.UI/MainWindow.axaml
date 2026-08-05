@@ -140,7 +140,7 @@
             </Border>
           </Grid>
 
-          <Grid Grid.Column="2" RowDefinitions="*,170" RowSpacing="10">
+          <Grid Grid.Column="2" RowDefinitions="*,Auto" RowSpacing="10">
             <Border Classes="card">
               <Grid RowDefinitions="Auto,*" RowSpacing="10">
                 <Grid ColumnDefinitions="*,Auto">
@@ -151,13 +151,13 @@
               </Grid>
             </Border>
 
-            <Border Grid.Row="1" Classes="card">
-              <Grid RowDefinitions="Auto,*,Auto" RowSpacing="9">
+            <Border Grid.Row="1" Classes="card compact">
+              <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="5">
                 <TextBlock Classes="sectionTitle" Text="Needs Review"/>
                 <TextBlock Name="txtReviewPrompt" Grid.Row="1" Text="No ambiguous reads"
                            TextWrapping="Wrap" Classes="bodyMuted"/>
                 <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="7">
-                  <ComboBox Name="cbReviewSelect"
+                  <ComboBox Name="cbReviewSelect" HorizontalAlignment="Stretch"
                             ToolTip.Tip="Choose the correct moon when a detected name has more than one likely match."/>
                   <Button Name="btnReviewApply" Grid.Column="1" Content="Use"/>
                   <Button Name="btnReviewDismiss" Grid.Column="2" Content="Dismiss"
@@ -262,6 +262,8 @@
                     <TextBlock Classes="caption" Margin="24,-7,0,0"
                                Text="Unsupported kingdoms and screens without the gameplay HUD still require manual selection."
                                TextWrapping="Wrap"/>
+                    <CheckBox Name="chkShowPendingImages" Content="Show reference images for pending moons"
+                              ToolTip.Tip="Display a moon reference image beside pending entries. This uses more screen space."/>
                   </StackPanel>
                 </Border>
 
@@ -293,8 +295,6 @@
                               ToolTip.Tip="Choose the run category. Category changes update the available moon list. In Hardcore, story moons don't count."/>
                     <CheckBox Name="chkIncludePostGame" Content="Include postgame kingdoms"
                               ToolTip.Tip="Adds postgame kingdoms. Turning this off later resets all kingdom lists after confirmation."/>
-                    <CheckBox Name="chkShowPendingImages" Content="Show reference images for pending moons"
-                              ToolTip.Tip="Display a moon reference image beside pending entries. This uses more screen space."/>
                   </StackPanel>
                 </Border>
                 <Border Classes="card">
