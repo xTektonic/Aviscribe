@@ -1838,52 +1838,139 @@ namespace Aviscribe.Core.Ocr
             int DarkSupportedPixels,
             int DarkSupportedColumns);
 
+        private const int StoryMoonBackgroundPatchSize = 24;
+        private const double StoryMoonBackgroundTolerance = 30.0;
+        private const int RequiredStoryMoonBackgroundMatches = 3;
+
+        // These tiles are relative to the existing StoryMoon OCR crop. They avoid
+        // the bottom-left splits and variable character/name artwork. Expected
+        // values are RGB mean and population standard deviation from 37 labeled
+        // collection screens at the normalized 1920-by-1080 reference layout.
+        private static readonly StoryMoonBackgroundPatch[] StoryMoonBackgroundPatches =
+        [
+            new(
+                new Rect(1030, 56, StoryMoonBackgroundPatchSize, StoryMoonBackgroundPatchSize),
+                new StoryMoonColorStatistics(225.1, 0.7, 2.1, 1.3, 0.5, 1.2)),
+            new(
+                new Rect(1074, 4, StoryMoonBackgroundPatchSize, StoryMoonBackgroundPatchSize),
+                new StoryMoonColorStatistics(224.9, 0.9, 2.7, 2.1, 2.3, 3.8)),
+            new(
+                new Rect(946, 8, StoryMoonBackgroundPatchSize, StoryMoonBackgroundPatchSize),
+                new StoryMoonColorStatistics(224.6, 4.1, 9.4, 8.1, 10.4, 15.2)),
+            new(
+                new Rect(250, 124, StoryMoonBackgroundPatchSize, StoryMoonBackgroundPatchSize),
+                new StoryMoonColorStatistics(225.3, 5.0, 10.7, 9.0, 11.5, 16.4))
+        ];
+
         public static bool HasStoryMoonText(Mat image)
         {
             if (image.Empty() || image.Channels() < 3)
                 return false;
 
-            var redRatio = MeasureRedCelebrationRatio(image);
-            if (redRatio < 0.30)
-                return false;
+            var matches = 0;
+            for (var index = 0; index < StoryMoonBackgroundPatches.Length; index++)
+            {
+                var remaining = StoryMoonBackgroundPatches.Length - index;
+                if (matches + remaining < RequiredStoryMoonBackgroundMatches)
+                    return false;
 
-            var metrics = MeasureMoonGetText(image);
+                var patch = StoryMoonBackgroundPatches[index];
+                if (!Contains(image, patch.Bounds))
+                    return false;
 
-            return
-                metrics.WhitePixels >= 20000 &&
-                metrics.WhiteRatio >= 0.12 &&
-                metrics.BandScore >= 10000 &&
-                metrics.ActiveColumns >= 390 &&
-                metrics.SpanWidth >= 450 &&
-                metrics.BandRows >= 10 &&
-                metrics.BandCenterRatio >= 0.15 &&
-                metrics.BandCenterRatio <= 0.55 &&
-                metrics.OutlinedPixels >= 300 &&
-                metrics.OutlinedColumns >= 100;
+                var measured = MeasureStoryMoonColorStatistics(image, patch.Bounds);
+                if (MatchesStoryMoonBackground(measured, patch.Expected))
+                    matches++;
+            }
+
+            return matches >= RequiredStoryMoonBackgroundMatches;
         }
 
-        private static double MeasureRedCelebrationRatio(Mat image)
+        private static bool Contains(Mat image, Rect bounds)
         {
-            var width = image.Width;
-            var height = image.Height;
-            var redPixels = 0;
+            return
+                bounds.X >= 0 &&
+                bounds.Y >= 0 &&
+                bounds.Right <= image.Width &&
+                bounds.Bottom <= image.Height;
+        }
 
-            for (var y = 0; y < height; y++)
+        private static StoryMoonColorStatistics MeasureStoryMoonColorStatistics(
+            Mat image,
+            Rect bounds)
+        {
+            var pixelCount = bounds.Width * bounds.Height;
+            var redSum = 0.0;
+            var greenSum = 0.0;
+            var blueSum = 0.0;
+            var redSquaredSum = 0.0;
+            var greenSquaredSum = 0.0;
+            var blueSquaredSum = 0.0;
+
+            for (var y = bounds.Top; y < bounds.Bottom; y++)
             {
-                for (var x = 0; x < width; x++)
+                for (var x = bounds.Left; x < bounds.Right; x++)
                 {
                     var pixel = image.At<Vec3b>(y, x);
-                    var b = pixel.Item0;
-                    var g = pixel.Item1;
-                    var r = pixel.Item2;
+                    var blue = (double)pixel.Item0;
+                    var green = (double)pixel.Item1;
+                    var red = (double)pixel.Item2;
 
-                    if (r >= 145 && g <= 105 && b <= 125 && r >= g + 45 && r >= b + 45)
-                        redPixels++;
+                    redSum += red;
+                    greenSum += green;
+                    blueSum += blue;
+                    redSquaredSum += red * red;
+                    greenSquaredSum += green * green;
+                    blueSquaredSum += blue * blue;
                 }
             }
 
-            return redPixels / (double)Math.Max(1, width * height);
+            var redMean = redSum / pixelCount;
+            var greenMean = greenSum / pixelCount;
+            var blueMean = blueSum / pixelCount;
+
+            return new StoryMoonColorStatistics(
+                redMean,
+                greenMean,
+                blueMean,
+                StandardDeviation(redSquaredSum, redMean, pixelCount),
+                StandardDeviation(greenSquaredSum, greenMean, pixelCount),
+                StandardDeviation(blueSquaredSum, blueMean, pixelCount));
         }
+
+        private static double StandardDeviation(
+            double squaredSum,
+            double mean,
+            int pixelCount)
+        {
+            var variance = squaredSum / pixelCount - mean * mean;
+            return Math.Sqrt(Math.Max(0, variance));
+        }
+
+        private static bool MatchesStoryMoonBackground(
+            StoryMoonColorStatistics measured,
+            StoryMoonColorStatistics expected)
+        {
+            return
+                Math.Abs(measured.RedMean - expected.RedMean) <= StoryMoonBackgroundTolerance &&
+                Math.Abs(measured.GreenMean - expected.GreenMean) <= StoryMoonBackgroundTolerance &&
+                Math.Abs(measured.BlueMean - expected.BlueMean) <= StoryMoonBackgroundTolerance &&
+                Math.Abs(measured.RedStandardDeviation - expected.RedStandardDeviation) <= StoryMoonBackgroundTolerance &&
+                Math.Abs(measured.GreenStandardDeviation - expected.GreenStandardDeviation) <= StoryMoonBackgroundTolerance &&
+                Math.Abs(measured.BlueStandardDeviation - expected.BlueStandardDeviation) <= StoryMoonBackgroundTolerance;
+        }
+
+        private readonly record struct StoryMoonBackgroundPatch(
+            Rect Bounds,
+            StoryMoonColorStatistics Expected);
+
+        private readonly record struct StoryMoonColorStatistics(
+            double RedMean,
+            double GreenMean,
+            double BlueMean,
+            double RedStandardDeviation,
+            double GreenStandardDeviation,
+            double BlueStandardDeviation);
 
         public static bool HasMoonTextHeuristic(Mat image)
         {
