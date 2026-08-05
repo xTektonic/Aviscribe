@@ -1,4 +1,5 @@
 using Aviscribe.Core.Capture;
+using Aviscribe.Core.Diagnostics;
 using Aviscribe.Core.KingdomDetection;
 using Aviscribe.Core.Ocr;
 using OpenCvSharp;
@@ -100,6 +101,46 @@ public sealed class FrameProcessorKingdomDetectionTests
         Assert.Equal("Cascade", state.CurrentKingdom);
     }
 
+    [Theory]
+    [InlineData(0.0, false)]
+    [InlineData(0.25, true)]
+    public void KingdomCheckLoggingRequiresNonZeroScore(
+        double score,
+        bool shouldLog)
+    {
+        var repository = MoonRepository.LoadDefault();
+        var state = new GameState();
+        state.SetKingdom("Cascade");
+        state.Settings.AutomaticallySwitchKingdoms = true;
+        var result = KingdomDetectionResult.Rejected(
+            KingdomDetectionStatus.LowConfidence,
+            score);
+        var kingdomDetector = new ScriptedKingdomDetector(result);
+        var diagnostics = new RecordingDiagnostics();
+        using var processor = new FrameProcessor(
+            new EmptyOcrService(),
+            new MoonMatcher(
+                repository,
+                state.Settings.InputLanguage,
+                state.Settings.OutputLanguage),
+            state,
+            new CountingAbsentTextDetector(),
+            diagnostics: diagnostics,
+            kingdomDetector: kingdomDetector);
+
+        processor.Start();
+        processor.PushFrame(Frame(DateTime.UtcNow));
+        Assert.True(SpinWait.SpinUntil(
+            () => kingdomDetector.CallCount >= 1,
+            TimeSpan.FromSeconds(2)));
+        processor.Stop();
+
+        Assert.Equal(
+            shouldLog,
+            diagnostics.Messages.Any(message =>
+                message.StartsWith("KINGDOM DETECTION", StringComparison.Ordinal)));
+    }
+
     private static VideoFrame Frame(DateTime timestamp)
     {
         return new VideoFrame(
@@ -143,6 +184,43 @@ public sealed class FrameProcessorKingdomDetectionTests
         {
             Interlocked.Increment(ref _callCount);
             return result;
+        }
+    }
+
+    private sealed class RecordingDiagnostics : IAppDiagnostics
+    {
+        private readonly object _sync = new();
+        private readonly List<string> _messages = [];
+
+        public string LogDirectory => string.Empty;
+
+        public IReadOnlyList<DiagnosticEntry> RecentEntries => [];
+
+        public IReadOnlyList<string> Messages
+        {
+            get
+            {
+                lock (_sync)
+                    return _messages.ToArray();
+            }
+        }
+
+        public void Debug(string message)
+        {
+            lock (_sync)
+                _messages.Add(message);
+        }
+
+        public void Information(string message)
+        {
+        }
+
+        public void Error(string message, Exception? exception = null)
+        {
+        }
+
+        public void Dispose()
+        {
         }
     }
 }

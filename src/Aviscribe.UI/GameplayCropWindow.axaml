@@ -5,49 +5,55 @@
         Width="1220" Height="820"
         MinWidth="900" MinHeight="620"
         Title="Crop Gameplay">
-  <Grid Margin="16" RowDefinitions="Auto,*,Auto" RowSpacing="12">
+  <Grid Margin="20" RowDefinitions="Auto,*,Auto" RowSpacing="16">
     <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
-      <StackPanel>
-        <TextBlock Text="Gameplay crop" FontSize="20" FontWeight="SemiBold"/>
-        <TextBlock Text="Drag the frame or its handles. The selection stays 16:9 for accurate OCR."
-                   Opacity="0.7"/>
+      <StackPanel Spacing="3">
+        <TextBlock Classes="eyebrow" Text="CAPTURE SETUP"/>
+        <TextBlock Classes="pageTitle" Text="Gameplay crop"/>
+        <TextBlock Classes="bodyMuted" Text="Drag the frame or its handles. The selection stays 16:9 for accurate OCR."/>
       </StackPanel>
       <CheckBox Name="chkShowGuides" Grid.Column="1" Content="Show OCR guides"
-                IsChecked="True" VerticalAlignment="Center"/>
+                IsChecked="True" VerticalAlignment="Center"
+                ToolTip.Tip="Show the areas Aviscribe checks for Talkatoo, Moon Get, and Story Moon text."/>
       <Button Name="btnRefreshFrame" Grid.Column="2" Content="Refresh Frame"
-              VerticalAlignment="Center" MinWidth="120"/>
+              VerticalAlignment="Center" MinWidth="120"
+              ToolTip.Tip="Request a new uncropped frame from the active capture source."/>
     </Grid>
 
-    <Grid Grid.Row="1" ColumnDefinitions="*,260" ColumnSpacing="14">
-      <Border Background="Black" CornerRadius="6" ClipToBounds="True">
+    <Grid Grid.Row="1" ColumnDefinitions="*,270" ColumnSpacing="16">
+      <Border Background="Black" CornerRadius="8" ClipToBounds="True">
         <local:CropSelectionControl Name="cropCanvas" Focusable="True"/>
       </Border>
 
-      <Border Grid.Column="1" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-              BorderThickness="1" CornerRadius="6" Padding="14">
+      <Border Grid.Column="1" Classes="card">
         <StackPanel Spacing="12">
-          <TextBlock Text="Fine tune" FontSize="16" FontWeight="SemiBold"/>
-          <TextBlock Name="txtSourceSize" Text="Waiting for a frame…" Opacity="0.7"/>
+          <TextBlock Classes="sectionTitle" Text="Fine tune"/>
+          <TextBlock Name="txtSourceSize" Text="Waiting for a frame..." Classes="caption"/>
 
           <Grid ColumnDefinitions="70,*" RowDefinitions="Auto,Auto,Auto,Auto"
                 ColumnSpacing="8" RowSpacing="8">
-            <TextBlock Text="X" VerticalAlignment="Center"/>
+            <TextBlock Text="X" VerticalAlignment="Center"
+                       ToolTip.Tip="Horizontal position of the crop's left edge."/>
             <NumericUpDown Name="numCropX" Grid.Column="1" Minimum="0" Increment="1"
                            FormatString="0"/>
-            <TextBlock Grid.Row="1" Text="Y" VerticalAlignment="Center"/>
+            <TextBlock Grid.Row="1" Text="Y" VerticalAlignment="Center"
+                       ToolTip.Tip="Vertical position of the crop's top edge."/>
             <NumericUpDown Name="numCropY" Grid.Row="1" Grid.Column="1" Minimum="0"
                            Increment="1" FormatString="0"/>
-            <TextBlock Grid.Row="2" Text="Width" VerticalAlignment="Center"/>
+            <TextBlock Grid.Row="2" Text="Width" VerticalAlignment="Center"
+                       ToolTip.Tip="Width of the selected gameplay area in source pixels."/>
             <NumericUpDown Name="numCropWidth" Grid.Row="2" Grid.Column="1" Minimum="16"
                            Increment="16" FormatString="0"/>
-            <TextBlock Grid.Row="3" Text="Height" VerticalAlignment="Center"/>
+            <TextBlock Grid.Row="3" Text="Height" VerticalAlignment="Center"
+                       ToolTip.Tip="Height of the selected gameplay area in source pixels."/>
             <NumericUpDown Name="numCropHeight" Grid.Row="3" Grid.Column="1" Minimum="9"
                            Increment="9" FormatString="0"/>
           </Grid>
 
-          <TextBlock Text="Arrow keys move 1 px; hold Shift for 10 px."
-                     TextWrapping="Wrap" Opacity="0.7"/>
-          <Button Name="btnResetCrop" Content="Reset to Full Frame"/>
+          <TextBlock Classes="caption" Text="Arrow keys move 1 px; hold Shift for 10 px."
+                     TextWrapping="Wrap"/>
+          <Button Name="btnResetCrop" Content="Reset to Full Frame"
+                  ToolTip.Tip="Restore the largest centered 16:9 crop for this source."/>
 
           <Separator/>
           <TextBlock Text="Guide colors" FontWeight="SemiBold"/>
@@ -65,16 +71,16 @@
           </StackPanel>
 
           <TextBlock Name="txtCropStatus" Text="Refresh the frame to begin."
-                     TextWrapping="Wrap" Opacity="0.7"/>
+                     TextWrapping="Wrap" Classes="caption"/>
         </StackPanel>
       </Border>
     </Grid>
 
     <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-      <TextBlock Text="Changes take effect only when you choose Apply."
-                 VerticalAlignment="Center" Opacity="0.7"/>
+      <TextBlock Classes="caption" Text="Changes take effect only when you choose Apply."
+                 VerticalAlignment="Center"/>
       <Button Name="btnCancel" Grid.Column="1" Content="Cancel" MinWidth="90"/>
-      <Button Name="btnApply" Grid.Column="2" Content="Apply" MinWidth="90"
+      <Button Name="btnApply" Grid.Column="2" Classes="primary" Content="Apply" MinWidth="90"
               IsDefault="True"/>
     </Grid>
   </Grid>

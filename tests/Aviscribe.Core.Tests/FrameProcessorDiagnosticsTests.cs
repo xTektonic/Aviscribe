@@ -7,15 +7,10 @@ namespace Aviscribe.Core.Tests;
 
 public sealed class FrameProcessorDiagnosticsTests
 {
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task OcrEventsFollowDebugLoggingSetting(bool debugEnabled)
+    [Fact]
+    public async Task OcrEventsAreAlwaysLogged()
     {
-        var diagnostics = new RecordingDiagnostics
-        {
-            DebugEnabled = debugEnabled
-        };
+        var diagnostics = new RecordingDiagnostics();
         using var ocr = new RecordingOcrService("diagnostic probe");
         var state = new GameState();
         state.SetKingdom("Cascade");
@@ -66,21 +61,14 @@ public sealed class FrameProcessorDiagnosticsTests
             processor.Stop();
         }
 
-        if (debugEnabled)
-        {
-            Assert.Contains(
-                diagnostics.Messages,
-                message => message.StartsWith(
-                    "ENQUEUE OCR (Talkatoo",
-                    StringComparison.Ordinal));
-            Assert.Contains(
-                "OCR RESULT (Talkatoo): \"diagnostic probe\"",
-                diagnostics.Messages);
-        }
-        else
-        {
-            Assert.Empty(diagnostics.Messages);
-        }
+        Assert.Contains(
+            diagnostics.Messages,
+            message => message.StartsWith(
+                "ENQUEUE OCR (Talkatoo",
+                StringComparison.Ordinal));
+        Assert.Contains(
+            "OCR RESULT (Talkatoo): \"diagnostic probe\"",
+            diagnostics.Messages);
     }
 
     private sealed class RecordingOcrService(string result) :
@@ -130,7 +118,6 @@ public sealed class FrameProcessorDiagnosticsTests
         private readonly object _sync = new();
         private readonly List<string> _messages = [];
 
-        public bool DebugEnabled { get; set; }
         public string LogDirectory => string.Empty;
 
         public IReadOnlyList<DiagnosticEntry> RecentEntries => [];
@@ -146,9 +133,6 @@ public sealed class FrameProcessorDiagnosticsTests
 
         public void Debug(string message)
         {
-            if (!DebugEnabled)
-                return;
-
             lock (_sync)
                 _messages.Add(message);
         }

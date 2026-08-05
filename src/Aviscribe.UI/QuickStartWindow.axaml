@@ -1,0 +1,79 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Aviscribe.UI.QuickStartWindow"
+        Title="Quick Start"
+        Width="780" Height="560"
+        MinWidth="720" MinHeight="520"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+  <Grid Margin="28" RowDefinitions="Auto,*,Auto" RowSpacing="20">
+    <StackPanel Spacing="6">
+      <TextBlock Classes="eyebrow" Text="WELCOME TO AVISCRIBE"/>
+      <TextBlock Classes="pageTitle" Text="Set up the translator, then let it work"/>
+      <TextBlock Classes="bodyMuted"
+                 Text="Aviscribe reads supported moon text automatically while you view and manage the run from one screen."
+                 TextWrapping="Wrap"/>
+    </StackPanel>
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="14">
+      <Border Classes="card compact">
+        <StackPanel Spacing="10">
+          <TextBlock Classes="eyebrow" Text="BEFORE YOUR RUN"/>
+          <StackPanel Spacing="3">
+            <TextBlock Classes="sectionTitle" Text="1. Capture the game"/>
+            <TextBlock Classes="bodyMuted"
+                       Text="In Settings &gt; Setup, choose a capture source and confirm that the full gameplay area appears in the preview."
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+          <Separator/>
+          <StackPanel Spacing="3">
+            <TextBlock Classes="sectionTitle" Text="2. Choose your languages"/>
+            <TextBlock Classes="bodyMuted"
+                       Text="Game text language must match the game. Display language controls the names shown in Aviscribe."
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+          <Separator/>
+          <StackPanel Spacing="3">
+            <TextBlock Classes="sectionTitle" Text="3. Check the other settings"/>
+            <TextBlock Classes="bodyMuted"
+                       Text="Review the remaining Setup options, then check Run Configuration for the category and route options for this run."
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Column="1" Classes="card compact">
+        <StackPanel Spacing="10">
+          <TextBlock Classes="eyebrow" Text="DURING A RUN"/>
+          <StackPanel Spacing="3">
+            <TextBlock Classes="sectionTitle" Text="1. Start capture"/>
+            <TextBlock Classes="bodyMuted"
+                       Text="On the Run screen, select the current kingdom if needed and click Start Capture. Supported moon reads are handled automatically."
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+          <Separator/>
+          <StackPanel Spacing="5">
+            <TextBlock Classes="sectionTitle" Text="2. Check and correct the lists"/>
+            <TextBlock Classes="bodyMuted"
+                       Text="Pending holds detected moons. Counted and Wrong / Uncounted show their final result."
+                       TextWrapping="Wrap"/>
+            <TextBlock Classes="bodyMuted"
+                       Text="Click items or drag them between lists to make corrections. Kingdom Moons lets you add a moon manually, while Needs Review asks you to resolve an uncertain read."
+                       TextWrapping="Wrap"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+      <TextBlock Classes="caption" Text="You can reopen this guide from Settings > Help."
+                 VerticalAlignment="Center"/>
+      <Button Name="btnClose" Grid.Column="1" Content="Got it" MinWidth="96"
+              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+      <Button Name="btnOpenSettings" Grid.Column="2" Classes="primary"
+              Content="Open Settings" MinWidth="132" IsDefault="True"
+              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+    </Grid>
+  </Grid>
+</Window>

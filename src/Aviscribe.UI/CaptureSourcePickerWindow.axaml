@@ -6,29 +6,33 @@
         Width="560" Height="500"
         MinWidth="420" MinHeight="360"
         WindowStartupLocation="CenterOwner">
-  <Grid RowDefinitions="Auto,*,Auto" Margin="18" RowSpacing="14">
-    <StackPanel Spacing="4">
-      <TextBlock FontSize="20" FontWeight="SemiBold" Text="Choose a capture source"/>
-      <TextBlock Opacity="0.7" Text="Select a video device or application window."/>
+  <Grid RowDefinitions="Auto,*,Auto" Margin="24" RowSpacing="18">
+    <StackPanel Spacing="5">
+      <TextBlock Classes="eyebrow" Text="CAPTURE SETUP"/>
+      <TextBlock Classes="pageTitle" Text="Choose a capture source"/>
+      <TextBlock Classes="bodyMuted" Text="Select the capture card, camera, virtual camera, or application window showing gameplay." TextWrapping="Wrap"/>
     </StackPanel>
-    <ListBox Name="lstCaptureSources" Grid.Row="1">
-      <ListBox.ItemTemplate>
-        <DataTemplate>
-          <Grid ColumnDefinitions="110,*" Margin="6" IsEnabled="{Binding Device.IsAvailable}">
-            <TextBlock Text="{Binding KindLabel}" Opacity="0.65" VerticalAlignment="Center"/>
-            <StackPanel Grid.Column="1" Spacing="2">
-              <TextBlock Text="{Binding Device.Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-              <TextBlock Text="{Binding Detail}" Opacity="0.55" FontSize="12" TextWrapping="Wrap"/>
-            </StackPanel>
-          </Grid>
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
+    <Border Grid.Row="1" Classes="card" Padding="6">
+      <ListBox Name="lstCaptureSources" BorderThickness="0" Background="Transparent">
+        <ListBox.ItemTemplate>
+          <DataTemplate>
+            <Grid ColumnDefinitions="110,*" Margin="8" IsEnabled="{Binding Device.IsAvailable}">
+              <TextBlock Text="{Binding KindLabel}" Classes="caption" VerticalAlignment="Center"/>
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="{Binding Device.Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding Detail}" Classes="caption" TextWrapping="Wrap"/>
+              </StackPanel>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Border>
     <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-      <TextBlock Name="txtPickerStatus" VerticalAlignment="Center" Opacity="0.7"
+      <TextBlock Name="txtPickerStatus" VerticalAlignment="Center" Classes="caption"
                  TextWrapping="Wrap"/>
       <Button Name="btnCancel" Grid.Column="1" Content="Cancel"/>
-      <Button Name="btnChoose" Grid.Column="2" Content="Choose" IsDefault="True"/>
+      <Button Name="btnChoose" Grid.Column="2" Classes="primary" Content="Choose" IsDefault="True"
+              ToolTip.Tip="Use the selected source for capture and preview."/>
     </Grid>
   </Grid>
 </Window>
