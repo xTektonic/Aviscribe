@@ -29,7 +29,7 @@ namespace Aviscribe.Classifier
             using var ocr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
             var repo = MoonRepository.LoadDefault();
             var settings = new RunSettings();
-            var matcher = new MoonMatcher(repo, settings.InputLanguage, settings.OutputLanguage);
+            var matcher = new MoonMatcher(repo, settings.InputLanguage);
             using var frame = new Mat();
             var failures = new List<ProbeRequest>();
 

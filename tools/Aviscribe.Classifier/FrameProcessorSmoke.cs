@@ -39,7 +39,7 @@ namespace Aviscribe.Classifier
             state.SetKingdom("Sand");
 
             using var ocr = new BlockingOcrService("圓沙丘的頂端");
-            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage, state.Settings.OutputLanguage);
+            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state, new TalkatooOnlyDetector());
 
             processor.Start();
@@ -122,7 +122,7 @@ namespace Aviscribe.Classifier
             state.MarkCollected(moon1);
 
             using var ocr = new StaticOcrService("Cascade Timer Challenge");
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new RegionOnlyDetector(OcrRegionType.Talkatoo));
             var ambiguousEvents = 0;
             processor.AmbiguousMatchReceived += (_, _) => ambiguousEvents++;
@@ -156,7 +156,7 @@ namespace Aviscribe.Classifier
             state.MarkCollected(moon1);
 
             using var ocr = new CountingOcrService("Cascade Timer Challenge");
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
             var ambiguousEvents = 0;
             processor.AmbiguousMatchReceived += (_, _) => ambiguousEvents++;
@@ -197,7 +197,7 @@ namespace Aviscribe.Classifier
             state.AddPending(moon2);
 
             using var ocr = new StaticOcrService("Cascade Timer Challenge");
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new RegionOnlyDetector(OcrRegionType.MoonGet));
             var ambiguousEvents = 0;
             processor.AmbiguousMatchReceived += (_, _) => ambiguousEvents++;
@@ -238,7 +238,7 @@ namespace Aviscribe.Classifier
             state.AddPending(hero);
 
             using var ocr = new StaticOcrService("跳繩");
-            var matcher = new MoonMatcher(repo, GameLanguage.ChineseTraditional, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.ChineseTraditional);
             var processor = new FrameProcessor(ocr, matcher, state, new RegionOnlyDetector(OcrRegionType.MoonGet));
             var ambiguousEvents = 0;
             processor.AmbiguousMatchReceived += (_, _) => ambiguousEvents++;
@@ -278,7 +278,7 @@ namespace Aviscribe.Classifier
             var state = CreateChineseState("Metro");
 
             using var ocr = new StaticOcrService("跳繩");
-            var matcher = new MoonMatcher(repo, GameLanguage.ChineseTraditional, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.ChineseTraditional);
             var processor = new FrameProcessor(ocr, matcher, state, new RegionOnlyDetector(OcrRegionType.MoonGet));
             var ambiguousEvents = 0;
             processor.AmbiguousMatchReceived += (_, _) => ambiguousEvents++;
@@ -310,7 +310,7 @@ namespace Aviscribe.Classifier
             var state = CreateEnglishState("Cascade");
 
             using var ocr = new StaticOcrService("Cascade Timer Challenge");
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new RegionOnlyDetector(OcrRegionType.Talkatoo));
             var ambiguousEvents = 0;
             processor.AmbiguousMatchReceived += (_, _) => ambiguousEvents++;
@@ -344,7 +344,7 @@ namespace Aviscribe.Classifier
             var repo = CreateRepo(oldMoon, middleMoon, recentMoon, latestMoon);
             var state = CreateEnglishState("Cascade");
             using var ocr = new ColorOcrService();
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
 
             processor.Start();
@@ -382,7 +382,7 @@ namespace Aviscribe.Classifier
             var repo = CreateRepo(firstMoon, secondMoon);
             var state = CreateEnglishState("Cascade");
             using var ocr = new ColorOcrService(blockFirstRead: false);
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
 
             processor.Start();
@@ -406,7 +406,7 @@ namespace Aviscribe.Classifier
             var repo = CreateRepo(moon);
             var state = CreateEnglishState("Cascade");
             using var ocr = new CountingOcrService("Old Real Moon");
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
 
             processor.Start();
@@ -439,7 +439,7 @@ namespace Aviscribe.Classifier
             var repo = CreateRepo(moon);
             var state = CreateEnglishState("Cascade");
             using var ocr = new BlockingCountingOcrService("Old Real Moon");
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
 
             processor.Start();
@@ -475,7 +475,7 @@ namespace Aviscribe.Classifier
             var repo = CreateRepo(moon);
             var state = CreateEnglishState("Cascade");
             using var ocr = new CountingOcrService("Old Real Moon");
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
 
             processor.Start();
@@ -508,7 +508,7 @@ namespace Aviscribe.Classifier
             var repo = CreateRepo(realMoon);
             var state = CreateEnglishState("Cascade");
             using var ocr = new FalseThenRealColorOcrService();
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
             var ambiguousEvents = 0;
             processor.AmbiguousMatchReceived += (_, _) => ambiguousEvents++;
@@ -551,7 +551,7 @@ namespace Aviscribe.Classifier
             var state = CreateEnglishState("Cascade");
             state.AddPending(collectionMoon);
             using var ocr = new RegionSizedOcrService("False Talkatoo Moon", "Collected Moon");
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new MoonGetAndTalkatooDetector());
 
             processor.Start();
@@ -579,7 +579,7 @@ namespace Aviscribe.Classifier
             var state = CreateEnglishState("Cascade");
             state.AddPending(moon);
             using var ocr = new CountingOcrService("Cascade Timer Challenge 2");
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new MoonGetAndStoryDetector());
 
             processor.Start();
@@ -614,7 +614,7 @@ namespace Aviscribe.Classifier
             var repo = CreateRepo(moon);
             var state = CreateEnglishState("Cascade");
             using var ocr = new CountingOcrService("A Real Moon");
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
 
             processor.Start();
@@ -645,7 +645,7 @@ namespace Aviscribe.Classifier
             var repo = CreateRepo(moon);
             var state = CreateEnglishState("Cascade");
             using var ocr = new CountingOcrService(string.Empty);
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
             var processor = new FrameProcessor(ocr, matcher, state, new ColorTalkatooDetector());
 
             processor.Start();

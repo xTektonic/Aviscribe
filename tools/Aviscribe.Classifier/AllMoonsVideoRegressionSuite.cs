@@ -91,7 +91,7 @@ namespace Aviscribe.Classifier
             {
                 IncludePostGameKingdoms = true
             };
-            var matcher = new MoonMatcher(repo, settings.InputLanguage, settings.OutputLanguage);
+            var matcher = new MoonMatcher(repo, settings.InputLanguage);
             using var frame = new Mat();
             var failures = new List<AllMoonsFailure>();
 

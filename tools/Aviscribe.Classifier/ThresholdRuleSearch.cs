@@ -5,18 +5,6 @@ namespace Aviscribe.Classifier
 {
     internal static class ThresholdRuleSearch
     {
-        public static IReadOnlyList<ThresholdSearchResult> SearchAll(
-            string dataRoot,
-            double minimumRecallTarget,
-            Action<string>? progress = null)
-        {
-            return new[]
-            {
-                SearchRegion(dataRoot, OcrRegionType.Talkatoo, minimumRecallTarget, progress),
-                SearchRegion(dataRoot, OcrRegionType.MoonGet, minimumRecallTarget, progress)
-            };
-        }
-
         public static IReadOnlyList<ThresholdRuleSetCandidate> SearchRuleSets(
             string dataRoot,
             double minimumRecallTarget,
@@ -69,28 +57,6 @@ namespace Aviscribe.Classifier
             }
 
             return best;
-        }
-
-        public static ThresholdSearchResult SearchRegion(
-            string dataRoot,
-            OcrRegionType regionType,
-            double minimumRecallTarget,
-            Action<string>? progress = null)
-        {
-            var region = regionType.ToString();
-            var rows = DatasetManifest.EnumerateRows(dataRoot, includeDimensions: false)
-                .Where(r => r.Region == region && (r.Label == "good" || r.Label == "bad"))
-                .ToList();
-
-            var samples = LoadSamples(dataRoot, rows, region, progress);
-            if (samples.Count == 0)
-                return ThresholdSearchResult.Empty(regionType);
-
-            var candidates = new List<ThresholdSearchResult>();
-            foreach (var feature in FeatureAccessors.All)
-                candidates.AddRange(SearchFeature(regionType, samples, feature));
-
-            return SelectBest(candidates, minimumRecallTarget);
         }
 
         public static List<ThresholdSearchResult> SearchFeature(

@@ -38,7 +38,7 @@ namespace Aviscribe.Classifier
             {
                 IncludePostGameKingdoms = true
             };
-            var matcher = new MoonMatcher(repo, settings.InputLanguage, settings.OutputLanguage);
+            var matcher = new MoonMatcher(repo, settings.InputLanguage);
             var candidates = Candidates(repo, regionType, settings, kingdom);
             var detectionBounds = DetectionBounds(regionType);
             var ocrBounds = OcrBounds(regionType);

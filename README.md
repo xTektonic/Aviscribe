@@ -50,10 +50,6 @@ profiles are disabled, set `Aviscribe.Desktop` as the startup project instead.
 `Aviscribe.Core`, `Aviscribe.Core.Capture`, `Aviscribe.Capture`, and
 `Aviscribe.UI` are libraries and are debugged through the desktop process.
 
-After switching from an older checkout that used the pre-normalization project
-paths, close Visual Studio and remove the ignored `.vs` directory once so the
-IDE does not restore retired projects such as `Core\Core.csproj`.
-
 ```text
 dotnet restore Aviscribe.sln
 dotnet build Aviscribe.sln --configuration Release --no-restore
@@ -70,10 +66,6 @@ The solution contains:
 - `src/Aviscribe.Desktop`: the single GUI entry point and dependency composition
 - `tools/Aviscribe.Classifier`: audits, experiments, and smoke/regression commands
 - `tests/Aviscribe.Core.Tests` and `tests/Aviscribe.Capture.Tests`: hardware-independent tests
-
-The legacy Windows-only application and Accord capture projects are retained
-temporarily for parity reference but are not part of the maintained solution or
-release path.
 
 ## User interface and first-run setup
 

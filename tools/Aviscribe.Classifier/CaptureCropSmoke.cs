@@ -66,8 +66,7 @@ namespace Aviscribe.Classifier
             state.SetKingdom("Sand");
             var matcher = new MoonMatcher(
                 repo,
-                state.Settings.InputLanguage,
-                state.Settings.OutputLanguage);
+                state.Settings.InputLanguage);
             using var detector = new GameplayProbeDetector();
             using var ocr = new NoOpOcrService();
             var crop = CaptureCropSettings.FromRect(

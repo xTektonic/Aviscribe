@@ -20,8 +20,7 @@ public sealed class FrameProcessorKingdomDetectionTests
             new EmptyOcrService(),
             new MoonMatcher(
                 repository,
-                state.Settings.InputLanguage,
-                state.Settings.OutputLanguage),
+                state.Settings.InputLanguage),
             state,
             new CountingAbsentTextDetector(),
             kingdomDetector: kingdomDetector);
@@ -53,8 +52,7 @@ public sealed class FrameProcessorKingdomDetectionTests
             new EmptyOcrService(),
             new MoonMatcher(
                 repository,
-                state.Settings.InputLanguage,
-                state.Settings.OutputLanguage),
+                state.Settings.InputLanguage),
             state,
             textDetector,
             kingdomDetector: kingdomDetector);
@@ -81,8 +79,7 @@ public sealed class FrameProcessorKingdomDetectionTests
             new EmptyOcrService(),
             new MoonMatcher(
                 repository,
-                state.Settings.InputLanguage,
-                state.Settings.OutputLanguage),
+                state.Settings.InputLanguage),
             state,
             new CountingAbsentTextDetector(),
             kingdomDetector: kingdomDetector);
@@ -121,8 +118,7 @@ public sealed class FrameProcessorKingdomDetectionTests
             new EmptyOcrService(),
             new MoonMatcher(
                 repository,
-                state.Settings.InputLanguage,
-                state.Settings.OutputLanguage),
+                state.Settings.InputLanguage),
             state,
             new CountingAbsentTextDetector(),
             diagnostics: diagnostics,

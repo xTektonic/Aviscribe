@@ -16,8 +16,7 @@ public sealed class FrameProcessorDiagnosticsTests
         state.SetKingdom("Cascade");
         var matcher = new MoonMatcher(
             new MoonRepository(),
-            state.Settings.InputLanguage,
-            state.Settings.OutputLanguage);
+            state.Settings.InputLanguage);
         using var detector = new TalkatooOnlyDetector();
         using var processor = new FrameProcessor(
             ocr,

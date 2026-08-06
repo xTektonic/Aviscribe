@@ -12,20 +12,15 @@ namespace Aviscribe.Core
         // Language of OCR input (what Talkatoo shows in-game)
         private readonly GameLanguage _inputLanguage;
 
-        // Language you want to DISPLAY / send to OBS
-        private readonly GameLanguage _outputLanguage;
-
         public double Threshold { get; set; } = 0.6;
         public int MaxCandidates { get; set; } = 3;
 
         public MoonMatcher(
             MoonRepository repo,
-            GameLanguage inputLanguage,
-            GameLanguage outputLanguage)
+            GameLanguage inputLanguage)
         {
             _repo = repo;
             _inputLanguage = inputLanguage;
-            _outputLanguage = outputLanguage;
         }
 
         public MatchResult Match(string input, string kingdom)
@@ -164,20 +159,6 @@ namespace Aviscribe.Core
         {
             var match = Regex.Match(input, @"[0-9]+$");
             return match.Success ? match.Value : null;
-        }
-
-        public string GetDisplayName(Moon? moon)
-        {
-            if (moon == null)
-                return string.Empty;
-
-            return moon.GetName(_outputLanguage) ?? moon.English;
-        }
-
-        public string GetBestMatchDisplayName(string input, string kingdom)
-        {
-            var result = Match(input, kingdom);
-            return GetDisplayName(result.BestMatch);
         }
 
         private string Normalize(string input)

@@ -650,8 +650,7 @@ namespace Aviscribe.UI
         {
             var matcher = new MoonMatcher(
                 _repo,
-                _state.Settings.InputLanguage,
-                _state.Settings.OutputLanguage
+                _state.Settings.InputLanguage
             );
 
             var ocr = new OnnxOcrService(
@@ -660,7 +659,7 @@ namespace Aviscribe.UI
                 _state.Settings.OcrMode,
                 _diagnostics);
             _ocrService = ocr;
-            var detector = LoadTextPresenceDetector();
+            var detector = new HeuristicTextPresenceDetector();
             var kingdomDetector = LoadKingdomDetector();
 
             _processor = new FrameProcessor(
@@ -691,11 +690,6 @@ namespace Aviscribe.UI
                 _processor?.Start();
 
             previous?.Dispose();
-        }
-
-        private ITextPresenceDetector LoadTextPresenceDetector()
-        {
-            return new HeuristicTextPresenceDetector();
         }
 
         private IKingdomDetector? LoadKingdomDetector()
