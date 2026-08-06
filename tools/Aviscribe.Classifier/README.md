@@ -1,45 +1,36 @@
 # Aviscribe Classifier
 
-This project is the tracked home for classifier experiments and detector benchmarks.
-It intentionally reads the existing local data by path instead of moving or rewriting it.
+Aviscribe.Classifier contains maintainer tools for inspecting datasets,
+benchmarking text detectors, extracting video frames, auditing OCR events, and
+exporting detector data used by the application. It is not required to run the
+desktop application.
 
-Default data root:
+## Data
 
-```text
-[removed]
-```
+Commands use the repository-relative tools/Aviscribe.Classifier/Data directory
+when no path is supplied. Pass another data directory as the command's first
+argument when needed. The tool reads local datasets and does not move or rewrite
+the source images. Its generated Data, Output, and Models directories are
+ignored by Git.
 
-Current roles:
+## Common commands
 
-- `Talkatoo`: cropped Talkatoo moon text region.
-- `MoonGet`: cropped normal moon-get text region.
-- `StoryMoons`: uncategorized full-frame samples from an All Story Moons run. These need a separate ROI/normalization path because the text is diagonal.
+Run these from the repository root:
 
-Near-term workflow:
+~~~text
+dotnet run --project tools/Aviscribe.Classifier -- summary [dataRoot]
+dotnet run --project tools/Aviscribe.Classifier -- benchmark [dataRoot]
+dotnet run --project tools/Aviscribe.Classifier -- manifest [dataRoot] [outputCsv]
+dotnet run --project tools/Aviscribe.Classifier -- features [dataRoot] [outputCsv]
+dotnet run --project tools/Aviscribe.Classifier -- thresholds [dataRoot]
+dotnet run --project tools/Aviscribe.Classifier -- rules [dataRoot] [outputJson]
+dotnet run --project tools/Aviscribe.Classifier -- train-linear [dataRoot] [outputJson]
+dotnet run --project tools/Aviscribe.Classifier -- extract <videoPath> <outputDir> [modulo] [full|regions]
+dotnet run --project tools/Aviscribe.Classifier -- story-crops [dataRoot] [outputDir]
+dotnet run --project tools/Aviscribe.Classifier -- ocr-provider-benchmark
+~~~
 
-1. Use this project to summarize label counts and benchmark the current OpenCV gates.
-2. Create a manifest-based dataset split so mislabeled samples can be corrected without moving files.
-3. Train and export small CPU-first binary ONNX classifiers for `Talkatoo`, `MoonGet`, and `StoryMoon`.
-4. Feed classifier confidence into the core frame state machine before OCR is queued.
+Pass an unknown command such as help to print the full command list.
 
-## Commands
-
-Run from the repository root:
-
-```text
-dotnet run --project tools/Aviscribe.Classifier -- summary
-dotnet run --project tools/Aviscribe.Classifier -- benchmark
-dotnet run --project tools/Aviscribe.Classifier -- manifest
-dotnet run --project tools/Aviscribe.Classifier -- features
-dotnet run --project tools/Aviscribe.Classifier -- thresholds
-dotnet run --project tools/Aviscribe.Classifier -- rules
-dotnet run --project tools/Aviscribe.Classifier -- train-linear
-dotnet run --project tools/Aviscribe.Classifier -- extract C:\path\run.mp4 tools\Aviscribe.Classifier\Data\Extracted 10 regions
-dotnet run --project tools/Aviscribe.Classifier -- story-crops
-```
-
-`tools\Aviscribe.Classifier\Data`, `tools\Aviscribe.Classifier\Output`, and
-`tools\Aviscribe.Classifier\Models` are ignored so local data mirrors, generated
-CSVs, and experimental models can live with the solution without being committed accidentally.
-
-`thresholds`, `rules`, and `train-linear` optimize for high recall by default because a false negative can miss a moon title entirely. Runtime exports only include regions that also stay under the false-positive cap, defaulting to 5%. Threshold rules are written to `src\Aviscribe.Core\Data\detector-rules.json`; linear models are written to `src\Aviscribe.Core\Data\linear-detector.json`.
+Detector rules and linear models can be exported to
+src/Aviscribe.Core/Data/. Review generated changes before committing them.

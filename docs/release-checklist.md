@@ -1,34 +1,26 @@
 # Release checklist
 
-The canonical development, packaging, platform troubleshooting, and manual
-hardware checklist is in the repository `README.md`. This file records the
-release gate that CI cannot complete without hardware or credentials.
+Use this checklist after CI has completed. CI builds the solution, runs tests
+and smoke checks, publishes the supported runtimes, and inspects the generated
+packages. The remaining checks require release hardware or credentials.
 
-## Automated gate
+## Hardware
 
-- Build all maintained projects with .NET 10.
-- Run both xUnit test projects.
-- Run state, crop, frame-processor, Talkatoo-confirmation, collection-confirmation,
-  and matcher smoke coverage.
-- Publish `win-x64`, `osx-arm64`, and `linux-x64` as self-contained payloads.
-- Verify OpenCV and ONNX Runtime native libraries in every payload.
-- Build and inspect the installer, DMG/app bundle, Debian package, and AppImage.
+- Install and uninstall the Windows package.
+- Open the macOS app from the DMG and test granted and denied camera and screen-recording permissions.
+- Install and remove the Debian package.
+- Run the AppImage normally and through its extraction fallback when FUSE is unavailable.
+- Test a physical camera, USB capture card, and OBS Virtual Camera on each supported OS.
+- Disconnect and reconnect a running device, refresh sources, and restart capture.
+- Test gameplay crops from 16:9, 4:3, and ultrawide sources.
+- Verify MoonGet, StoryMoon, and Talkatoo behavior during a representative run.
+- Inspect diagnostics and confirm packages contain the required native OpenCV and ONNX Runtime libraries.
+- Test a user profile and checkout path containing non-ASCII characters.
 
-## Hardware gate
+## Signing and branding
 
-- Follow the ten-step manual hardware checklist in `README.md`.
-- Record tested device names, native backend, selected format, OS version, and
-  whether device loss/restart succeeded.
-- Exercise camera permission granted and denied states on macOS and Windows.
-- Exercise a Linux user with and without `/dev/video*` permission.
-- Capture one visible and one covered window on Windows, macOS, and X11/XWayland.
-- Verify macOS Screen Recording permission denied/granted behavior and restart.
-- Confirm native Wayland opens the compositor window picker and receives preview frames.
-- Confirm a portal backend without the `WINDOW` capability shows the documented
-  unavailable-source guidance while XWayland windows remain selectable.
-
-## Credential and branding gate
-
-Public releases remain blocked until final icons and signing assets exist.
-Never store certificates or notarization credentials in the repository. CI
-should receive them through protected release-environment secrets.
+- Replace temporary package icons with final branded assets.
+- Sign Windows installers and release binaries.
+- Sign and notarize the macOS application with hardened-runtime entitlements.
+- Keep certificates and notarization credentials in protected release secrets,
+  never in the repository.

@@ -45,7 +45,6 @@ namespace Aviscribe.Windows.Capture
             VideoFrame frame = new VideoFrame(BitmapConverter.ToMat(bitmap), DateTime.UtcNow);
             FrameReceived?.Invoke(frame);
 
-            //bitmap.Save("C:\\Users\\[removed]\\Downloads\\moon_get.png");
         }
     }
 }

@@ -4,8 +4,6 @@ namespace Aviscribe.Core.Ocr
 {
     public class TextDetection
     {
-        //image.SaveImage("[removed]");
-
         public static bool HasTalkatooText(Mat image)
         {
             return HasYellowTalkatooText(image);
