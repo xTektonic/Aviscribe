@@ -44,9 +44,6 @@ public sealed class CaptureSourceSelection
         return filtered.FirstOrDefault();
     }
 
-    public string GetSelectedId(CaptureSourceKind kind) =>
-        _selectedIds.TryGetValue(kind, out var id) ? id : string.Empty;
-
     public IReadOnlyDictionary<CaptureSourceKind, string> Snapshot() =>
         new Dictionary<CaptureSourceKind, string>(_selectedIds);
 }

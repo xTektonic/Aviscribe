@@ -364,7 +364,6 @@ namespace Aviscribe.Classifier
         {
             var matcher = new MoonMatcher(
                 repo,
-                GameLanguage.English,
                 GameLanguage.English);
             return new FrameProcessor(ocr, matcher, state, detector);
         }

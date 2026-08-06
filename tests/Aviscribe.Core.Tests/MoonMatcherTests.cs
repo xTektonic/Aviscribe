@@ -11,7 +11,7 @@ public class MoonMatcherTests
         string expectedEnglishName)
     {
         var repository = MoonRepository.LoadDefault();
-        var matcher = new MoonMatcher(repository, inputLanguage, GameLanguage.English);
+        var matcher = new MoonMatcher(repository, inputLanguage);
 
         var result = matcher.Match(input, "Sand");
 
@@ -27,8 +27,7 @@ public class MoonMatcherTests
         var repository = MoonRepository.LoadDefault();
         var matcher = new MoonMatcher(
             repository,
-            GameLanguage.ChineseSimplified,
-            GameLanguage.English);
+            GameLanguage.ChineseSimplified);
 
         var result = matcher.Match(input, "Sand");
 
@@ -42,8 +41,7 @@ public class MoonMatcherTests
         var repository = MoonRepository.LoadDefault();
         var matcher = new MoonMatcher(
             repository,
-            GameLanguage.ChineseSimplified,
-            GameLanguage.English);
+            GameLanguage.ChineseSimplified);
         var variants = new[]
         {
             new Moon

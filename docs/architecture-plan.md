@@ -31,10 +31,6 @@ Maintained projects stay portable and map directly to their namespaces:
 - `src/Aviscribe.UI`: platform-neutral Avalonia views and controls
 - `src/Aviscribe.Desktop`: the single cross-platform GUI entry point
 
-The old Windows application and Accord capture projects remain outside the
-solution only as temporary parity references. They are not a runtime or release
-dependency.
-
 ## Detection Pipeline
 
 The intended runtime pipeline is:

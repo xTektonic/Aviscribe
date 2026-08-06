@@ -105,7 +105,7 @@ namespace Aviscribe.Classifier
             var state = new GameState();
             using var innerOcr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
             var ocr = new OcrAttemptCountingProxy(innerOcr);
-            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage, state.Settings.OutputLanguage);
+            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state);
             var failures = new List<RuntimeExpectation>();
 
@@ -206,7 +206,7 @@ namespace Aviscribe.Classifier
 
             using var innerOcr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
             var ocr = new OcrAttemptCountingProxy(innerOcr);
-            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage, state.Settings.OutputLanguage);
+            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state);
 
             processor.Start();
@@ -262,8 +262,7 @@ namespace Aviscribe.Classifier
             var ocr = new OcrAttemptCountingProxy(new EmptyOcrService());
             var matcher = new MoonMatcher(
                 repo,
-                state.Settings.InputLanguage,
-                state.Settings.OutputLanguage);
+                state.Settings.InputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state);
 
             processor.Start();

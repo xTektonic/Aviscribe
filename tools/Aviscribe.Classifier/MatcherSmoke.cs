@@ -21,7 +21,7 @@ namespace Aviscribe.Classifier
                 new Moon { Id = 3, Kingdom = "Cascade", English = "Behind the Waterfall" },
             ]);
             var settings = new RunSettings { InputLanguage = GameLanguage.English };
-            var matcher = new MoonMatcher(repo, GameLanguage.English, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.English);
 
             var result = matcher.MatchTalkatooText("Cascade Timer Challenge", "Cascade", settings);
 
@@ -50,7 +50,7 @@ namespace Aviscribe.Classifier
                 },
             ]);
             var settings = new RunSettings { InputLanguage = GameLanguage.ChineseTraditional };
-            var matcher = new MoonMatcher(repo, GameLanguage.ChineseTraditional, GameLanguage.English);
+            var matcher = new MoonMatcher(repo, GameLanguage.ChineseTraditional);
 
             var result = matcher.MatchCollectionText("烟力量之目", "Cascade", settings);
 

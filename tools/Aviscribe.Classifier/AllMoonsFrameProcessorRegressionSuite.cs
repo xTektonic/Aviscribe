@@ -210,7 +210,7 @@ namespace Aviscribe.Classifier
 
             using var innerOcr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
             var ocr = new CountingOcrProxy(innerOcr);
-            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage, state.Settings.OutputLanguage);
+            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state);
 
             processor.Start();
@@ -262,8 +262,7 @@ namespace Aviscribe.Classifier
             var ocr = new EmptyCountingOcrService();
             var matcher = new MoonMatcher(
                 repo,
-                state.Settings.InputLanguage,
-                state.Settings.OutputLanguage);
+                state.Settings.InputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state);
 
             processor.Start();
@@ -308,7 +307,7 @@ namespace Aviscribe.Classifier
 
             using var innerOcr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
             var ocr = new OcrAttemptCountingProxy(innerOcr);
-            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage, state.Settings.OutputLanguage);
+            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state);
 
             processor.Start();
@@ -371,8 +370,7 @@ namespace Aviscribe.Classifier
             var ocr = new OcrAttemptCountingProxy(new EmptyOcrService());
             var matcher = new MoonMatcher(
                 repo,
-                state.Settings.InputLanguage,
-                state.Settings.OutputLanguage);
+                state.Settings.InputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state);
 
             processor.Start();
@@ -419,7 +417,7 @@ namespace Aviscribe.Classifier
 
             using var innerOcr = new OnnxOcrService(AppPaths.OcrModelPath, AppPaths.CharsetPath);
             var ocr = new OcrAttemptCountingProxy(innerOcr);
-            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage, state.Settings.OutputLanguage);
+            var matcher = new MoonMatcher(repo, state.Settings.InputLanguage);
             var processor = new FrameProcessor(ocr, matcher, state);
 
             processor.Start();

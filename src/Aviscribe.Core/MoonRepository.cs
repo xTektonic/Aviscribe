@@ -41,11 +41,6 @@ namespace Aviscribe.Core
             return Load(AppPaths.MoonList);
         }
 
-        public bool IsPostGameKingdom(string kingdom)
-        {
-            return IsPostGameKingdomName(kingdom);
-        }
-
         internal static bool IsPostGameKingdomName(string kingdom) =>
             PostGameKingdoms.Contains(kingdom);
 
