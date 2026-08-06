@@ -5,6 +5,8 @@ Aviscribe is a cross-platform Talkatoo translator for Super Mario Odyssey. Curre
 Aviscribe works by capturing gameplay from a camera, capture card, virtual camera, or application window,
 recognizing Talkatoo and moon collection text, and displaying that info for the user to see.
 
+![Aviscribe run interface](docs/images/aviscribe-ui.png)
+
 ## Supported platforms
 
 - Windows 10/11 x64
