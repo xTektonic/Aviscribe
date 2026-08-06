@@ -43,15 +43,18 @@ namespace Aviscribe.Core
 
         public bool IsPostGameKingdom(string kingdom)
         {
-            return PostGameKingdoms.Contains(kingdom);
+            return IsPostGameKingdomName(kingdom);
         }
+
+        internal static bool IsPostGameKingdomName(string kingdom) =>
+            PostGameKingdoms.Contains(kingdom);
 
         public List<string> GetKingdoms(bool includePostGameKingdoms)
         {
             return Moons
                 .Select(moon => moon.Kingdom)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(kingdom => includePostGameKingdoms || !IsPostGameKingdom(kingdom))
+                .Where(kingdom => includePostGameKingdoms || !IsPostGameKingdomName(kingdom))
                 .ToList();
         }
 

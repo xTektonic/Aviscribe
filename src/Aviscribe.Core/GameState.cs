@@ -87,7 +87,7 @@ namespace Aviscribe.Core
         {
             lock (_sync)
             {
-                ResetRunState();
+                ResetRunState(CurrentKingdom);
             }
 
             OnChanged();
@@ -102,7 +102,13 @@ namespace Aviscribe.Core
 
                 Settings.IncludePostGameKingdoms = includePostGameKingdoms;
                 if (!includePostGameKingdoms)
-                    ResetRunState();
+                {
+                    var resetKingdom = KingdomRoute.GetRequirement(CurrentKingdom) > 0 &&
+                        !MoonRepository.IsPostGameKingdomName(CurrentKingdom)
+                        ? CurrentKingdom
+                        : InitialKingdom;
+                    ResetRunState(resetKingdom);
+                }
             }
 
             OnChanged();
@@ -408,11 +414,13 @@ namespace Aviscribe.Core
             UncountedCollected = state.UncountedCollected;
         }
 
-        private void ResetRunState()
+        private void ResetRunState(string kingdom)
         {
             _kingdomStates.Clear();
-            CurrentKingdom = InitialKingdom;
-            ApplyKingdomState(GetOrCreateKingdomState(InitialKingdom));
+            CurrentKingdom = string.IsNullOrWhiteSpace(kingdom)
+                ? InitialKingdom
+                : kingdom;
+            ApplyKingdomState(GetOrCreateKingdomState(CurrentKingdom));
         }
 
         private static KingdomStateData CreateKingdomState(
