@@ -58,11 +58,11 @@ public sealed class RunStatePersistenceTests
             Assert.Equal(sand[0].Id, Assert.Single(restored.Collected).Id);
             restored.SetKingdom("Cascade");
             Assert.Equal(cascade[0].Id, Assert.Single(restored.Pending).Id);
+            restored.SetKingdom("Sand");
 
             restored.ResetRun();
-            Assert.Equal(GameState.InitialKingdom, restored.CurrentKingdom);
+            Assert.Equal("Sand", restored.CurrentKingdom);
             Assert.Empty(restored.Pending);
-            restored.SetKingdom("Sand");
             Assert.Empty(restored.Pending);
             Assert.Empty(restored.Collected);
             Assert.Empty(restored.UncountedCollected);
@@ -108,6 +108,54 @@ public sealed class RunStatePersistenceTests
         Assert.True(changed);
         Assert.False(state.Settings.IncludePostGameKingdoms);
         Assert.Equal(GameState.InitialKingdom, state.CurrentKingdom);
+        Assert.Empty(state.Pending);
+        Assert.Empty(state.Collected);
+        Assert.Empty(state.UncountedCollected);
+        Assert.All(state.CreateSnapshot().KingdomStates.Values, kingdom =>
+        {
+            Assert.Empty(kingdom.Pending);
+            Assert.Empty(kingdom.Collected);
+            Assert.Empty(kingdom.UncountedCollected);
+        });
+    }
+
+    [Theory]
+    [InlineData("Cap")]
+    [InlineData("Cloud")]
+    [InlineData("Ruined")]
+    [InlineData("Mushroom")]
+    [InlineData("Moon")]
+    [InlineData("Dark")]
+    [InlineData("Darker")]
+    public void DisablingPostgameModeSelectsCascadeForKingdomsHiddenInNormalMode(
+        string postgameKingdom)
+    {
+        var state = new GameState();
+        state.SetIncludePostGameKingdoms(true);
+        state.SetKingdom(postgameKingdom);
+
+        state.SetIncludePostGameKingdoms(false);
+
+        Assert.Equal(GameState.InitialKingdom, state.CurrentKingdom);
+    }
+
+    [Fact]
+    public void DisablingPostgameModePreservesSelectedNormalKingdom()
+    {
+        var state = new GameState();
+        state.SetIncludePostGameKingdoms(true);
+        var cascade = Candidates("Cascade", state.Settings);
+        var sand = Candidates("Sand", state.Settings);
+        state.SetKingdom("Cascade");
+        state.MoveToPending(cascade[0]);
+        state.SetKingdom("Sand");
+        state.MoveToCollected(sand[0]);
+
+        var changed = state.SetIncludePostGameKingdoms(false);
+
+        Assert.True(changed);
+        Assert.False(state.Settings.IncludePostGameKingdoms);
+        Assert.Equal("Sand", state.CurrentKingdom);
         Assert.Empty(state.Pending);
         Assert.Empty(state.Collected);
         Assert.Empty(state.UncountedCollected);
