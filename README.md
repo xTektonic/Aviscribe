@@ -1,8 +1,8 @@
 # Aviscribe
 
-Aviscribe is a cross-platform run assistant for Super Mario Odyssey. It captures
+Aviscribe is a cross-platform Talkatoo translator for Super Mario Odyssey. Aviscribe works by capturing
 gameplay from a camera, capture card, virtual camera, or application window,
-recognizes moon-related text, and tracks the current run.
+recognizing Talkatoo and moon collection text, and displaying that info for the user to see.
 
 ## Supported platforms
 
@@ -58,9 +58,8 @@ dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-bui
    counted, and uncounted results.
 
 OCR uses the CPU by default. An optional WebGPU processor is available in
-**Settings > Setup > OCR processor**. If it cannot initialize, Aviscribe falls
-back to CPU processing. See [docs/gpu-ocr-research.md](docs/gpu-ocr-research.md)
-for implementation notes and benchmark details.
+**Settings > Setup > OCR processor**. Using the GPU can significantly decrease text/moon recognition times. If it cannot initialize, Aviscribe falls
+back to CPU processing.
 
 Capture permissions depend on the platform:
 
@@ -92,9 +91,7 @@ bash packaging/macos/package.sh 0.5.0
 bash packaging/linux/package.sh 0.5.0
 ~~~
 
-Packages and publish outputs are written to artifacts/. Release validation,
-including hardware and signing checks, is documented in
-[docs/release-checklist.md](docs/release-checklist.md).
+Packages and publish outputs are written to artifacts/.
 
 ## Repository layout
 
