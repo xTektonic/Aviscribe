@@ -1195,7 +1195,7 @@ namespace Aviscribe.UI
                 return;
 
             _moonSelect.ItemsSource = _repo
-                .GetCollectionCandidates(_state.CurrentKingdom, _state.Settings)
+                .GetKingdomDisplayCandidates(_state.CurrentKingdom, _state.Settings)
                 .Select(CreateListItem)
                 .ToList();
             _moonSelect.SelectedIndex = 0;
@@ -1208,7 +1208,7 @@ namespace Aviscribe.UI
 
             _updatingLists = true;
             var moons = _repo
-                .GetCollectionCandidates(_state.CurrentKingdom, _state.Settings)
+                .GetKingdomDisplayCandidates(_state.CurrentKingdom, _state.Settings)
                 .Select(CreateListItem)
                 .ToList();
             _moonList.ItemsSource = moons;
@@ -1810,7 +1810,7 @@ namespace Aviscribe.UI
             }
 
             var candidates = _repo
-                .GetCollectionCandidates(_state.CurrentKingdom, _state.Settings)
+                .GetKingdomDisplayCandidates(_state.CurrentKingdom, _state.Settings)
                 .Where(moon => moon.Id == moonNumber)
                 .ToList();
 
