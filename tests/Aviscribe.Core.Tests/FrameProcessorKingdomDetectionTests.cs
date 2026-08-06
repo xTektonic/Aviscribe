@@ -9,7 +9,7 @@ namespace Aviscribe.Core.Tests;
 public sealed class FrameProcessorKingdomDetectionTests
 {
     [Fact]
-    public void TwoTimedDetectionsSwitchTheActiveKingdom()
+    public async Task TwoTimedDetectionsSwitchTheActiveKingdom()
     {
         var repository = MoonRepository.LoadDefault();
         var state = new GameState();
@@ -29,8 +29,8 @@ public sealed class FrameProcessorKingdomDetectionTests
 
         processor.Start();
         processor.PushFrame(Frame(start));
-        Assert.True(SpinWait.SpinUntil(
-            () => kingdomDetector.CallCount >= 1,
+        Assert.True(await kingdomDetector.WaitForCallCountAsync(
+            1,
             TimeSpan.FromSeconds(2)));
         Assert.Equal("Cascade", state.CurrentKingdom);
 
@@ -70,7 +70,7 @@ public sealed class FrameProcessorKingdomDetectionTests
     }
 
     [Fact]
-    public void HiddenPostgameKingdomIsNotSelectedAutomatically()
+    public async Task HiddenPostgameKingdomIsNotSelectedAutomatically()
     {
         var repository = MoonRepository.LoadDefault();
         var state = new GameState();
@@ -90,12 +90,12 @@ public sealed class FrameProcessorKingdomDetectionTests
 
         processor.Start();
         processor.PushFrame(Frame(start));
-        Assert.True(SpinWait.SpinUntil(
-            () => kingdomDetector.CallCount >= 1,
+        Assert.True(await kingdomDetector.WaitForCallCountAsync(
+            1,
             TimeSpan.FromSeconds(2)));
         processor.PushFrame(Frame(start.AddSeconds(3)));
-        Assert.True(SpinWait.SpinUntil(
-            () => kingdomDetector.CallCount >= 2,
+        Assert.True(await kingdomDetector.WaitForCallCountAsync(
+            2,
             TimeSpan.FromSeconds(2)));
 
         Assert.Equal("Cascade", state.CurrentKingdom);
@@ -104,7 +104,7 @@ public sealed class FrameProcessorKingdomDetectionTests
     [Theory]
     [InlineData(0.0, false)]
     [InlineData(0.25, true)]
-    public void KingdomCheckLoggingRequiresNonZeroScore(
+    public async Task KingdomCheckLoggingRequiresNonZeroScore(
         double score,
         bool shouldLog)
     {
@@ -130,8 +130,8 @@ public sealed class FrameProcessorKingdomDetectionTests
 
         processor.Start();
         processor.PushFrame(Frame(DateTime.UtcNow));
-        Assert.True(SpinWait.SpinUntil(
-            () => kingdomDetector.CallCount >= 1,
+        Assert.True(await kingdomDetector.WaitForCallCountAsync(
+            1,
             TimeSpan.FromSeconds(2)));
         processor.Stop();
 
@@ -178,12 +178,27 @@ public sealed class FrameProcessorKingdomDetectionTests
         KingdomDetectionResult result) : IKingdomDetector
     {
         private int _callCount;
+        private readonly SemaphoreSlim _callSignal = new(0);
         public int CallCount => Volatile.Read(ref _callCount);
 
         public KingdomDetectionResult Detect(Mat referenceFrame)
         {
             Interlocked.Increment(ref _callCount);
+            _callSignal.Release();
             return result;
+        }
+
+        public async Task<bool> WaitForCallCountAsync(
+            int expectedCallCount,
+            TimeSpan timeout)
+        {
+            while (CallCount < expectedCallCount)
+            {
+                if (!await _callSignal.WaitAsync(timeout))
+                    return false;
+            }
+
+            return true;
         }
     }
 

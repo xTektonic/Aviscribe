@@ -17,7 +17,14 @@ namespace Aviscribe.Core
         public bool IsMulti { get; set; }
 
         [JsonIgnore]
-        public bool IsHintArt => !string.IsNullOrWhiteSpace(CollectionKingdom);
+        public bool IsHintArt =>
+            !string.IsNullOrWhiteSpace(CollectionKingdom) &&
+            !Kingdom.Equals(CollectionKingdom, StringComparison.OrdinalIgnoreCase);
+
+        [JsonIgnore]
+        public string CollectionLocationKingdom => IsHintArt
+            ? CollectionKingdom!
+            : Kingdom;
 
         [JsonIgnore]
         public int MoonCountValue => IsMulti ? 3 : 1;
@@ -53,8 +60,17 @@ namespace Aviscribe.Core
 
         public bool IsCollectedInKingdom(string kingdom)
         {
+            return CollectionLocationKingdom.Equals(
+                kingdom,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        public bool IsDisplayedInKingdom(string kingdom)
+        {
             return Kingdom.Equals(kingdom, StringComparison.OrdinalIgnoreCase) ||
-                   (CollectionKingdom?.Equals(kingdom, StringComparison.OrdinalIgnoreCase) ?? false);
+                (IsHintArt && CollectionLocationKingdom.Equals(
+                    kingdom,
+                    StringComparison.OrdinalIgnoreCase));
         }
 
         public string GetName(GameLanguage lang)
