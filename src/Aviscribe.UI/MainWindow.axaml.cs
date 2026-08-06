@@ -89,6 +89,7 @@ namespace Aviscribe.UI
         private IReadOnlyList<VideoDevice> _allCaptureSources = [];
         private bool _updatingLists;
         private bool _updatingIncludePostGameCheck;
+        private bool _updatingKingdomSelection;
         private bool _dragStarted;
         private bool _suppressListClick;
         private Avalonia.Point _dragStartPoint;
@@ -160,6 +161,9 @@ namespace Aviscribe.UI
             _kingdomSelect = this.GetControl<ComboBox>("cbKingdomSelect");
             _kingdomSelect.SelectionChanged += (_, _) =>
             {
+                if (_updatingKingdomSelection)
+                    return;
+
                 if (_kingdomSelect.SelectedItem is KingdomListItem item)
                 {
                     _state.SetKingdom(item.Kingdom);
@@ -252,9 +256,7 @@ namespace Aviscribe.UI
                 _diagnostics.Information(includePostGameKingdoms
                     ? "Postgame kingdoms enabled."
                     : "Postgame kingdoms disabled and run state reset.");
-                RefreshKingdoms(includePostGameKingdoms
-                    ? null
-                    : GameState.InitialKingdom);
+                RefreshKingdoms(_state.CurrentKingdom);
                 RefreshMoonSelect();
                 RefreshMoonList();
                 ShowNextReview();
@@ -486,7 +488,7 @@ namespace Aviscribe.UI
                 ClearAmbiguousReviews();
                 _state.ResetRun();
                 _diagnostics.Information("Run reset by the user.");
-                RefreshKingdoms(GameState.InitialKingdom);
+                RefreshKingdoms(_state.CurrentKingdom);
                 RefreshMoonSelect();
                 RefreshMoonList();
                 ShowNextReview();
@@ -1135,11 +1137,14 @@ namespace Aviscribe.UI
                 current = _state.CurrentKingdom;
 
             var items = kingdoms.Select(CreateKingdomListItem).ToList();
-            _kingdomSelect.ItemsSource = items;
-            _kingdomSelect.SelectedItem =
-                items.FirstOrDefault(item => string.Equals(item.Kingdom, current, StringComparison.OrdinalIgnoreCase)) ??
-                items.FirstOrDefault(item => string.Equals(item.Kingdom, "Cascade", StringComparison.OrdinalIgnoreCase)) ??
-                items.FirstOrDefault();
+            UpdateKingdomSelection(() =>
+            {
+                _kingdomSelect.ItemsSource = items;
+                _kingdomSelect.SelectedItem =
+                    items.FirstOrDefault(item => string.Equals(item.Kingdom, current, StringComparison.OrdinalIgnoreCase)) ??
+                    items.FirstOrDefault(item => string.Equals(item.Kingdom, "Cascade", StringComparison.OrdinalIgnoreCase)) ??
+                    items.FirstOrDefault();
+            });
         }
 
         private void SynchronizeKingdomSelection(string kingdom)
@@ -1159,7 +1164,24 @@ namespace Aviscribe.UI
                 kingdom,
                 StringComparison.OrdinalIgnoreCase));
             if (match != null)
-                _kingdomSelect.SelectedItem = match;
+            {
+                UpdateKingdomSelection(() =>
+                    _kingdomSelect.SelectedItem = match);
+            }
+        }
+
+        private void UpdateKingdomSelection(Action update)
+        {
+            var wasUpdating = _updatingKingdomSelection;
+            _updatingKingdomSelection = true;
+            try
+            {
+                update();
+            }
+            finally
+            {
+                _updatingKingdomSelection = wasUpdating;
+            }
         }
 
         private KingdomListItem CreateKingdomListItem(string kingdom)
