@@ -137,6 +137,19 @@ namespace Aviscribe.Core
             });
         }
 
+        public List<Moon> GetKingdomDisplayCandidates(string kingdom, RunSettings settings)
+        {
+            return Query(new MoonQueryOptions
+            {
+                IncludeStory = true,
+                IncludeNonStory = true,
+                IncludeHintArt = true,
+                IncludePostGameKingdoms = settings.IncludePostGameKingdoms
+            })
+                .Where(moon => moon.IsDisplayedInKingdom(kingdom))
+                .ToList();
+        }
+
         private static bool IsMushroomRematchMultiMoon(Moon moon)
         {
             return moon.Kingdom.Equals("Mushroom", StringComparison.OrdinalIgnoreCase) &&

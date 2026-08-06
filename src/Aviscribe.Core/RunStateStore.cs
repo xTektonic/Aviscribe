@@ -138,7 +138,7 @@ namespace Aviscribe.Core
             }
 
             var byId = _repository
-                .GetCollectionCandidates(savedState.CurrentKingdom, savedState.Settings)
+                .GetKingdomDisplayCandidates(savedState.CurrentKingdom, savedState.Settings)
                 .GroupBy(moon => moon.Id)
                 .ToDictionary(group => group.Key, group => group.First());
 
