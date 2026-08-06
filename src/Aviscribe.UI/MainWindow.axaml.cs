@@ -256,9 +256,7 @@ namespace Aviscribe.UI
                 _diagnostics.Information(includePostGameKingdoms
                     ? "Postgame kingdoms enabled."
                     : "Postgame kingdoms disabled and run state reset.");
-                RefreshKingdoms(includePostGameKingdoms
-                    ? null
-                    : GameState.InitialKingdom);
+                RefreshKingdoms(_state.CurrentKingdom);
                 RefreshMoonSelect();
                 RefreshMoonList();
                 ShowNextReview();
@@ -490,7 +488,7 @@ namespace Aviscribe.UI
                 ClearAmbiguousReviews();
                 _state.ResetRun();
                 _diagnostics.Information("Run reset by the user.");
-                RefreshKingdoms(GameState.InitialKingdom);
+                RefreshKingdoms(_state.CurrentKingdom);
                 RefreshMoonSelect();
                 RefreshMoonList();
                 ShowNextReview();
