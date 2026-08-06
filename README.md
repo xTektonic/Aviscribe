@@ -1,7 +1,8 @@
 # Aviscribe
 
-Aviscribe is a cross-platform Talkatoo translator for Super Mario Odyssey. Aviscribe works by capturing
-gameplay from a camera, capture card, virtual camera, or application window,
+Aviscribe is a cross-platform Talkatoo translator for Super Mario Odyssey. Currently only Traditional Chinese gameplay is supported, with output being available in all native Super Mario Odyssey languages. 
+
+Aviscribe works by capturing gameplay from a camera, capture card, virtual camera, or application window,
 recognizing Talkatoo and moon collection text, and displaying that info for the user to see.
 
 ## Supported platforms
