@@ -26,14 +26,14 @@ mkdir -p \
   "${deb_root}/usr/bin" \
   "${deb_root}/usr/lib/aviscribe" \
   "${deb_root}/usr/share/applications" \
-  "${deb_root}/usr/share/icons/hicolor/scalable/apps"
+  "${deb_root}/usr/share/icons/hicolor/256x256/apps"
 cp -a "${publish_dir}/." "${deb_root}/usr/lib/aviscribe/"
 ln -s "../lib/aviscribe/Aviscribe" "${deb_root}/usr/bin/Aviscribe"
 ln -s "Aviscribe" "${deb_root}/usr/bin/aviscribe"
 cp "${repo_root}/packaging/linux/io.github.xtektonic.aviscribe.desktop" \
   "${deb_root}/usr/share/applications/"
-cp "${repo_root}/packaging/linux/aviscribe.svg" \
-  "${deb_root}/usr/share/icons/hicolor/scalable/apps/aviscribe.svg"
+cp "${repo_root}/packaging/linux/aviscribe.png" \
+  "${deb_root}/usr/share/icons/hicolor/256x256/apps/aviscribe.png"
 
 installed_size="$(du -sk "${deb_root}/usr" | cut -f1)"
 sed \
@@ -51,7 +51,7 @@ cp -a "${publish_dir}/." "${app_dir}/usr/lib/aviscribe/"
 cp "${repo_root}/packaging/linux/AppRun" "${app_dir}/AppRun"
 cp "${repo_root}/packaging/linux/io.github.xtektonic.aviscribe.desktop" \
   "${app_dir}/io.github.xtektonic.aviscribe.desktop"
-cp "${repo_root}/packaging/linux/aviscribe.svg" "${app_dir}/aviscribe.svg"
+cp "${repo_root}/packaging/linux/aviscribe.png" "${app_dir}/aviscribe.png"
 chmod 0755 "${app_dir}/AppRun" "${app_dir}/usr/lib/aviscribe/Aviscribe"
 
 appimage_tool="${APPIMAGETOOL:-${artifacts_root}/tools/appimagetool-x86_64.AppImage}"

@@ -4,6 +4,7 @@
         Width="1380" Height="840"
         MinWidth="1080" MinHeight="680"
         WindowState="Maximized"
+        Icon="avares://Aviscribe.UI/Assets/aviscribe-icon.png"
         Title="Aviscribe">
 
   <Window.Styles>

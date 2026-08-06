@@ -20,5 +20,6 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\moons\**\*.png" />
+    <AvaloniaResource Include="Assets\aviscribe-icon.png" />
   </ItemGroup>
 </Project>
