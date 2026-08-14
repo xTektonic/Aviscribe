@@ -28,6 +28,7 @@ namespace Aviscribe.Core.Ocr
         private bool _disposed;
 
         private readonly TalkatooConfirmationTracker _talkatooConfirmation = new();
+        private readonly TalkatooAdaptiveAnalyzer _talkatooAdaptiveAnalyzer = new();
         private readonly CollectionConfirmationCoordinator _collectionConfirmation = new();
         private long _processedFrameCount;
         private string _observedKingdom;
@@ -255,12 +256,45 @@ namespace Aviscribe.Core.Ocr
                         continue;
 
                     using var talkatooCrop = mat[region.DetectionBounds ?? region.Bounds];
-                    var talkatooDetection = region.Detector.Detect(region.Type, talkatooCrop);
-                    var signature = talkatooDetection.Present
-                        ? TalkatooPromptSignature.Capture(talkatooCrop)
-                        : null;
+                    var useAdaptiveDetection =
+                        settings.AdaptiveTalkatooDetection &&
+                        region.Detector.GetType() == typeof(HeuristicTextPresenceDetector);
+                    bool talkatooPresent;
+                    TalkatooPromptSignature? signature;
+
+                    if (useAdaptiveDetection)
+                    {
+                        var analysis = _talkatooAdaptiveAnalyzer.Analyze(talkatooCrop);
+                        talkatooPresent = analysis.Present;
+                        signature = analysis.Present
+                            ? analysis.Adapted
+                                ? TalkatooPromptSignature.CaptureAdaptive(
+                                    talkatooCrop,
+                                    analysis)
+                                : TalkatooPromptSignature.Capture(talkatooCrop)
+                            : null;
+
+                        if (analysis.StartedAdaptiveRun)
+                        {
+                            _diagnostics.Debug(
+                                $"Adaptive Talkatoo detection selected " +
+                                $"{analysis.Gain:0.00}x gain.");
+                        }
+                    }
+                    else
+                    {
+                        _talkatooAdaptiveAnalyzer.Reset();
+                        var talkatooDetection = region.Detector.Detect(
+                            region.Type,
+                            talkatooCrop);
+                        talkatooPresent = talkatooDetection.Present;
+                        signature = talkatooDetection.Present
+                            ? TalkatooPromptSignature.Capture(talkatooCrop)
+                            : null;
+                    }
+
                     var decision = _talkatooConfirmation.Observe(
-                        talkatooDetection.Present,
+                        talkatooPresent,
                         signature);
                     talkatooRegion = region;
                     talkatooDecision = decision;

@@ -5,6 +5,11 @@ namespace Aviscribe.Core.Ocr
     internal sealed class TalkatooPromptSignature
     {
         private const int YellowStartX = 80;
+        private const double StrictMinimumMaskIoU = 0.90;
+        private const double AdaptiveMinimumMaskIoU = 0.65;
+        private const double StrictMaximumPixelChangeRatio = 0.03;
+        private const double AdaptiveMaximumPixelChangeRatio = 0.08;
+        private const int AdaptiveMaximumTranslation = 2;
 
         private TalkatooPromptSignature(
             int width,
@@ -12,7 +17,8 @@ namespace Aviscribe.Core.Ocr
             byte[] yellowMask,
             int yellowPixelCount,
             Rect textBounds,
-            Rect markerBounds)
+            Rect markerBounds,
+            bool adaptive)
         {
             Width = width;
             Height = height;
@@ -20,6 +26,7 @@ namespace Aviscribe.Core.Ocr
             YellowPixelCount = yellowPixelCount;
             TextBounds = textBounds;
             MarkerBounds = markerBounds;
+            Adaptive = adaptive;
         }
 
         public int Width { get; }
@@ -28,6 +35,7 @@ namespace Aviscribe.Core.Ocr
         public int YellowPixelCount { get; }
         public Rect TextBounds { get; }
         public Rect MarkerBounds { get; }
+        public bool Adaptive { get; }
 
         public static TalkatooPromptSignature Capture(Mat image)
         {
@@ -70,7 +78,43 @@ namespace Aviscribe.Core.Ocr
                 mask,
                 yellowPixels,
                 textBounds,
-                TalkatooStaticGate.FindMarkerBounds(image));
+                TalkatooStaticGate.FindMarkerBounds(image),
+                adaptive: false);
+        }
+
+        public static TalkatooPromptSignature CaptureAdaptive(
+            Mat image,
+            TalkatooAdaptiveAnalysis analysis)
+        {
+            using var adjusted = new Mat();
+            image.ConvertTo(adjusted, image.Type(), analysis.Gain);
+
+            var width = adjusted.Width;
+            var height = adjusted.Height;
+            var mask = new byte[Math.Max(0, width * height)];
+            var yellowPixels = 0;
+            var textBounds = ClipBounds(analysis.Gate.TextBounds, width, height);
+
+            for (var y = textBounds.Top; y < textBounds.Bottom; y++)
+            {
+                for (var x = textBounds.Left; x < textBounds.Right; x++)
+                {
+                    if (!IsAdaptiveSignatureYellow(adjusted.At<Vec3b>(y, x)))
+                        continue;
+
+                    mask[y * width + x] = 1;
+                    yellowPixels++;
+                }
+            }
+
+            return new TalkatooPromptSignature(
+                width,
+                height,
+                mask,
+                yellowPixels,
+                textBounds,
+                analysis.Gate.MarkerBounds,
+                adaptive: true);
         }
 
         public bool IsNearIdenticalTo(TalkatooPromptSignature other)
@@ -78,7 +122,14 @@ namespace Aviscribe.Core.Ocr
             if (Width != other.Width || Height != other.Height)
                 return false;
 
-            if (MaskIoU(other) < 0.90)
+            if (Adaptive != other.Adaptive)
+                return false;
+
+            var minimumMaskIoU = Adaptive
+                ? AdaptiveMinimumMaskIoU
+                : StrictMinimumMaskIoU;
+            var maximumOffset = Adaptive ? AdaptiveMaximumTranslation : 0;
+            if (MaskIoU(other, maximumOffset) < minimumMaskIoU)
                 return false;
 
             var maximumPixelCount = Math.Max(YellowPixelCount, other.YellowPixelCount);
@@ -86,29 +137,71 @@ namespace Aviscribe.Core.Ocr
                 ? 0
                 : Math.Abs(YellowPixelCount - other.YellowPixelCount) / (double)maximumPixelCount;
 
-            return pixelChangeRatio <= 0.03 &&
+            var maximumPixelChangeRatio = Adaptive
+                ? AdaptiveMaximumPixelChangeRatio
+                : StrictMaximumPixelChangeRatio;
+            return pixelChangeRatio <= maximumPixelChangeRatio &&
                 GeometryWithin(TextBounds, other.TextBounds, 2) &&
                 GeometryWithin(MarkerBounds, other.MarkerBounds, 2);
         }
 
-        private double MaskIoU(TalkatooPromptSignature other)
+        private double MaskIoU(
+            TalkatooPromptSignature other,
+            int maximumOffset)
         {
-            var intersection = 0;
-            var union = 0;
-
-            for (var i = 0; i < YellowMask.Length; i++)
+            var best = 0.0;
+            for (var offsetY = -maximumOffset;
+                 offsetY <= maximumOffset;
+                 offsetY++)
             {
-                var current = YellowMask[i] != 0;
-                var candidate = other.YellowMask[i] != 0;
-
-                if (current && candidate)
-                    intersection++;
-
-                if (current || candidate)
-                    union++;
+                for (var offsetX = -maximumOffset;
+                     offsetX <= maximumOffset;
+                     offsetX++)
+                {
+                    var intersection = ShiftedIntersection(
+                        other,
+                        offsetX,
+                        offsetY);
+                    var union = YellowPixelCount +
+                        other.YellowPixelCount -
+                        intersection;
+                    var iou = union == 0
+                        ? 1
+                        : intersection / (double)union;
+                    best = Math.Max(best, iou);
+                }
             }
 
-            return union == 0 ? 1 : intersection / (double)union;
+            return best;
+        }
+
+        private int ShiftedIntersection(
+            TalkatooPromptSignature other,
+            int offsetX,
+            int offsetY)
+        {
+            var intersection = 0;
+            for (var y = TextBounds.Top; y < TextBounds.Bottom; y++)
+            {
+                var otherY = y + offsetY;
+                if (otherY < 0 || otherY >= Height)
+                    continue;
+
+                for (var x = TextBounds.Left; x < TextBounds.Right; x++)
+                {
+                    if (YellowMask[y * Width + x] == 0)
+                        continue;
+
+                    var otherX = x + offsetX;
+                    if (otherX < 0 || otherX >= Width)
+                        continue;
+
+                    if (other.YellowMask[otherY * Width + otherX] != 0)
+                        intersection++;
+                }
+            }
+
+            return intersection;
         }
 
         private static bool GeometryWithin(Rect first, Rect second, int tolerance)
@@ -117,6 +210,25 @@ namespace Aviscribe.Core.Ocr
                 Math.Abs(first.Y - second.Y) <= tolerance &&
                 Math.Abs(first.Width - second.Width) <= tolerance &&
                 Math.Abs(first.Height - second.Height) <= tolerance;
+        }
+
+        private static Rect ClipBounds(Rect bounds, int width, int height)
+        {
+            var left = Math.Clamp(bounds.Left, 0, width);
+            var top = Math.Clamp(bounds.Top, 0, height);
+            var right = Math.Clamp(bounds.Right, left, width);
+            var bottom = Math.Clamp(bounds.Bottom, top, height);
+            return new Rect(left, top, right - left, bottom - top);
+        }
+
+        private static bool IsAdaptiveSignatureYellow(Vec3b pixel)
+        {
+            if (!TalkatooStaticGate.IsYellow(pixel))
+                return false;
+
+            var green = pixel.Item1;
+            var red = pixel.Item2;
+            return red >= green - 25 && red <= green + 70;
         }
 
     }

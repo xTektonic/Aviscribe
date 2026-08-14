@@ -275,6 +275,13 @@
                     <ComboBox Name="cbOcrModeSelect"
                               ToolTip.Tip="GPU mode accelerates supported work through WebGPU and safely falls back to CPU if unavailable."/>
                     <TextBlock Classes="caption" Text="GPU mode can improve OCR performance on supported systems; CPU remains the safest default." TextWrapping="Wrap"/>
+                    <Separator/>
+                    <CheckBox Name="chkAdaptiveTalkatooDetection"
+                              Content="Use adaptive Talkatoo detection"
+                              ToolTip.Tip="Helps capture sources with unusual brightness or color output detect Talkatoo hints."/>
+                    <TextBlock Classes="caption" Margin="24,-7,0,0"
+                               Text="Compatibility option for capture sources with unusual brightness or color. Leave this off unless Talkatoo hints are missed."
+                               TextWrapping="Wrap"/>
                   </StackPanel>
                 </Border>
               </StackPanel>
