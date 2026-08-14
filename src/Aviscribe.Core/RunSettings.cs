@@ -10,6 +10,7 @@ namespace Aviscribe.Core
         public bool WoodedBeforeLake { get; set; } = true;
         public bool SeasideBeforeSnow { get; set; } = true;
         public bool AutomaticallySwitchKingdoms { get; set; }
+        public bool AdaptiveTalkatooDetection { get; set; }
         public bool ShowPendingMoonImages { get; set; }
         public OcrMode OcrMode { get; set; } = OcrMode.Cpu;
         public string FocusMoonNumberHotkey { get; set; } = "M";
@@ -31,6 +32,7 @@ namespace Aviscribe.Core
                 WoodedBeforeLake = WoodedBeforeLake,
                 SeasideBeforeSnow = SeasideBeforeSnow,
                 AutomaticallySwitchKingdoms = AutomaticallySwitchKingdoms,
+                AdaptiveTalkatooDetection = AdaptiveTalkatooDetection,
                 ShowPendingMoonImages = ShowPendingMoonImages,
                 OcrMode = OcrMode,
                 FocusMoonNumberHotkey = FocusMoonNumberHotkey,
@@ -50,6 +52,7 @@ namespace Aviscribe.Core
             WoodedBeforeLake = settings.WoodedBeforeLake;
             SeasideBeforeSnow = settings.SeasideBeforeSnow;
             AutomaticallySwitchKingdoms = settings.AutomaticallySwitchKingdoms;
+            AdaptiveTalkatooDetection = settings.AdaptiveTalkatooDetection;
             ShowPendingMoonImages = settings.ShowPendingMoonImages;
             OcrMode = settings.OcrMode;
             FocusMoonNumberHotkey = settings.FocusMoonNumberHotkey;

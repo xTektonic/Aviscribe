@@ -13,6 +13,7 @@ public sealed class FrameProcessorDiagnosticsTests
         var diagnostics = new RecordingDiagnostics();
         using var ocr = new RecordingOcrService("diagnostic probe");
         var state = new GameState();
+        state.Settings.AdaptiveTalkatooDetection = true;
         state.SetKingdom("Cascade");
         var matcher = new MoonMatcher(
             new MoonRepository(),

@@ -309,6 +309,21 @@ namespace Aviscribe.UI
                     : "Automatic kingdom switching disabled");
             };
 
+            var adaptiveTalkatooDetectionCheck =
+                this.GetControl<CheckBox>("chkAdaptiveTalkatooDetection");
+            adaptiveTalkatooDetectionCheck.IsChecked =
+                _state.Settings.AdaptiveTalkatooDetection;
+            adaptiveTalkatooDetectionCheck.IsCheckedChanged += (_, _) =>
+            {
+                var enabled = adaptiveTalkatooDetectionCheck.IsChecked == true;
+                _state.Settings.AdaptiveTalkatooDetection = enabled;
+                _diagnostics.Information($"Adaptive Talkatoo detection = {enabled}.");
+                _state.NotifySettingsChanged();
+                SetStatus(enabled
+                    ? "Adaptive Talkatoo detection enabled"
+                    : "Adaptive Talkatoo detection disabled");
+            };
+
             this.GetControl<Button>("btnOpenDiagnostics").Click +=
                 OpenDiagnostics;
             this.GetControl<Button>("btnOpenQuickStart").Click +=

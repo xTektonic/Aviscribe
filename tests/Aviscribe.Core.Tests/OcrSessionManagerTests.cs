@@ -12,10 +12,14 @@ public sealed class OcrSessionManagerTests
     {
         var legacy = JsonSerializer.Deserialize<RunSettings>("{}");
         var gpu = new RunSettings { OcrMode = OcrMode.WebGpu };
+        var adaptive = new RunSettings { AdaptiveTalkatooDetection = true };
         var restored = JsonSerializer.Deserialize<RunSettings>(JsonSerializer.Serialize(gpu));
 
         Assert.Equal(OcrMode.Cpu, legacy!.OcrMode);
+        Assert.False(legacy.AdaptiveTalkatooDetection);
         Assert.Equal(OcrMode.WebGpu, gpu.Clone().OcrMode);
+        Assert.False(gpu.Clone().AdaptiveTalkatooDetection);
+        Assert.True(adaptive.Clone().AdaptiveTalkatooDetection);
         Assert.Equal(OcrMode.WebGpu, restored!.OcrMode);
     }
 

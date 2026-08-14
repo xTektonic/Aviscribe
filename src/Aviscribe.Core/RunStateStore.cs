@@ -53,6 +53,7 @@ namespace Aviscribe.Core
                     WoodedBeforeLake = snapshot.WoodedBeforeLake,
                     SeasideBeforeSnow = snapshot.SeasideBeforeSnow,
                     AutomaticallySwitchKingdoms = snapshot.AutomaticallySwitchKingdoms,
+                    AdaptiveTalkatooDetection = snapshot.AdaptiveTalkatooDetection,
                     ShowPendingMoonImages = snapshot.ShowPendingMoonImages,
                     OcrMode = snapshot.OcrMode,
                     FocusMoonNumberHotkey = snapshot.FocusMoonNumberHotkey,
