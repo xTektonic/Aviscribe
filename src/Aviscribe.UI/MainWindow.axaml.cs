@@ -1092,7 +1092,12 @@ namespace Aviscribe.UI
                     _actualCountText.Text = snapshot.ActualMoonCount.ToString();
 
                 UpdateKingdomHeader(snapshot.CurrentKingdom);
-                SynchronizeKingdomSelection(snapshot.CurrentKingdom);
+                if (SynchronizeKingdomSelection(snapshot.CurrentKingdom))
+                {
+                    RefreshMoonSelect();
+                    RefreshMoonList();
+                    ShowNextReview();
+                }
 
                 if (_pendingList != null)
                 {
@@ -1147,17 +1152,17 @@ namespace Aviscribe.UI
             });
         }
 
-        private void SynchronizeKingdomSelection(string kingdom)
+        private bool SynchronizeKingdomSelection(string kingdom)
         {
             if (_kingdomSelect?.ItemsSource is not IEnumerable<KingdomListItem> items)
-                return;
+                return false;
 
             var selected = _kingdomSelect.SelectedItem as KingdomListItem;
             if (selected?.Kingdom.Equals(
                     kingdom,
                     StringComparison.OrdinalIgnoreCase) == true)
             {
-                return;
+                return false;
             }
 
             var match = items.FirstOrDefault(item => item.Kingdom.Equals(
@@ -1167,7 +1172,10 @@ namespace Aviscribe.UI
             {
                 UpdateKingdomSelection(() =>
                     _kingdomSelect.SelectedItem = match);
+                return true;
             }
+
+            return false;
         }
 
         private void UpdateKingdomSelection(Action update)
