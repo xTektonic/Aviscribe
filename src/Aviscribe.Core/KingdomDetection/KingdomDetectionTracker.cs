@@ -3,7 +3,7 @@ namespace Aviscribe.Core.KingdomDetection;
 public sealed class KingdomDetectionTracker
 {
     public static readonly TimeSpan DefaultInspectionInterval =
-        TimeSpan.FromSeconds(3);
+        TimeSpan.FromSeconds(1);
     public static readonly TimeSpan DefaultConfirmationWindow =
         TimeSpan.FromSeconds(10);
 

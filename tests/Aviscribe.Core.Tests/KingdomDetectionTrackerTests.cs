@@ -11,8 +11,8 @@ public sealed class KingdomDetectionTrackerTests
         var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         Assert.True(tracker.ShouldInspect(start));
-        Assert.False(tracker.ShouldInspect(start.AddSeconds(2.9)));
-        Assert.True(tracker.ShouldInspect(start.AddSeconds(3)));
+        Assert.False(tracker.ShouldInspect(start.AddSeconds(0.9)));
+        Assert.True(tracker.ShouldInspect(start.AddSeconds(1)));
     }
 
     [Fact]

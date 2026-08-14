@@ -34,7 +34,7 @@ public sealed class FrameProcessorKingdomDetectionTests
             TimeSpan.FromSeconds(2)));
         Assert.Equal("Cascade", state.CurrentKingdom);
 
-        processor.PushFrame(Frame(start.AddSeconds(3)));
+        processor.PushFrame(Frame(start.AddSeconds(1)));
 
         Assert.True(SpinWait.SpinUntil(
             () => state.CurrentKingdom == "Sand",
@@ -93,7 +93,7 @@ public sealed class FrameProcessorKingdomDetectionTests
         Assert.True(await kingdomDetector.WaitForCallCountAsync(
             1,
             TimeSpan.FromSeconds(2)));
-        processor.PushFrame(Frame(start.AddSeconds(3)));
+        processor.PushFrame(Frame(start.AddSeconds(1)));
         Assert.True(await kingdomDetector.WaitForCallCountAsync(
             2,
             TimeSpan.FromSeconds(2)));
