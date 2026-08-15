@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.6.0",
+    [string]$Version = "0.6.1",
     [string]$Configuration = "Release",
     [string]$ArtifactsDirectory = ""
 )

@@ -82,18 +82,18 @@ The packaging scripts produce self-contained builds for Windows x64, macOS
 Apple Silicon, and Linux x64. Set the version first if needed:
 
 ~~~powershell
-./tools/set-version.ps1 0.6.0
+./tools/set-version.ps1 0.6.1
 ~~~
 
 Run the package script on its target operating system:
 
 ~~~powershell
-./packaging/windows/package.ps1 -Version 0.6.0
+./packaging/windows/package.ps1 -Version 0.6.1
 ~~~
 
 ~~~text
-bash packaging/macos/package.sh 0.6.0
-bash packaging/linux/package.sh 0.6.0
+bash packaging/macos/package.sh 0.6.1
+bash packaging/linux/package.sh 0.6.1
 ~~~
 
 Packages and publish outputs are written to artifacts/.
