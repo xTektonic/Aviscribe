@@ -1394,7 +1394,7 @@ namespace Aviscribe.UI
 
         private async void OpenDiscord(object? sender, RoutedEventArgs args)
         {
-            const string discordInvite = "https://discord.gg/HzFWsA4y5n";
+            const string discordInvite = "https://discord.gg/ADDAuJVxjnn";
             try
             {
                 var topLevel = TopLevel.GetTopLevel(this);
