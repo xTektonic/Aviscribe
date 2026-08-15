@@ -12,9 +12,9 @@
         <TextBlock Classes="pageTitle" Text="Gameplay crop"/>
         <TextBlock Classes="bodyMuted" Text="Drag the frame or its handles. The selection stays 16:9 for accurate OCR."/>
       </StackPanel>
-      <CheckBox Name="chkShowGuides" Grid.Column="1" Content="Show OCR guides"
+      <CheckBox Name="chkShowGuides" Grid.Column="1" Content="Show scan areas"
                 IsChecked="True" VerticalAlignment="Center"
-                ToolTip.Tip="Show the areas Aviscribe checks for Talkatoo, Moon Get, and Story Moon text."/>
+                ToolTip.Tip="Show every gameplay area Aviscribe checks for text and automatic kingdom detection."/>
       <Button Name="btnRefreshFrame" Grid.Column="2" Content="Refresh Frame"
               VerticalAlignment="Center" MinWidth="120"
               ToolTip.Tip="Request a new uncropped frame from the active capture source."/>
@@ -69,6 +69,13 @@
             <Border Width="12" Height="12" Background="#FF5FBE" CornerRadius="2"/>
             <TextBlock Text="Story Moon"/>
           </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Border Width="12" Height="12" Background="#75E086" CornerRadius="2"/>
+            <TextBlock Text="Kingdom HUD"/>
+          </StackPanel>
+          <TextBlock Classes="caption"
+                     Text="Thin outlines show detection areas. Bold outlines show text sent to OCR."
+                     TextWrapping="Wrap"/>
 
           <TextBlock Name="txtCropStatus" Text="Refresh the frame to begin."
                      TextWrapping="Wrap" Classes="caption"/>

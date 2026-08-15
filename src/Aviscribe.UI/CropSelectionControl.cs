@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Aviscribe.Core.Capture;
+using Aviscribe.Core.KingdomDetection;
 using Aviscribe.Core.Ocr;
 using System;
 using System.Collections.Generic;
@@ -26,7 +27,7 @@ namespace Aviscribe.UI
 
         public event EventHandler<CaptureCropSettings>? SelectionChanged;
 
-        public bool ShowOcrGuides { get; set; } = true;
+        public bool ShowScanGuides { get; set; } = true;
 
         public CaptureCropSettings Selection => _selection.Clone();
 
@@ -82,8 +83,8 @@ namespace Aviscribe.UI
                 _selection.Height));
             DrawOutsideMask(context, imageBounds, selectionBounds);
 
-            if (ShowOcrGuides)
-                DrawOcrGuides(context, selectionBounds);
+            if (ShowScanGuides)
+                DrawScanGuides(context, selectionBounds);
 
             context.DrawRectangle(null, SelectionPen, selectionBounds);
             foreach (var point in HandlePoints(selectionBounds))
@@ -303,7 +304,7 @@ namespace Aviscribe.UI
                 new Rect(selectionBounds.Right, selectionBounds.Y, imageBounds.Right - selectionBounds.Right, selectionBounds.Height));
         }
 
-        private static void DrawOcrGuides(DrawingContext context, Rect selectionBounds)
+        private static void DrawScanGuides(DrawingContext context, Rect selectionBounds)
         {
             foreach (var guide in OcrReferenceLayout.Guides)
             {
@@ -321,6 +322,18 @@ namespace Aviscribe.UI
                     ocrPen,
                     MapGuide(guide.OcrBounds, selectionBounds));
             }
+
+            var kingdomPen = new Pen(
+                new SolidColorBrush(Color.FromArgb(190, 117, 224, 134)),
+                1);
+            context.DrawRectangle(
+                null,
+                kingdomPen,
+                MapGuide(TemplateKingdomDetector.IconSearchBounds, selectionBounds));
+            context.DrawRectangle(
+                null,
+                kingdomPen,
+                MapGuide(TemplateKingdomDetector.HudUnderlineBounds, selectionBounds));
         }
 
         private static Rect MapGuide(CvRect guide, Rect selection)
