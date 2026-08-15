@@ -54,7 +54,7 @@ namespace Aviscribe.UI
             _canvas.SelectionChanged += (_, selection) => UpdateNumbers(selection);
             this.GetControl<CheckBox>("chkShowGuides").IsCheckedChanged += (_, _) =>
             {
-                _canvas.ShowOcrGuides =
+                _canvas.ShowScanGuides =
                     this.GetControl<CheckBox>("chkShowGuides").IsChecked == true;
                 _canvas.InvalidateVisual();
             };
