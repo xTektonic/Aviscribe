@@ -82,8 +82,12 @@ namespace Aviscribe.Classifier
                     "Changed Talkatoo layout did not stabilize as a new prompt.");
             }
 
-            tracker.Observe(false, null);
-            if (tracker.ShouldInspect(5))
+            var cadenceTracker = new TalkatooConfirmationTracker();
+            var disappearedAt = DateTime.UnixEpoch;
+            cadenceTracker.Observe(false, null, disappearedAt);
+            if (cadenceTracker.ShouldInspect(
+                    disappearedAt +
+                    TalkatooConfirmationTracker.IdleDetectionInterval / 2))
                 throw new InvalidOperationException(
                     "Talkatoo disappearance did not return the tracker to idle cadence.");
         }

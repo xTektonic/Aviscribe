@@ -53,6 +53,9 @@ public sealed class WaylandPortalVideoProviderTests
         Assert.True(source.RequiresInteractiveSelection);
         Assert.True(source.IsAvailable);
         Assert.Contains("Choose", source.Name, StringComparison.Ordinal);
+        Assert.Equal(
+            CaptureTiming.PreferredFramesPerSecond,
+            Assert.Single(source.Capabilities).FramesPerSecond);
     }
 
     [Fact]

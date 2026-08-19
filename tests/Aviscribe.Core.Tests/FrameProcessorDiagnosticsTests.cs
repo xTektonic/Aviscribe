@@ -30,6 +30,14 @@ public sealed class FrameProcessorDiagnosticsTests
         processor.Start();
         try
         {
+            var start = new DateTime(
+                2026,
+                1,
+                1,
+                0,
+                0,
+                0,
+                DateTimeKind.Utc);
             for (var index = 0;
                 index < TalkatooConfirmationTracker.RequiredStableFrames;
                 index++)
@@ -39,7 +47,8 @@ public sealed class FrameProcessorDiagnosticsTests
                         new Size(1920, 1080),
                         MatType.CV_8UC3,
                         Scalar.Black),
-                    DateTime.UtcNow));
+                    start +
+                        CaptureTiming.PreferredFrameInterval * index));
 
                 Assert.True(
                     await detector.Detected.WaitAsync(

@@ -127,7 +127,13 @@ internal sealed class WaylandPortalVideoProvider : IVideoProvider
         RequiresInteractiveSelection = true,
         Capabilities =
         [
-            new VideoFormat(1920, 1080, "BGR", 30, 1, "Portal-selected window")
+            new VideoFormat(
+                1920,
+                1080,
+                "BGR",
+                CaptureTiming.PreferredFramesPerSecond,
+                1,
+                "Portal-selected window")
         ]
     };
 
@@ -673,7 +679,7 @@ internal sealed class WaylandPortalVideoCapture : IVideoCapture
                     frame.Width,
                     frame.Height,
                     "BGR",
-                    30,
+                    CaptureTiming.PreferredFramesPerSecond,
                     1,
                     "Wayland portal window");
                 _firstFrame?.TrySetResult(true);

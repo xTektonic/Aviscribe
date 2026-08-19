@@ -76,7 +76,7 @@ public sealed class WindowCaptureProvider : IVideoProvider
             IsAvailable = target.IsAvailable,
             UnavailableReason = target.UnavailableReason,
             Capabilities = target.IsAvailable
-                ? [new VideoFormat(target.Width, target.Height, "BGR", 10, 1, "Window")]
+                ? [WindowVideoCapture.CreateFormat(target.Width, target.Height)]
                 : []
         }).ToArray();
     }

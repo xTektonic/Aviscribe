@@ -201,7 +201,7 @@ public sealed class FlashCapVideoProvider : IVideoProvider
         return supported
             .OrderBy(FormatAspectPenalty)
             .ThenBy(FormatResolutionPenalty)
-            .ThenByDescending(item => FramesPerSecond(item))
+            .ThenBy(FormatFrameRatePenalty)
             .ThenBy(item => PixelFormatPenalty(item.PixelFormat))
             .First();
     }
@@ -219,6 +219,28 @@ public sealed class FlashCapVideoProvider : IVideoProvider
         var widthDelta = format.Width - CaptureCropSettings.ReferenceWidth;
         var heightDelta = format.Height - CaptureCropSettings.ReferenceHeight;
         return Math.Abs(widthDelta) + Math.Abs(heightDelta);
+    }
+
+    private static double FormatFrameRatePenalty(VideoCharacteristics format)
+    {
+        var framesPerSecond = FramesPerSecond(format);
+        return FrameRatePreferencePenalty(framesPerSecond);
+    }
+
+    internal static double FrameRatePreferencePenalty(double framesPerSecond)
+    {
+        if (framesPerSecond <= 0)
+            return double.MaxValue;
+
+        // Prefer 60/59.94 over both slower and unnecessarily faster modes.
+        // If 60 is unavailable, prefer a mode that can still meet the target;
+        // otherwise take the fastest sub-60 mode.
+        return framesPerSecond >= 59
+            ? Math.Abs(framesPerSecond -
+                CaptureTiming.PreferredFramesPerSecond)
+            : 1_000 +
+                CaptureTiming.PreferredFramesPerSecond -
+                framesPerSecond;
     }
 
     private static int PixelFormatPenalty(PixelFormats pixelFormat)

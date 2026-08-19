@@ -19,8 +19,25 @@ public sealed class WindowVideoCaptureTests
 
         Assert.Equal(CaptureState.Stopped, capture.State);
         Assert.Equal(CaptureSourceKind.Window, capture.Device.Kind);
+        Assert.Equal(60, capture.SelectedFormat.FramesPerSecond);
+        Assert.Equal(
+            60,
+            Assert.Single(capture.Device.Capabilities).FramesPerSecond);
         Assert.Equal(640, frame.Frame.Width);
         Assert.False(frame.IsDisposed);
+    }
+
+    [Fact]
+    public void AvailableWindowSourcesAdvertiseSixtyFramesPerSecond()
+    {
+        var backend = new FakeWindowBackend();
+        var provider = new WindowCaptureProvider(backend);
+
+        var source = Assert.Single(provider.GetDevices());
+        var format = Assert.Single(source.Capabilities);
+
+        Assert.Equal(60, format.FramesPerSecond);
+        Assert.Equal("BGR", format.PixelFormat);
     }
 
     [Fact]

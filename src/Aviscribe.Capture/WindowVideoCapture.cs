@@ -5,6 +5,11 @@ namespace Aviscribe.Capture;
 
 internal sealed class WindowVideoCapture : IVideoCapture
 {
+    internal const int TargetFramesPerSecond =
+        CaptureTiming.PreferredFramesPerSecond;
+    private static readonly TimeSpan FrameInterval =
+        CaptureTiming.PreferredFrameInterval;
+
     private readonly IWindowCaptureBackend _backend;
     private readonly WindowCaptureTarget _target;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
@@ -24,7 +29,7 @@ internal sealed class WindowVideoCapture : IVideoCapture
             Name = target.Name,
             Backend = backend.Name,
             Kind = CaptureSourceKind.Window,
-            Capabilities = [new VideoFormat(target.Width, target.Height, "BGR", 10, 1, "Window")]
+            Capabilities = [CreateFormat(target.Width, target.Height)]
         };
         SelectedFormat = Device.Capabilities[0];
     }
@@ -96,6 +101,7 @@ internal sealed class WindowVideoCapture : IVideoCapture
     private async Task CaptureLoopAsync(CancellationToken cancellationToken)
     {
         var consecutiveFailures = 0;
+        using var frameTimer = new PeriodicTimer(FrameInterval);
         while (!cancellationToken.IsCancellationRequested)
         {
             try
@@ -108,7 +114,7 @@ internal sealed class WindowVideoCapture : IVideoCapture
                 }
 
                 consecutiveFailures = 0;
-                SelectedFormat = new VideoFormat(captured.Width, captured.Height, "BGR", 10, 1, "Window");
+                SelectedFormat = CreateFormat(captured.Width, captured.Height);
                 DispatchFrame(new VideoFrame(captured, DateTime.UtcNow, Interlocked.Increment(ref _sequenceNumber)));
             }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
@@ -125,9 +131,17 @@ internal sealed class WindowVideoCapture : IVideoCapture
                 }
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
+            if (!await frameTimer
+                .WaitForNextTickAsync(cancellationToken)
+                .ConfigureAwait(false))
+            {
+                break;
+            }
         }
     }
+
+    internal static VideoFormat CreateFormat(int width, int height) =>
+        new(width, height, "BGR", TargetFramesPerSecond, 1, "Window");
 
     private void DispatchFrame(VideoFrame frame)
     {

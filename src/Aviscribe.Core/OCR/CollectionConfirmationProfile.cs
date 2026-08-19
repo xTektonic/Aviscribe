@@ -1,4 +1,5 @@
 using OpenCvSharp;
+using Aviscribe.Core.Capture;
 
 namespace Aviscribe.Core.Ocr
 {
@@ -11,6 +12,24 @@ namespace Aviscribe.Core.Ocr
         int RequiredAbsentObservations,
         int RetryPresentObservations)
     {
+        internal TimeSpan DetectionInterval =>
+            CaptureTiming.DurationForFrames(DetectionIntervalFrames);
+
+        internal TimeSpan RequiredPresentDuration =>
+            CaptureTiming.DurationForFrames(
+                Math.Max(0, RequiredPresentObservations - 1) *
+                DetectionIntervalFrames);
+
+        internal TimeSpan RequiredAbsentDuration =>
+            CaptureTiming.DurationForFrames(
+                Math.Max(0, RequiredAbsentObservations - 1) *
+                DetectionIntervalFrames);
+
+        internal TimeSpan RetryPresentDuration =>
+            CaptureTiming.DurationForFrames(
+                Math.Max(0, RetryPresentObservations - 1) *
+                DetectionIntervalFrames);
+
         internal static CollectionConfirmationProfile MoonGet { get; } = new(
             OcrRegionType.MoonGet,
             OcrReferenceLayout.MoonGet.OcrBounds,

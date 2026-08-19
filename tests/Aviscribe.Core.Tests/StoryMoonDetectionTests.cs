@@ -119,9 +119,15 @@ public sealed class StoryMoonDetectionTests
         using var image = CreateMatchingBackground();
         var tracker = new CollectionConfirmationTracker(
             CollectionConfirmationProfile.StoryMoon);
+        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var interval = CollectionConfirmationProfile.StoryMoon.DetectionInterval;
 
-        var first = tracker.Observe(TextDetection.HasStoryMoonText(image));
-        var second = tracker.Observe(TextDetection.HasStoryMoonText(image));
+        var first = tracker.Observe(
+            TextDetection.HasStoryMoonText(image),
+            start);
+        var second = tracker.Observe(
+            TextDetection.HasStoryMoonText(image),
+            start + interval);
 
         Assert.False(first.Confirmed);
         Assert.True(second.Confirmed);
@@ -132,10 +138,22 @@ public sealed class StoryMoonDetectionTests
             index < CollectionConfirmationProfile.StoryMoon.RequiredAbsentObservations;
             index++)
         {
-            Assert.True(tracker.Observe(present: false).Active);
+            Assert.True(tracker.Observe(
+                present: false,
+                start + TimeSpan.FromSeconds(1) +
+                    interval * (index - 1)).Active);
         }
 
-        Assert.False(tracker.Observe(present: false).Active);
+        var released = tracker.Observe(
+            present: false,
+            start + TimeSpan.FromSeconds(1) +
+                interval *
+                    (CollectionConfirmationProfile.StoryMoon
+                        .RequiredAbsentObservations - 1));
+        Assert.False(
+            released.Active,
+            $"absence={released.ConsecutiveAbsentDuration}, " +
+            $"required={CollectionConfirmationProfile.StoryMoon.RequiredAbsentDuration}");
     }
 
     private static Mat CreateMatchingBackground()

@@ -1,3 +1,5 @@
+using Aviscribe.Core.Capture;
+
 namespace Aviscribe.Core.Ocr
 {
     internal sealed class CollectionConfirmationCoordinator
@@ -11,11 +13,25 @@ namespace Aviscribe.Core.Ocr
             };
         private CollectionEvent? _event;
 
-        public bool ShouldInspect(OcrRegionType regionType, long processedFrameCount)
+        public bool ShouldInspect(OcrRegionType regionType, DateTime timestamp)
         {
-            return _trackers[regionType].ShouldInspect(processedFrameCount);
+            return _trackers[regionType].ShouldInspect(timestamp);
         }
 
+        public void Observe(
+            OcrRegionType regionType,
+            bool present,
+            DateTime timestamp)
+        {
+            lock (_lock)
+                _trackers[regionType].Observe(present, timestamp);
+        }
+
+        // Deterministic compatibility for classifier smoke coverage.
+        public bool ShouldInspect(OcrRegionType regionType, long frameNumber) =>
+            _trackers[regionType].ShouldInspect(frameNumber);
+
+        // Deterministic compatibility for classifier smoke coverage.
         public void Observe(OcrRegionType regionType, bool present)
         {
             lock (_lock)
@@ -144,7 +160,9 @@ namespace Aviscribe.Core.Ocr
                     {
                         _event.RetryBaselines[
                             new ConfirmationKey(pair.Key, pair.Value)] =
-                            snapshot.PresentObservationCount;
+                            new RetryBaseline(
+                                snapshot.PresentObservationCount,
+                                snapshot.LastObservation);
                     }
                 }
             }
@@ -244,8 +262,11 @@ namespace Aviscribe.Core.Ocr
                 return false;
 
             var profile = CollectionConfirmationProfile.For(snapshot.RegionType);
-            return snapshot.PresentObservationCount - baseline >=
-                profile.RetryPresentObservations;
+            return snapshot.PresentObservationCount > baseline.ObservationCount &&
+                snapshot.LastObservation >= baseline.Timestamp &&
+                CaptureTiming.HasElapsed(
+                    snapshot.LastObservation - baseline.Timestamp,
+                    profile.RetryPresentDuration);
         }
 
         private static CollectionConfirmationDecision Decision(
@@ -383,7 +404,7 @@ namespace Aviscribe.Core.Ocr
         private sealed class CollectionEvent
         {
             public Dictionary<OcrRegionType, long> Generations { get; } = new();
-            public Dictionary<ConfirmationKey, int> RetryBaselines { get; } = new();
+            public Dictionary<ConfirmationKey, RetryBaseline> RetryBaselines { get; } = new();
             public OcrRegionType Primary { get; set; }
             public OcrRegionType? Fallback { get; set; }
             public int AttemptCount { get; set; }
@@ -427,4 +448,8 @@ namespace Aviscribe.Core.Ocr
     internal readonly record struct ConfirmationKey(
         OcrRegionType RegionType,
         long Generation);
+
+    internal readonly record struct RetryBaseline(
+        int ObservationCount,
+        DateTime Timestamp);
 }

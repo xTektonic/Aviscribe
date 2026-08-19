@@ -32,7 +32,9 @@ namespace Aviscribe.Core.Ocr
         private readonly CollectionConfirmationCoordinator _collectionConfirmation = new();
         private long _processedFrameCount;
         private string _observedKingdom;
-        private long _suppressTalkatooUntilFrame;
+        private DateTime _suppressTalkatooUntil;
+        private static readonly TimeSpan TalkatooSuppressionDuration =
+            CaptureTiming.DurationForFrames(20);
         private const double WeakCollectionMatchThreshold = 0.50;
         private const double WeakStoryMoonMatchThreshold = 0.40;
         private const double WeakCollectionPendingMargin = 0.08;
@@ -252,7 +254,7 @@ namespace Aviscribe.Core.Ocr
             {
                 if (region.Type == OcrRegionType.Talkatoo)
                 {
-                    if (!_talkatooConfirmation.ShouldInspect(_processedFrameCount))
+                    if (!_talkatooConfirmation.ShouldInspect(timestamp))
                         continue;
 
                     using var talkatooCrop = mat[region.DetectionBounds ?? region.Bounds];
@@ -295,7 +297,8 @@ namespace Aviscribe.Core.Ocr
 
                     var decision = _talkatooConfirmation.Observe(
                         talkatooPresent,
-                        signature);
+                        signature,
+                        timestamp);
                     talkatooRegion = region;
                     talkatooDecision = decision;
                     continue;
@@ -303,20 +306,23 @@ namespace Aviscribe.Core.Ocr
 
                 if (!_collectionConfirmation.ShouldInspect(
                         region.Type,
-                        _processedFrameCount))
+                        timestamp))
                 {
                     continue;
                 }
 
                 using var detectionCrop = mat[region.DetectionBounds ?? region.Bounds];
                 var detection = region.Detector.Detect(region.Type, detectionCrop);
-                _collectionConfirmation.Observe(region.Type, detection.Present);
+                _collectionConfirmation.Observe(
+                    region.Type,
+                    detection.Present,
+                    timestamp);
             }
 
             var collectionDecision = _collectionConfirmation.NextDecision();
             if (_collectionConfirmation.HasConfirmedPresence())
-                _suppressTalkatooUntilFrame = _processedFrameCount + 20;
-            var suppressTalkatoo = _processedFrameCount <= _suppressTalkatooUntilFrame;
+                _suppressTalkatooUntil = timestamp + TalkatooSuppressionDuration;
+            var suppressTalkatoo = timestamp <= _suppressTalkatooUntil;
 
             if (collectionDecision.ShouldEnqueue)
             {
@@ -736,7 +742,7 @@ namespace Aviscribe.Core.Ocr
             _talkatooConfirmation.Reset();
             _collectionConfirmation.Reset();
             _kingdomDetectionTracker.ResetCandidate();
-            _suppressTalkatooUntilFrame = 0;
+            _suppressTalkatooUntil = default;
             _observedKingdom = currentKingdom;
         }
 

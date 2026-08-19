@@ -208,16 +208,17 @@ public sealed class TalkatooAdaptiveAnalyzerTests
         using var prompt = CreatePrompt(dimmed: true);
         var analyzer = new TalkatooAdaptiveAnalyzer();
         var tracker = new TalkatooConfirmationTracker();
+        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        Assert.True(tracker.ShouldInspect(processedFrameCount: 1));
+        Assert.True(tracker.ShouldInspect(start));
         var absentAnalysis = analyzer.Analyze(absent);
-        tracker.Observe(absentAnalysis.Present, signature: null);
+        tracker.Observe(absentAnalysis.Present, signature: null, start);
 
         int? enqueuedPromptFrame = null;
         for (var promptFrame = 1; promptFrame <= 12; promptFrame++)
         {
-            var processedFrame = promptFrame + 1;
-            if (!tracker.ShouldInspect(processedFrame))
+            var timestamp = start + TimeSpan.FromSeconds(promptFrame / 60.0);
+            if (!tracker.ShouldInspect(timestamp))
                 continue;
 
             var analysis = analyzer.Analyze(prompt);
@@ -226,7 +227,10 @@ public sealed class TalkatooAdaptiveAnalyzerTests
             var signature = TalkatooPromptSignature.CaptureAdaptive(
                 prompt,
                 analysis);
-            var decision = tracker.Observe(present: true, signature);
+            var decision = tracker.Observe(
+                present: true,
+                signature,
+                timestamp);
             if (!decision.ShouldEnqueue)
                 continue;
 
