@@ -10,7 +10,7 @@
   <Window.Styles>
     <Style Selector="ListBox.runList">
       <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontSize" Value="{DynamicResource FontSize}"/>
       <Setter Property="Background" Value="Transparent"/>
     </Style>
     <Style Selector="ListBox.runList > ListBoxItem">
@@ -66,7 +66,9 @@
               </StackPanel>
               <StackPanel Grid.Column="3" VerticalAlignment="Center">
                 <TextBlock Classes="caption" Text="REQUIREMENT"/>
-                <TextBlock Name="txtRequirement" Text="0" FontSize="18" FontWeight="SemiBold"/>
+                <TextBlock Name="txtRequirement" Text="0"
+                           FontSize="{DynamicResource RequirementFontSize}"
+                           FontWeight="SemiBold"/>
               </StackPanel>
               <Button Name="btnUpdatePreview" Grid.Column="5" Classes="primary"
                       Content="Start Capture"
@@ -148,7 +150,18 @@
                   <TextBlock Classes="sectionTitle" Text="Kingdom Moons"/>
                   <TextBlock Grid.Column="1" Name="txtMoonCount" Classes="caption"/>
                 </Grid>
-                <ListBox Name="lstMoonList" Grid.Row="1" Classes="runList" SelectionMode="Multiple"/>
+                <ListBox Name="lstMoonList" Grid.Row="1" Classes="runList">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:CompileBindings="False">
+                      <Grid>
+                        <Border IsVisible="{Binding IsTracked}"
+                                Background="{DynamicResource SystemControlHighlightAccentBrush}"
+                                Opacity="0.22" CornerRadius="4"/>
+                        <TextBlock Text="{Binding Label}"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
               </Grid>
             </Border>
 
@@ -351,12 +364,12 @@
             </ScrollViewer>
           </TabItem>
 
-          <TabItem Header="Theme">
+          <TabItem Header="Appearance">
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="20,0,12,20" Spacing="14" MaxWidth="700" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="3">
-                  <TextBlock Classes="sectionTitle" Text="Theme"/>
-                  <TextBlock Classes="bodyMuted" Text="Choose the app appearance and accent color."/>
+                  <TextBlock Classes="sectionTitle" Text="Appearance"/>
+                  <TextBlock Classes="bodyMuted" Text="Choose the app theme, accent color, and text size."/>
                 </StackPanel>
                 <Border Classes="card">
                   <StackPanel Spacing="12">
@@ -369,6 +382,11 @@
                     <ComboBox Name="cbAccentColorSelect" Width="220" HorizontalAlignment="Left"
                               ToolTip.Tip="Choose the color used for selections, highlights, and primary actions."/>
                     <TextBlock Classes="caption" Text="System accent follows your operating system and is the default." TextWrapping="Wrap"/>
+                    <Separator/>
+                    <TextBlock Text="Text size" FontWeight="SemiBold"/>
+                    <ComboBox Name="cbTextSizeSelect" Width="220" HorizontalAlignment="Left"
+                              ToolTip.Tip="Adjust the size of moon names, section labels, and key run totals."/>
+                    <TextBlock Classes="caption" Text="Changes moon names, section labels, and key run totals throughout the app." TextWrapping="Wrap"/>
                   </StackPanel>
                 </Border>
               </StackPanel>

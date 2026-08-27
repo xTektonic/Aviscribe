@@ -17,6 +17,7 @@ using Aviscribe.Core.Ocr;
 using OpenCvSharp;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -119,6 +120,7 @@ namespace Aviscribe.UI
             LoadAppPreferences();
             ApplyThemePreference();
             ApplyAccentColorPreference();
+            ApplyTextSizePreference();
             LoadSavedRunState();
             NormalizeLanguageSettings();
             _outputWriter.Language = _state.Settings.OutputLanguage;
@@ -370,6 +372,31 @@ namespace Aviscribe.UI
                 ApplyAccentColorPreference();
                 PersistAppPreferences();
                 _diagnostics.Information($"Application accent color changed to {item.Name}.");
+            };
+
+            var textSizeSelect =
+                this.GetControl<ComboBox>("cbTextSizeSelect");
+            var textSizes = new[]
+            {
+                new TextSizeListItem(TextSizePreference.Small, "Small"),
+                new TextSizeListItem(TextSizePreference.Default, "Default"),
+                new TextSizeListItem(TextSizePreference.Large, "Large"),
+                new TextSizeListItem(TextSizePreference.ExtraLarge, "Extra large")
+            };
+            textSizeSelect.ItemsSource = textSizes;
+            textSizeSelect.SelectedItem = textSizes.First(item =>
+                item.Preference == _preferences.TextSize);
+            textSizeSelect.SelectionChanged += (_, _) =>
+            {
+                if (textSizeSelect.SelectedItem is not TextSizeListItem item ||
+                    item.Preference == _preferences.TextSize)
+                    return;
+
+                _preferences.TextSize = item.Preference;
+                ApplyTextSizePreference();
+                PersistAppPreferences();
+                _diagnostics.Information(
+                    $"Text size changed to {item.Name}.");
             };
 
             var ocrModeSelect = this.GetControl<ComboBox>("cbOcrModeSelect");
@@ -1239,12 +1266,20 @@ namespace Aviscribe.UI
                 _moonCountText.Text = $"{moons.Count} moons";
             UpdateMoonListHighlights(_state.CreateSnapshot());
             _updatingLists = false;
+
+            if (moons.Count > 0)
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (ReferenceEquals(_moonList?.ItemsSource, moons))
+                        _moonList.ScrollIntoView(0);
+                }, DispatcherPriority.Loaded);
+            }
         }
 
         private void UpdateMoonListHighlights(GameStateSnapshot snapshot)
         {
-            if (_moonList?.ItemsSource is not IEnumerable<MoonListItem> items ||
-                _moonList.SelectedItems == null)
+            if (_moonList?.ItemsSource is not IEnumerable<MoonListItem> items)
                 return;
 
             var tracked = snapshot.Pending
@@ -1252,12 +1287,9 @@ namespace Aviscribe.UI
                 .Concat(snapshot.UncountedCollected)
                 .ToList();
 
-            _moonList.SelectedItems.Clear();
-            foreach (var item in items.Where(item =>
-                         tracked.Any(moon => SameMoon(moon, item.Moon))))
-            {
-                _moonList.SelectedItems.Add(item);
-            }
+            _moonList.SelectedItem = null;
+            foreach (var item in items)
+                item.IsTracked = tracked.Any(moon => SameMoon(moon, item.Moon));
         }
 
         private void UpdateKingdomHeader(string kingdom)
@@ -1295,6 +1327,25 @@ namespace Aviscribe.UI
                 AppThemePreference.Dark => ThemeVariant.Dark,
                 _ => ThemeVariant.Default
             };
+        }
+
+        private void ApplyTextSizePreference()
+        {
+            if (Application.Current?.Resources == null)
+                return;
+
+            var sizes = _preferences.TextSize switch
+            {
+                TextSizePreference.Small => (12d, 14d, 25d, 16d),
+                TextSizePreference.Large => (15d, 17d, 32d, 21d),
+                TextSizePreference.ExtraLarge => (17d, 19d, 36d, 24d),
+                _ => (13d, 15d, 28d, 18d)
+            };
+
+            Application.Current.Resources["FontSize"] = sizes.Item1;
+            Application.Current.Resources["SectionFontSize"] = sizes.Item2;
+            Application.Current.Resources["MetricFontSize"] = sizes.Item3;
+            Application.Current.Resources["RequirementFontSize"] = sizes.Item4;
         }
 
         private void InitializePlatformAppearance(object? sender, EventArgs args)
@@ -2269,8 +2320,28 @@ namespace Aviscribe.UI
         }
 
         private sealed record MoonListItem(Moon Moon, string Label, Bitmap? Image = null)
+            : INotifyPropertyChanged
         {
+            private bool _isTracked;
+
             public bool HasImage => Image != null;
+
+            public bool IsTracked
+            {
+                get => _isTracked;
+                set
+                {
+                    if (_isTracked == value)
+                        return;
+
+                    _isTracked = value;
+                    PropertyChanged?.Invoke(
+                        this,
+                        new PropertyChangedEventArgs(nameof(IsTracked)));
+                }
+            }
+
+            public event PropertyChangedEventHandler? PropertyChanged;
 
             public override string ToString() => Label;
         }
@@ -2293,6 +2364,13 @@ namespace Aviscribe.UI
 
         private sealed record AccentColorListItem(
             AccentColorPreference Preference,
+            string Name)
+        {
+            public override string ToString() => Name;
+        }
+
+        private sealed record TextSizeListItem(
+            TextSizePreference Preference,
             string Name)
         {
             public override string ToString() => Name;
