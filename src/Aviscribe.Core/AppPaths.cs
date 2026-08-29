@@ -54,6 +54,9 @@ public static class AppPaths
     public static string AppPreferencesPath =>
         Path.Combine(UserDataFolder, "preferences.json");
 
+    public static string OnlineResumePath =>
+        Path.Combine(UserDataFolder, "online-resume.json");
+
     public static AppPlatform CurrentPlatform()
     {
         if (OperatingSystem.IsWindows())

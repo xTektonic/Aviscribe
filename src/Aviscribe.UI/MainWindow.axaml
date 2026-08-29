@@ -50,7 +50,7 @@
       <Grid Margin="14" RowDefinitions="Auto,*,Auto" RowSpacing="10">
         <Border Classes="card compact">
           <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
-            <Grid ColumnDefinitions="200,Auto,Auto,Auto,*,Auto,Auto" ColumnSpacing="14">
+            <Grid ColumnDefinitions="200,Auto,Auto,Auto,*,Auto,Auto,Auto" ColumnSpacing="14">
               <StackPanel Spacing="4">
                 <TextBlock Classes="caption" Text="CURRENT KINGDOM"/>
                 <ComboBox Name="cbKingdomSelect" Width="200" HorizontalAlignment="Left"
@@ -70,11 +70,15 @@
                            FontSize="{DynamicResource RequirementFontSize}"
                            FontWeight="SemiBold"/>
               </StackPanel>
-              <Button Name="btnUpdatePreview" Grid.Column="5" Classes="primary"
+              <Button Name="btnOnlineRun" Grid.Column="5"
+                      Content="Offline"
+                      VerticalAlignment="Center"
+                      ToolTip.Tip="Create, join, or manage an online Talkatoo run."/>
+              <Button Name="btnUpdatePreview" Grid.Column="6" Classes="primary"
                       Content="Start Capture"
                       VerticalAlignment="Center"
                       ToolTip.Tip="Start or restart capture with the source configured in Settings."/>
-              <Button Name="btnResetKingdom" Grid.Column="6" Classes="danger"
+              <Button Name="btnResetKingdom" Grid.Column="7" Classes="danger"
                       Content="Reset Run"
                       VerticalAlignment="Center"
                       ToolTip.Tip="Clear every kingdom list and all items waiting for review."/>

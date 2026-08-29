@@ -14,6 +14,7 @@ using Aviscribe.Core.Capture;
 using Aviscribe.Core.Diagnostics;
 using Aviscribe.Core.KingdomDetection;
 using Aviscribe.Core.Ocr;
+using Aviscribe.Core.Online;
 using OpenCvSharp;
 using System;
 using System.Collections.Generic;
@@ -33,7 +34,10 @@ namespace Aviscribe.UI
         private readonly IAppDiagnostics _diagnostics;
         private readonly MoonRepository _repo;
         private readonly GameState _state = new();
+        private readonly RunCoordinator _runCoordinator;
+        private readonly OnlineRunCoordinator _onlineRun;
         private readonly RunStateStore _stateStore;
+        private SavedRunState? _loadedRunState;
         private readonly AppPreferencesStore _preferencesStore = new();
         private AppPreferences _preferences = new();
         private readonly RunOutputWriter _outputWriter = new();
@@ -74,6 +78,9 @@ namespace Aviscribe.UI
         private ComboBox? _inputLanguageSelect;
         private ComboBox? _outputLanguageSelect;
         private CheckBox? _includePostGameCheck;
+        private ComboBox? _categorySelect;
+        private Button? _onlineRunButton;
+        private Button? _resetRunButton;
         private CheckBox? _writeOverlayCheck;
         private TextBox? _overlayPathText;
         private TextBox? _moonNumberText;
@@ -101,6 +108,7 @@ namespace Aviscribe.UI
         private int _previewRequested;
         private int _sourceWidth;
         private int _sourceHeight;
+        private int _onlineGenerationSeen;
 
         public MainWindow()
             : this(new DesignVideoProvider(), NullAppDiagnostics.Instance)
@@ -122,12 +130,23 @@ namespace Aviscribe.UI
             ApplyAccentColorPreference();
             ApplyTextSizePreference();
             LoadSavedRunState();
+            _runCoordinator = new RunCoordinator(_state, _repo);
+            var restoredFacts = _loadedRunState == null
+                ? []
+                : _stateStore.RestoreFacts(_loadedRunState);
+            if (restoredFacts.Count > 0)
+                _runCoordinator.ReplaceFacts(restoredFacts);
+            else
+                _runCoordinator.ImportLegacyProjection();
+            _onlineRun = new OnlineRunCoordinator(_runCoordinator);
+            _onlineRun.StateChanged += (_, _) => Dispatcher.UIThread.Post(UpdateOnlineUi);
             NormalizeLanguageSettings();
             _outputWriter.Language = _state.Settings.OutputLanguage;
             InitControls();
             InitFrameProcessor();
             _state.Changed += (_, _) => UpdateRunState();
             UpdateRunState();
+            UpdateOnlineUi();
             Opened += InitializePlatformAppearance;
             Opened += ShowFirstRunQuickStart;
         }
@@ -154,6 +173,10 @@ namespace Aviscribe.UI
             this.GetControl<Button>("btnChooseCaptureSource").Click +=
                 ChooseCaptureSource;
 
+            _onlineRunButton = this.GetControl<Button>("btnOnlineRun");
+            _onlineRunButton.Click += OpenOnlineRun;
+            _resetRunButton = this.GetControl<Button>("btnResetKingdom");
+
             // Update Preview button
             Button updatePreview = this.GetControl<Button>("btnUpdatePreview");
             updatePreview.Click += StartPreview;
@@ -176,14 +199,15 @@ namespace Aviscribe.UI
                 }
             };
 
-            ComboBox categorySelect = this.GetControl<ComboBox>("cbCategorySelect");
-            categorySelect.ItemsSource = Enum.GetValues<RunCategory>();
-            categorySelect.SelectedItem = _state.Settings.Category;
-            categorySelect.SelectionChanged += (_, _) =>
+            _categorySelect = this.GetControl<ComboBox>("cbCategorySelect");
+            _categorySelect.ItemsSource = Enum.GetValues<RunCategory>();
+            _categorySelect.SelectedItem = _state.Settings.Category;
+            _categorySelect.SelectionChanged += (_, _) =>
             {
-                if (categorySelect.SelectedItem is RunCategory category)
+                if (_categorySelect.SelectedItem is RunCategory category)
                 {
                     _state.Settings.Category = category;
+                    _runCoordinator.Reproject();
                     _diagnostics.Information($"Run category changed to {category}.");
                     _state.NotifySettingsChanged();
                 }
@@ -255,6 +279,10 @@ namespace Aviscribe.UI
                     ClearAmbiguousReviews();
 
                 _state.SetIncludePostGameKingdoms(includePostGameKingdoms);
+                if (includePostGameKingdoms)
+                    _runCoordinator.Reproject();
+                else
+                    _runCoordinator.ResetLocal();
                 _diagnostics.Information(includePostGameKingdoms
                     ? "Postgame kingdoms enabled."
                     : "Postgame kingdoms disabled and run state reset.");
@@ -501,25 +529,25 @@ namespace Aviscribe.UI
             this.GetControl<Button>("btnManualPending").Click += (_, _) =>
             {
                 if (GetSelectedMoon() is { } moon)
-                    _state.AddPending(moon);
+                    _runCoordinator.SetPending(moon);
             };
 
             this.GetControl<Button>("btnManualCollected").Click += (_, _) =>
             {
                 if (GetSelectedMoon() is { } moon)
-                    _state.MarkCollected(moon);
+                    _runCoordinator.SetCounted(moon);
             };
 
             this.GetControl<Button>("btnManualUncounted").Click += (_, _) =>
             {
                 if (GetSelectedMoon() is { } moon)
-                    _state.MarkUncounted(moon);
+                    _runCoordinator.SetUncounted(moon);
             };
 
             this.GetControl<Button>("btnManualRemove").Click += (_, _) =>
             {
                 if (GetSelectedStateMoon() is { } moon)
-                    _state.Remove(moon);
+                    _runCoordinator.Remove(moon);
             };
 
             this.GetControl<Button>("btnResetKingdom").Click += async (_, _) =>
@@ -528,7 +556,7 @@ namespace Aviscribe.UI
                     return;
 
                 ClearAmbiguousReviews();
-                _state.ResetRun();
+                _runCoordinator.ResetLocal();
                 _diagnostics.Information("Run reset by the user.");
                 RefreshKingdoms(_state.CurrentKingdom);
                 RefreshMoonSelect();
@@ -712,7 +740,8 @@ namespace Aviscribe.UI
                 detector,
                 GetCropForDevice(_captureDeviceId),
                 _diagnostics,
-                kingdomDetector);
+                kingdomDetector,
+                _runCoordinator);
             _processorCaptureDeviceId = _captureDeviceId;
             _processor.AmbiguousMatchReceived += (_, result) =>
             {
@@ -903,6 +932,7 @@ namespace Aviscribe.UI
                     UpdateCropSummary();
                 });
                 PersistRunState(_state.CreateSnapshot());
+                _onlineRun.CaptureSharingArmed = true;
                 SetStatus(
                     $"Watching {capture.Device.Name} at {capture.SelectedFormat}");
                 _diagnostics.Information(
@@ -983,6 +1013,7 @@ namespace Aviscribe.UI
                 {
                     _processor?.Stop();
                     _processorRunning = false;
+                    _onlineRun.CaptureSharingArmed = false;
                     _currentDevice = null;
                 }
             }
@@ -992,6 +1023,7 @@ namespace Aviscribe.UI
             object? sender,
             CaptureErrorEventArgs args)
         {
+            _onlineRun.CaptureSharingArmed = false;
             _snapshotBroker.Cancel(
                 args.Exception ?? new IOException(args.Message));
             _diagnostics.Error(
@@ -1011,7 +1043,10 @@ namespace Aviscribe.UI
             _diagnostics.Debug(
                 $"Capture state changed from {args.Previous} to {args.Current}.");
             if (args.Current == CaptureState.Faulted)
+            {
+                _onlineRun.CaptureSharingArmed = false;
                 SetStatus("Capture entered a faulted state");
+            }
         }
 
         private void UpdatePreview(Mat source)
@@ -1496,6 +1531,7 @@ namespace Aviscribe.UI
                 if (savedState == null)
                     return;
 
+                _loadedRunState = savedState;
                 _stateStore.Restore(_state, savedState);
                 foreach (var review in _stateStore.RestoreReviews(savedState))
                 {
@@ -1548,7 +1584,8 @@ namespace Aviscribe.UI
                     GetCaptureCropSnapshot(),
                     _captureSourceSelection.Kind,
                     _captureSourceSelection.Snapshot(),
-                    GetReviewSnapshot());
+                    GetReviewSnapshot(),
+                    _runCoordinator.CreateFactSnapshot());
             }
             catch (Exception ex)
             {
@@ -1627,13 +1664,15 @@ namespace Aviscribe.UI
             switch (type)
             {
                 case OcrRegionType.Talkatoo:
-                    _state.AddPending(moon);
+                    _runCoordinator.ObserveHint(moon, automaticCapture: false);
                     SetStatus($"Added {moon.English}");
                     break;
 
                 case OcrRegionType.MoonGet:
                 case OcrRegionType.StoryMoon:
-                    var outcome = _state.MarkCollected(moon);
+                    var outcome = _runCoordinator.ObserveCollection(
+                        moon,
+                        automaticCapture: false);
                     SetStatus(outcome == CollectionOutcome.Uncounted
                         ? $"Tracked wrong moon: {moon.English}"
                         : $"Collected {moon.English}");
@@ -1902,22 +1941,22 @@ namespace Aviscribe.UI
             switch (target)
             {
                 case ManualMoonTarget.Pending:
-                    _state.MoveToPending(moon);
+                    _runCoordinator.SetPending(moon);
                     SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} -> pending");
                     break;
 
                 case ManualMoonTarget.Collected:
-                    _state.MoveToCollected(moon);
+                    _runCoordinator.SetCounted(moon);
                     SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} -> counted");
                     break;
 
                 case ManualMoonTarget.Uncounted:
-                    _state.MoveToUncounted(moon);
+                    _runCoordinator.SetUncounted(moon);
                     SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} -> wrong");
                     break;
 
                 case ManualMoonTarget.All:
-                    _state.Remove(moon);
+                    _runCoordinator.Remove(moon);
                     SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} removed");
                     break;
             }
@@ -1960,7 +1999,7 @@ namespace Aviscribe.UI
                     {
                         if (target != ManualMoonTarget.All)
                         {
-                            _state.Remove(item.Moon);
+                            _runCoordinator.Remove(item.Moon);
                             SetStatus($"Removed {FormatMoon(item.Moon)}");
                         }
 
@@ -2094,18 +2133,18 @@ namespace Aviscribe.UI
             switch (source)
             {
                 case ManualMoonTarget.All:
-                    _state.MoveToPending(moon);
+                    _runCoordinator.SetPending(moon);
                     SetStatus($"Added {FormatMoon(moon)} to pending");
                     break;
 
                 case ManualMoonTarget.Pending:
-                    _state.MoveToCollected(moon);
+                    _runCoordinator.SetCounted(moon);
                     SetStatus($"Collected {FormatMoon(moon)}");
                     break;
 
                 case ManualMoonTarget.Collected:
                 case ManualMoonTarget.Uncounted:
-                    _state.MoveToPending(moon);
+                    _runCoordinator.SetPending(moon);
                     SetStatus($"Moved {FormatMoon(moon)} to pending");
                     break;
             }
@@ -2124,23 +2163,23 @@ namespace Aviscribe.UI
                 case ManualMoonTarget.All:
                     if (source != ManualMoonTarget.All)
                     {
-                        _state.Remove(moon);
+                        _runCoordinator.Remove(moon);
                         SetStatus($"Removed {FormatMoon(moon)}");
                     }
                     break;
 
                 case ManualMoonTarget.Pending:
-                    _state.MoveToPending(moon);
+                    _runCoordinator.SetPending(moon);
                     SetStatus($"Moved {FormatMoon(moon)} to pending");
                     break;
 
                 case ManualMoonTarget.Collected:
-                    _state.MoveToCollected(moon);
+                    _runCoordinator.SetCounted(moon);
                     SetStatus($"Moved {FormatMoon(moon)} to collected");
                     break;
 
                 case ManualMoonTarget.Uncounted:
-                    _state.MoveToUncounted(moon);
+                    _runCoordinator.SetUncounted(moon);
                     SetStatus($"Moved {FormatMoon(moon)} to wrong moons");
                     break;
             }
@@ -2285,6 +2324,64 @@ namespace Aviscribe.UI
             });
         }
 
+        private async void OpenOnlineRun(object? sender, RoutedEventArgs args)
+        {
+            var window = new OnlineRunWindow(
+                _onlineRun,
+                _preferences,
+                PersistAppPreferences,
+                () => _runCoordinator.CreateFactSnapshot().Count > 0,
+                ConfirmReplaceWithOnlineRunAsync,
+                () => _state.Settings.Clone());
+            await window.ShowDialog(this);
+        }
+
+        private Task<bool> ConfirmReplaceWithOnlineRunAsync() => ConfirmRunResetAsync(
+            "Replace Local Run?",
+            "Connecting will replace the current local moon state with the online run. Local capture, route order, language, hotkeys, and overlay settings are kept.",
+            "Replace and Connect");
+
+        private void UpdateOnlineUi()
+        {
+            if (_onlineRunButton == null) return;
+            var joined = _onlineRun.IsJoined;
+            _onlineRunButton.Content = _onlineRun.State switch
+            {
+                OnlineConnectionState.Connected =>
+                    $"Online · {_onlineRun.Participants.Count(item => item.IsOnline)} players",
+                OnlineConnectionState.Reconnecting => "Reconnecting",
+                OnlineConnectionState.SharingPaused => "Online · sharing paused",
+                _ => "Offline"
+            };
+            if (_categorySelect != null)
+            {
+                _categorySelect.IsEnabled = !joined;
+                if (joined) _categorySelect.SelectedItem = _state.Settings.Category;
+            }
+            if (_includePostGameCheck != null)
+            {
+                _includePostGameCheck.IsEnabled = !joined;
+                if (joined)
+                {
+                    _updatingIncludePostGameCheck = true;
+                    _includePostGameCheck.IsChecked = _state.Settings.IncludePostGameKingdoms;
+                    _updatingIncludePostGameCheck = false;
+                }
+            }
+            if (_resetRunButton != null) _resetRunButton.IsEnabled = !joined;
+
+            if (joined && _onlineGenerationSeen != _onlineRun.Generation)
+            {
+                _onlineGenerationSeen = _onlineRun.Generation;
+                ClearAmbiguousReviews();
+                ShowNextReview();
+            }
+            else if (!joined)
+            {
+                _onlineGenerationSeen = 0;
+            }
+        }
+
         protected override void OnClosed(EventArgs e)
         {
             _diagnostics.Information("Aviscribe is shutting down.");
@@ -2309,6 +2406,13 @@ namespace Aviscribe.UI
             }
 
             _processor?.Dispose();
+            try
+            {
+                _onlineRun.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            catch
+            {
+            }
             _snapshotBroker.Dispose();
             _previewBitmap?.Dispose();
             foreach (var bitmap in _moonImageCache.Values)

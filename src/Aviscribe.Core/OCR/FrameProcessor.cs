@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Aviscribe.Core.Online;
 
 namespace Aviscribe.Core.Ocr
 {
@@ -15,6 +16,7 @@ namespace Aviscribe.Core.Ocr
         private readonly IOcrService _ocr;
         private readonly MoonMatcher _matcher;
         private readonly GameState _state;
+        private readonly RunCoordinator? _runCoordinator;
         private readonly IAppDiagnostics _diagnostics;
 
         private readonly object _lock = new();
@@ -58,11 +60,13 @@ namespace Aviscribe.Core.Ocr
             ITextPresenceDetector? textDetector = null,
             CaptureCropSettings? cropSettings = null,
             IAppDiagnostics? diagnostics = null,
-            IKingdomDetector? kingdomDetector = null)
+            IKingdomDetector? kingdomDetector = null,
+            RunCoordinator? runCoordinator = null)
         {
             _ocr = ocr;
             _matcher = matcher;
             _state = state;
+            _runCoordinator = runCoordinator;
             _diagnostics = diagnostics ?? NullAppDiagnostics.Instance;
             _textDetector = textDetector ?? new HeuristicTextPresenceDetector();
             _kingdomDetector = kingdomDetector;
@@ -847,13 +851,14 @@ namespace Aviscribe.Core.Ocr
             switch (type)
             {
                 case OcrRegionType.Talkatoo:
-                    if (_state.TryAddPending(match))
+                    if (_runCoordinator?.ObserveHint(match) ?? _state.TryAddPending(match))
                         _diagnostics.Debug($"ADD: {match.English}");
                     break;
 
                 case OcrRegionType.MoonGet:
                 case OcrRegionType.StoryMoon:
-                    var outcome = _state.MarkCollected(match);
+                    var outcome = _runCoordinator?.ObserveCollection(match) ??
+                                  _state.MarkCollected(match);
                     switch (outcome)
                     {
                         case CollectionOutcome.Counted:

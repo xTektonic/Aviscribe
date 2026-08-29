@@ -1,0 +1,237 @@
+using System.Buffers.Binary;
+using System.Net;
+using System.Net.Sockets;
+using System.Text.Json;
+using Aviscribe.Core.Online;
+
+namespace Aviscribe.Core.Tests;
+
+public sealed class OnlineIntegrationTests
+{
+    [Fact]
+    public void HintAndCollectionFactsCommuteAndManualTransitionsAreExplicit()
+    {
+        var hintThenCollection = RunFactReducer.Apply(
+            RunFactReducer.Apply(null, RunEventKind.HintObserved),
+            RunEventKind.CollectionObserved);
+        var collectionThenHint = RunFactReducer.Apply(
+            RunFactReducer.Apply(null, RunEventKind.CollectionObserved),
+            RunEventKind.HintObserved);
+        Assert.Equal(hintThenCollection, collectionThenHint);
+        Assert.Equal(new RunFact(true, true), hintThenCollection);
+
+        var pending = RunFactReducer.Apply(hintThenCollection, RunEventKind.SetPending);
+        Assert.Equal(new RunFact(true, false), pending);
+        var counted = RunFactReducer.Apply(pending, RunEventKind.SetCounted);
+        Assert.Equal(ManualClassification.Counted, counted!.Value.ManualClassification);
+        var wrong = RunFactReducer.Apply(counted, RunEventKind.SetUncounted);
+        Assert.Equal(ManualClassification.Uncounted, wrong!.Value.ManualClassification);
+        Assert.Null(RunFactReducer.Apply(wrong, RunEventKind.RemoveMoon));
+    }
+
+    [Fact]
+    public void RemoteApplicationDoesNotEchoAndProjectionHandlesHintArtAndMultiMoons()
+    {
+        var repository = MoonRepository.LoadDefault();
+        var state = new GameState();
+        state.SetKingdom(GameState.InitialKingdom);
+        var coordinator = new RunCoordinator(state, repository);
+        var outbound = 0;
+        coordinator.LocalEventCreated += (_, _) => outbound++;
+        var hintArt = repository.Moons.First(moon => moon.IsHintArt);
+
+        Assert.True(coordinator.ApplyRemote(new SharedRunEvent(
+            Guid.NewGuid(),
+            RunEventKind.HintObserved,
+            coordinator.Catalog.ToWire(hintArt))));
+        Assert.Equal(0, outbound);
+        state.SetKingdom(hintArt.Kingdom);
+        Assert.Contains(state.Pending, moon => Same(moon, hintArt));
+        state.SetKingdom(hintArt.CollectionLocationKingdom);
+        Assert.Contains(state.Pending, moon => Same(moon, hintArt));
+
+        var multi = repository.Moons.First(moon => moon.IsMulti);
+        coordinator.SetCounted(multi);
+        state.SetKingdom(multi.Kingdom);
+        Assert.Contains(state.Collected, moon => Same(moon, multi));
+        Assert.True(state.CountedMoonCount >= multi.MoonCountValue);
+        Assert.Equal(1, outbound);
+    }
+
+    [Fact]
+    public void CatalogHashIgnoresTranslationsButTracksGameplayMetadata()
+    {
+        var original = new Moon
+        {
+            Kingdom = "Cascade",
+            Id = 1,
+            CollectionKingdom = "Sand",
+            IsStory = true,
+            IsMulti = false,
+            English = "Name",
+            Japanese = "名前"
+        };
+        var translated = Copy(original);
+        translated.English = "Different";
+        translated.Japanese = "別";
+        Assert.Equal(
+            OnlineCatalog.CalculateHash([original]),
+            OnlineCatalog.CalculateHash([translated]));
+
+        var gameplayChange = Copy(original);
+        gameplayChange.IsMulti = true;
+        Assert.NotEqual(
+            OnlineCatalog.CalculateHash([original]),
+            OnlineCatalog.CalculateHash([gameplayChange]));
+    }
+
+    [Fact]
+    public void LegacyPersistenceMigratesPendingCountedAndWrongToFacts()
+    {
+        var repository = MoonRepository.LoadDefault();
+        var moons = repository.Moons.Take(3).ToArray();
+        var saved = new SavedRunState
+        {
+            KingdomStates = new Dictionary<string, SavedKingdomState>
+            {
+                [moons[0].Kingdom] = new SavedKingdomState
+                {
+                    Pending = [Reference(moons[0])],
+                    Collected = [Reference(moons[1])],
+                    UncountedCollected = [Reference(moons[2])]
+                }
+            }
+        };
+        var facts = new RunStateStore(repository).RestoreFacts(saved);
+        Assert.Contains(facts, fact => fact.MoonId == moons[0].Id && fact.Hinted && !fact.Collected);
+        Assert.Contains(facts, fact => fact.MoonId == moons[1].Id &&
+                                      fact.ManualClassification == ManualClassification.Counted);
+        Assert.Contains(facts, fact => fact.MoonId == moons[2].Id &&
+                                      fact.ManualClassification == ManualClassification.Uncounted);
+    }
+
+    [Fact]
+    public void WireEventsSerializeEnumAndMoonIdentityAsIntegers()
+    {
+        var json = JsonSerializer.Serialize(new WireRunEvent
+        {
+            EventId = Guid.NewGuid(),
+            Kind = RunEventKind.HintObserved,
+            KingdomId = 4,
+            MoonId = 17
+        }, OnlineProtocol.JsonOptions);
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal(0, document.RootElement.GetProperty("t").GetInt32());
+        Assert.Equal(4, document.RootElement.GetProperty("k").GetInt32());
+        Assert.Equal(17, document.RootElement.GetProperty("m").GetInt32());
+        Assert.DoesNotContain("kingdom", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ApiClientAcceptsFragmentedFramesAndRejectsMismatchedResponses()
+    {
+        var (port, server) = StartFakeServerAsync(async (stream, request) =>
+        {
+            var response = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                version = 1,
+                requestId = request.GetProperty("requestId").GetGuid(),
+                ok = true,
+                data = new
+                {
+                    enabled = true,
+                    protocolVersions = new[] { 1 },
+                    maximumActiveRuns = 16,
+                    maximumParticipantsPerRun = 8,
+                    idleExpirationMinutes = 30
+                }
+            }, OnlineProtocol.JsonOptions);
+            await WriteFragmentedResponseAsync(stream, response);
+        });
+        var capabilities = await new OnlineApiClient("127.0.0.1", port)
+            .GetCapabilitiesAsync(TestContext.Current.CancellationToken);
+        Assert.True(capabilities.Enabled);
+        await server;
+
+        var (badPort, badServer) = StartFakeServerAsync(async (stream, _) =>
+        {
+            var response = JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                version = 1,
+                requestId = Guid.NewGuid(),
+                ok = true,
+                data = new { enabled = true }
+            }, OnlineProtocol.JsonOptions);
+            await WriteFragmentedResponseAsync(stream, response);
+        });
+        var error = await Assert.ThrowsAsync<OnlineApiException>(() =>
+            new OnlineApiClient("127.0.0.1", badPort)
+                .GetCapabilitiesAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("invalidResponse", error.Code);
+        await badServer;
+    }
+
+    private static (int Port, Task Server) StartFakeServerAsync(
+        Func<NetworkStream, JsonElement, Task> responder)
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var task = Task.Run(async () =>
+        {
+            try
+            {
+                using var client = await listener.AcceptTcpClientAsync(TestContext.Current.CancellationToken);
+                await using var stream = client.GetStream();
+                var magic = new byte[OnlineProtocol.Magic.Length];
+                await ReadExactAsync(stream, magic);
+                Assert.Equal(OnlineProtocol.Magic, magic);
+                var length = new byte[4];
+                await ReadExactAsync(stream, length);
+                var payload = new byte[BinaryPrimitives.ReadInt32BigEndian(length)];
+                await ReadExactAsync(stream, payload);
+                using var request = JsonDocument.Parse(payload);
+                await responder(stream, request.RootElement.Clone());
+            }
+            finally
+            {
+                listener.Stop();
+            }
+        });
+        return (port, task);
+    }
+
+    private static async Task WriteFragmentedResponseAsync(NetworkStream stream, byte[] payload)
+    {
+        var frame = new byte[4 + payload.Length];
+        BinaryPrimitives.WriteInt32BigEndian(frame, payload.Length);
+        payload.CopyTo(frame, 4);
+        foreach (var value in frame)
+            await stream.WriteAsync(new byte[] { value }, TestContext.Current.CancellationToken);
+    }
+
+    private static async Task ReadExactAsync(Stream stream, Memory<byte> buffer)
+    {
+        var offset = 0;
+        while (offset < buffer.Length)
+        {
+            var read = await stream.ReadAsync(buffer[offset..], TestContext.Current.CancellationToken);
+            if (read == 0) throw new EndOfStreamException();
+            offset += read;
+        }
+    }
+
+    private static bool Same(Moon left, Moon right) => left.Id == right.Id &&
+        left.Kingdom.Equals(right.Kingdom, StringComparison.OrdinalIgnoreCase);
+    private static SavedMoonReference Reference(Moon moon) => new() { Kingdom = moon.Kingdom, MoonId = moon.Id };
+    private static Moon Copy(Moon moon) => new()
+    {
+        Kingdom = moon.Kingdom,
+        Id = moon.Id,
+        CollectionKingdom = moon.CollectionKingdom,
+        IsStory = moon.IsStory,
+        IsMulti = moon.IsMulti,
+        English = moon.English,
+        Japanese = moon.Japanese
+    };
+}
