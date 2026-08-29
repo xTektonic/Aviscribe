@@ -80,6 +80,9 @@ namespace Aviscribe.UI
         private CheckBox? _includePostGameCheck;
         private ComboBox? _categorySelect;
         private Button? _onlineRunButton;
+        private StackPanel? _multiplayerStatusPanel;
+        private Border? _multiplayerStatusDot;
+        private TextBlock? _multiplayerStatusText;
         private Button? _resetRunButton;
         private CheckBox? _writeOverlayCheck;
         private TextBox? _overlayPathText;
@@ -175,6 +178,9 @@ namespace Aviscribe.UI
 
             _onlineRunButton = this.GetControl<Button>("btnOnlineRun");
             _onlineRunButton.Click += OpenOnlineRun;
+            _multiplayerStatusPanel = this.GetControl<StackPanel>("pnlMultiplayerStatus");
+            _multiplayerStatusDot = this.GetControl<Border>("multiplayerStatusDot");
+            _multiplayerStatusText = this.GetControl<TextBlock>("txtMultiplayerStatus");
             _resetRunButton = this.GetControl<Button>("btnResetKingdom");
 
             // Update Preview button
@@ -787,6 +793,8 @@ namespace Aviscribe.UI
 
         private void OnFrame(VideoFrame frame)
         {
+            if (!_onlineRun.CaptureSharingArmed)
+                UpdateCaptureSharingState();
             VideoFrame? ownedFrame = frame;
             try
             {
@@ -860,6 +868,7 @@ namespace Aviscribe.UI
                     _video?.State == CaptureState.Running &&
                     _processorRunning)
                 {
+                    UpdateCaptureSharingState();
                     return;
                 }
 
@@ -923,6 +932,7 @@ namespace Aviscribe.UI
                     throw;
                 }
 
+                UpdateCaptureSharingState();
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (_selectedCaptureSourceText != null)
@@ -932,7 +942,6 @@ namespace Aviscribe.UI
                     UpdateCropSummary();
                 });
                 PersistRunState(_state.CreateSnapshot());
-                _onlineRun.CaptureSharingArmed = true;
                 SetStatus(
                     $"Watching {capture.Device.Name} at {capture.SelectedFormat}");
                 _diagnostics.Information(
@@ -1013,7 +1022,7 @@ namespace Aviscribe.UI
                 {
                     _processor?.Stop();
                     _processorRunning = false;
-                    _onlineRun.CaptureSharingArmed = false;
+                    UpdateCaptureSharingState(isActive: false);
                     _currentDevice = null;
                 }
             }
@@ -1023,7 +1032,7 @@ namespace Aviscribe.UI
             object? sender,
             CaptureErrorEventArgs args)
         {
-            _onlineRun.CaptureSharingArmed = false;
+            UpdateCaptureSharingState(isActive: false);
             _snapshotBroker.Cancel(
                 args.Exception ?? new IOException(args.Message));
             _diagnostics.Error(
@@ -1042,9 +1051,10 @@ namespace Aviscribe.UI
         {
             _diagnostics.Debug(
                 $"Capture state changed from {args.Previous} to {args.Current}.");
+            UpdateCaptureSharingState(
+                isActive: args.Current == CaptureState.Running && _processorRunning);
             if (args.Current == CaptureState.Faulted)
             {
-                _onlineRun.CaptureSharingArmed = false;
                 SetStatus("Capture entered a faulted state");
             }
         }
@@ -1741,7 +1751,8 @@ namespace Aviscribe.UI
                 Height = 205,
                 CanResize = false,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                ShowInTaskbar = false
+                ShowInTaskbar = false,
+                Icon = Icon
             };
             var resetButton = new Button { Content = confirmButtonText };
             resetButton.Classes.Add("danger");
@@ -2326,6 +2337,7 @@ namespace Aviscribe.UI
 
         private async void OpenOnlineRun(object? sender, RoutedEventArgs args)
         {
+            UpdateCaptureSharingState();
             var window = new OnlineRunWindow(
                 _onlineRun,
                 _preferences,
@@ -2336,23 +2348,48 @@ namespace Aviscribe.UI
             await window.ShowDialog(this);
         }
 
+        private void UpdateCaptureSharingState(bool? isActive = null)
+        {
+            var active = isActive ??
+                (_video?.State == CaptureState.Running && _processorRunning);
+            if (_onlineRun.CaptureSharingArmed == active) return;
+            _onlineRun.CaptureSharingArmed = active;
+            _diagnostics.Debug(active
+                ? "Multiplayer capture sharing is active."
+                : "Multiplayer capture sharing is paused.");
+        }
+
         private Task<bool> ConfirmReplaceWithOnlineRunAsync() => ConfirmRunResetAsync(
             "Replace Local Run?",
-            "Connecting will replace the current local moon state with the online run. Local capture, route order, language, hotkeys, and overlay settings are kept.",
+            "Joining a multiplayer room will replace the current local moon state with the room's run. Local capture, route order, language, hotkeys, and overlay settings are kept.",
             "Replace and Connect");
 
         private void UpdateOnlineUi()
         {
             if (_onlineRunButton == null) return;
             var joined = _onlineRun.IsJoined;
-            _onlineRunButton.Content = _onlineRun.State switch
+            _onlineRunButton.Content = "Multiplayer";
+            if (_multiplayerStatusPanel != null)
+                _multiplayerStatusPanel.IsVisible = true;
+            if (_multiplayerStatusText != null)
+                _multiplayerStatusText.Text = _onlineRun.State switch
+                {
+                    OnlineConnectionState.Connected =>
+                        $"Connected · {_onlineRun.Participants.Count(item => item.IsOnline)} players",
+                    OnlineConnectionState.Reconnecting => "Reconnecting",
+                    OnlineConnectionState.SharingPaused => "Sharing paused",
+                    _ => "Offline"
+                };
+            if (_multiplayerStatusDot != null)
             {
-                OnlineConnectionState.Connected =>
-                    $"Online · {_onlineRun.Participants.Count(item => item.IsOnline)} players",
-                OnlineConnectionState.Reconnecting => "Reconnecting",
-                OnlineConnectionState.SharingPaused => "Online · sharing paused",
-                _ => "Offline"
-            };
+                _multiplayerStatusDot.Background = _onlineRun.State switch
+                {
+                    OnlineConnectionState.Connected => new SolidColorBrush(Color.Parse("#2E9B68")),
+                    OnlineConnectionState.Reconnecting or OnlineConnectionState.SharingPaused =>
+                        new SolidColorBrush(Color.Parse("#D99227")),
+                    _ => new SolidColorBrush(Color.Parse("#C65353"))
+                };
+            }
             if (_categorySelect != null)
             {
                 _categorySelect.IsEnabled = !joined;
@@ -2368,7 +2405,16 @@ namespace Aviscribe.UI
                     _updatingIncludePostGameCheck = false;
                 }
             }
-            if (_resetRunButton != null) _resetRunButton.IsEnabled = !joined;
+            if (_resetRunButton != null)
+            {
+                _resetRunButton.IsEnabled = !joined;
+                ToolTip.SetTip(
+                    _resetRunButton,
+                    joined
+                        ? "Reset the run from the Multiplayer screen while connected to a room."
+                        : "Clear every kingdom list and all items waiting for review.");
+                ToolTip.SetShowOnDisabled(_resetRunButton, true);
+            }
 
             if (joined && _onlineGenerationSeen != _onlineRun.Generation)
             {

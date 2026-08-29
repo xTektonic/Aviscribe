@@ -89,6 +89,11 @@ public sealed class OnlineJoinRunData
     public string CatalogHash { get; set; } = string.Empty;
 }
 
+public sealed class OnlineResumeRunData
+{
+    public string JoinCode { get; set; } = string.Empty;
+}
+
 public sealed class OnlinePublishData
 {
     public int Generation { get; set; }

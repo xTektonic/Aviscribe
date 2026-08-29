@@ -1,5 +1,8 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Aviscribe.Core;
 using Aviscribe.Core.Online;
@@ -8,6 +11,9 @@ namespace Aviscribe.UI;
 
 public partial class OnlineRunWindow : Window
 {
+    private static readonly IBrush ConnectedBrush = new SolidColorBrush(Color.Parse("#2E9B68"));
+    private static readonly IBrush WarningBrush = new SolidColorBrush(Color.Parse("#D99227"));
+    private static readonly IBrush DisconnectedBrush = new SolidColorBrush(Color.Parse("#C65353"));
     private readonly OnlineRunCoordinator _online = null!;
     private readonly AppPreferences _preferences = null!;
     private readonly Action _savePreferences = null!;
@@ -51,6 +57,7 @@ public partial class OnlineRunWindow : Window
         this.GetControl<Button>("btnOnlineLeave").Click += LeaveRun;
         this.GetControl<Button>("btnOnlineReset").Click += ResetRun;
         this.GetControl<Button>("btnOnlineEnd").Click += EndRun;
+        this.GetControl<Button>("btnCopyJoinCode").Click += CopyJoinCode;
         _online.StateChanged += OnlineStateChanged;
         Closed += (_, _) => _online.StateChanged -= OnlineStateChanged;
         Refresh();
@@ -91,18 +98,18 @@ public partial class OnlineRunWindow : Window
     private async void LeaveRun(object? sender, RoutedEventArgs args)
     {
         if (!await ConfirmAsync(
-                "Leave Online Run?",
-                "You will be removed from the run and the saved resume credential will be deleted.",
-                "Leave Run")) return;
+                "Leave Multiplayer Room?",
+                "You will leave the room and the saved rejoin credential will be deleted.",
+                "Leave Room")) return;
         await RunBusyAsync(_online.LeaveAsync);
     }
 
     private async void ResetRun(object? sender, RoutedEventArgs args)
     {
         if (!await ConfirmAsync(
-                "Reset Online Run?",
-                "This clears shared moon state for every participant and starts a new generation.",
-                "Reset Run")) return;
+                "Start a New Run?",
+                "This clears shared moon state for every player in the room and starts a new run.",
+                "Start New Run")) return;
         var settings = _settings().Clone();
         if (this.GetControl<ComboBox>("cbOnlineCategory").SelectedItem is RunCategory category)
             settings.Category = category;
@@ -113,10 +120,31 @@ public partial class OnlineRunWindow : Window
     private async void EndRun(object? sender, RoutedEventArgs args)
     {
         if (!await ConfirmAsync(
-                "End Online Run?",
-                "This ends the session for every participant. It cannot be resumed.",
+                "End Multiplayer Run?",
+                "This ends the run and closes the room for every player. It cannot be resumed.",
                 "End Run")) return;
         await RunBusyAsync(_online.EndAsync);
+    }
+
+    private async void CopyJoinCode(object? sender, RoutedEventArgs args)
+    {
+        var code = _online.JoinCode;
+        if (string.IsNullOrWhiteSpace(code)) return;
+        try
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard == null)
+            {
+                ShowMessage("Clipboard access is unavailable. Select the room code and copy it manually.");
+                return;
+            }
+            await clipboard.SetTextAsync(code);
+            ShowMessage("Room join code copied to the clipboard.");
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Could not copy the room code: {ex.Message}. You can still select and copy it manually.");
+        }
     }
 
     private async Task<bool> ValidateAndConfirmAsync(bool alwaysConfirmNonEmpty, bool validateFields = true)
@@ -179,32 +207,69 @@ public partial class OnlineRunWindow : Window
         this.GetControl<StackPanel>("pnlConnected").IsVisible = joined;
         this.GetControl<TextBlock>("txtOnlineStatus").Text = _online.State switch
         {
-            OnlineConnectionState.Connected => $"Online · {_online.Participants.Count(item => item.IsOnline)} players",
+            OnlineConnectionState.Connected => $"Room connected · {_online.Participants.Count(item => item.IsOnline)} players online",
             OnlineConnectionState.Reconnecting => "Reconnecting",
-            OnlineConnectionState.SharingPaused => "Online · sharing paused",
-            _ => "Offline"
+            OnlineConnectionState.SharingPaused => "Room connected · sharing paused",
+            _ => "Not in a room"
         };
+        SetStatusDot(this.GetControl<Border>("multiplayerStatusDot"), _online.State);
         if (!string.IsNullOrWhiteSpace(_online.LastMessage))
             this.GetControl<TextBlock>("txtOnlineMessage").Text = _online.LastMessage;
         this.GetControl<Button>("btnResumeRun").IsVisible = _online.HasPreviousRun;
-        foreach (var name in new[] { "btnCreateRun", "btnJoinRun", "btnResumeRun", "btnOnlineLeave", "btnOnlineReset", "btnOnlineEnd" })
+        foreach (var name in new[] { "btnCreateRun", "btnJoinRun", "btnResumeRun", "btnOnlineLeave", "btnOnlineReset", "btnOnlineEnd", "btnCopyJoinCode" })
             this.GetControl<Button>(name).IsEnabled = !_busy;
         if (!joined) return;
 
-        this.GetControl<TextBlock>("txtConnectedCode").Text = string.IsNullOrWhiteSpace(_online.JoinCode) ? "—" : _online.JoinCode;
+        this.GetControl<TextBox>("txtConnectedCode").Text = string.IsNullOrWhiteSpace(_online.JoinCode) ? "—" : _online.JoinCode;
+        this.GetControl<Button>("btnCopyJoinCode").IsEnabled = !_busy && !string.IsNullOrWhiteSpace(_online.JoinCode);
         this.GetControl<TextBlock>("txtCaptureSharing").Text = _online.CaptureSharingArmed
-            ? "Active while capture runs"
-            : "Automatic detections paused";
+            ? _online.State switch
+            {
+                OnlineConnectionState.Connected => "Sharing active",
+                OnlineConnectionState.Reconnecting => "Queued · reconnecting",
+                _ => "Sharing paused"
+            }
+            : "Paused · start capture";
+        SetStatusDot(
+            this.GetControl<Border>("captureSharingDot"),
+            !_online.CaptureSharingArmed
+                ? "disconnected"
+                : _online.State == OnlineConnectionState.Connected
+                    ? "connected"
+                    : "warning");
         var owner = _online.Participants.FirstOrDefault(item => item.ParticipantId == _online.OwnerParticipantId);
         this.GetControl<TextBlock>("txtOwner").Text = owner?.DisplayName ?? "Vacant";
         this.GetControl<ListBox>("lstOnlineParticipants").ItemsSource = _online.Participants.Select(item =>
-            $"{item.DisplayName} · {(item.IsOnline ? "online" : "offline")}" +
-            (item.ParticipantId == _online.OwnerParticipantId ? " · owner" : string.Empty)).ToList();
+        {
+            var isCurrentPlayerWaiting = item.ParticipantId == _online.ParticipantId &&
+                                         _online.State is OnlineConnectionState.Reconnecting or
+                                             OnlineConnectionState.SharingPaused;
+            var status = isCurrentPlayerWaiting ? "Connecting" : item.IsOnline ? "Online" : "Offline";
+            var brush = isCurrentPlayerWaiting ? WarningBrush : item.IsOnline ? ConnectedBrush : DisconnectedBrush;
+            var role = item.ParticipantId == _online.OwnerParticipantId ? " · Owner" : string.Empty;
+            return new PlayerListItem(item.DisplayName, status + role, brush);
+        }).ToList();
         this.GetControl<ListBox>("lstOnlineEvents").ItemsSource = _online.RecentEvents
             .OrderByDescending(item => item.Revision)
-            .Select(item => item.Message)
+            .Select(_online.DescribeFeedItem)
             .ToList();
         this.GetControl<Border>("pnlOwnerControls").IsVisible = _online.IsOwner;
+    }
+
+    private static void SetStatusDot(Border dot, OnlineConnectionState state)
+        => SetStatusDot(dot, state switch
+        {
+            OnlineConnectionState.Connected => "connected",
+            OnlineConnectionState.Reconnecting or OnlineConnectionState.SharingPaused => "warning",
+            _ => "disconnected"
+        });
+
+    private static void SetStatusDot(Border dot, string statusClass)
+    {
+        dot.Classes.Remove("connected");
+        dot.Classes.Remove("warning");
+        dot.Classes.Remove("disconnected");
+        dot.Classes.Add(statusClass);
     }
 
     private void ShowMessage(string message) =>
@@ -219,7 +284,8 @@ public partial class OnlineRunWindow : Window
             Height = 205,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            ShowInTaskbar = false
+            ShowInTaskbar = false,
+            Icon = Icon
         };
         var confirm = new Button { Content = action };
         confirm.Classes.Add("danger");
@@ -245,4 +311,6 @@ public partial class OnlineRunWindow : Window
         };
         return await confirmation.ShowDialog<bool>(this);
     }
+
+    private sealed record PlayerListItem(string DisplayName, string Detail, IBrush StatusBrush);
 }

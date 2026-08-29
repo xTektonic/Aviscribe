@@ -4,6 +4,7 @@
         Width="780" Height="680"
         MinWidth="620" MinHeight="500"
         Title="Aviscribe Diagnostics"
+        Icon="avares://Aviscribe.UI/Assets/aviscribe-icon.png"
         WindowStartupLocation="CenterOwner">
   <Grid Margin="24" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="16">
     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">

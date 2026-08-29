@@ -27,13 +27,14 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     private readonly string _resumePath;
     private readonly SemaphoreSlim _publishSignal = new(0, 1);
     private readonly List<PersistedOutboxEvent> _outbox = [];
-    private CancellationTokenSource? _sessionCancellation;
+    private volatile CancellationTokenSource? _sessionCancellation;
     private Task? _sessionTask;
-    private OnlineApiClient? _api;
-    private OnlineResumeRecord? _credentials;
+    private volatile OnlineApiClient? _api;
+    private volatile OnlineResumeRecord? _credentials;
     private int _retryIndex;
-    private bool _captureSharingArmed;
-    private bool _sharingPaused;
+    private int _state = (int)OnlineConnectionState.Offline;
+    private volatile bool _captureSharingArmed;
+    private volatile bool _sharingPaused;
 
     public OnlineRunCoordinator(
         RunCoordinator runs,
@@ -47,7 +48,11 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     }
 
     public event EventHandler? StateChanged;
-    public OnlineConnectionState State { get; private set; } = OnlineConnectionState.Offline;
+    public OnlineConnectionState State
+    {
+        get => (OnlineConnectionState)Volatile.Read(ref _state);
+        private set => Volatile.Write(ref _state, (int)value);
+    }
     public bool CaptureSharingArmed
     {
         get => _captureSharingArmed;
@@ -130,10 +135,13 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     {
         await StopSessionAsync().ConfigureAwait(false);
         var saved = _resumeStore.Load(_resumePath) ??
-                    throw new OnlineApiException("runNotFound", "There is no previous online run to resume.");
+                    throw new OnlineApiException("runNotFound", "There is no previous multiplayer room to rejoin.");
         var api = new OnlineApiClient(saved.ServerAddress, saved.ServerPort);
         await ValidateCapabilitiesAsync(api, cancellationToken).ConfigureAwait(false);
-        var result = await api.SendAsync<OnlineConnectionResult>(AuthenticatedRequest(saved, "resumeRun"), cancellationToken)
+        var result = await api.SendAsync<OnlineConnectionResult>(AuthenticatedRequest(
+            saved,
+            "resumeRun",
+            new OnlineResumeRunData { JoinCode = saved.JoinCode }), cancellationToken)
             .ConfigureAwait(false);
         lock (_sync)
         {
@@ -141,20 +149,33 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             _outbox.AddRange(saved.Outbox.Where(item =>
                 item.SessionId == result.SessionId && item.Generation == result.Generation));
         }
-        BeginSession(api, result, saved.ServerAddress, saved.ServerPort, saved.DisplayName, saved.JoinCode);
+        BeginSession(
+            api,
+            result,
+            saved.ServerAddress,
+            saved.ServerPort,
+            saved.DisplayName,
+            result.JoinCode ?? saved.JoinCode);
     }
 
     public async Task LeaveAsync(CancellationToken cancellationToken)
     {
         var (api, credentials) = RequireSession();
-        await api.SendAsync<JsonElement>(AuthenticatedRequest(credentials, "leaveRun"), cancellationToken)
-            .ConfigureAwait(false);
         await StopSessionAsync().ConfigureAwait(false);
-        DeleteResume();
-        lock (_sync) _outbox.Clear();
-        _credentials = null;
-        _api = null;
-        SetState(OnlineConnectionState.Offline, "Left the online run.");
+        ClearSession("Left the multiplayer room.");
+        try
+        {
+            await api.SendAsync<JsonElement>(AuthenticatedRequest(credentials, "leaveRun"), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Leaving is a local decision. Do not trap the player in a reconnecting room
+            // just because the server cannot be notified.
+            SetState(
+                OnlineConnectionState.Offline,
+                $"Left the multiplayer room locally. The server could not be notified: {ex.Message}");
+        }
     }
 
     public async Task ResetAsync(RunSettings settings, CancellationToken cancellationToken)
@@ -173,7 +194,8 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         var (api, credentials) = RequireSession();
         await api.SendAsync<JsonElement>(AuthenticatedRequest(credentials, "endRun"), cancellationToken)
             .ConfigureAwait(false);
-        await EndedAsync("The online run ended.").ConfigureAwait(false);
+        await StopSessionAsync().ConfigureAwait(false);
+        ClearSession("The multiplayer run ended and the room was closed.");
     }
 
     public async ValueTask DisposeAsync()
@@ -212,7 +234,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             WaitLoopAsync(_sessionCancellation.Token),
             PublishLoopAsync(_sessionCancellation.Token));
         if (_outbox.Count > 0) SignalPublisher();
-        SetState(OnlineConnectionState.Connected, "Connected to the online run.");
+        SetState(OnlineConnectionState.Connected, "Joined the multiplayer room.");
     }
 
     private async Task WaitLoopAsync(CancellationToken cancellationToken)
@@ -233,7 +255,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
                 _retryIndex = 0;
                 if (result.Kind == "ended")
                 {
-                    await EndedAsync("The online run ended or expired.").ConfigureAwait(false);
+                    await EndedAsync("The multiplayer run ended or the room expired.").ConfigureAwait(false);
                     return;
                 }
                 if (result.Snapshot != null)
@@ -367,7 +389,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             if (change.OwnerParticipantId.HasValue || change.Kind == "ownerChanged")
                 OwnerParticipantId = change.OwnerParticipantId;
             var feed = RecentEvents.ToList();
-            feed.Add(new OnlineFeedItem
+            var feedItem = new OnlineFeedItem
             {
                 Revision = change.Revision,
                 OccurredAtUtc = DateTimeOffset.UtcNow,
@@ -379,8 +401,9 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
                     KingdomId = change.Event.KingdomId,
                     MoonId = change.Event.MoonId
                 },
-                Message = DescribeChange(change)
-            });
+            };
+            feedItem.Message = DescribeFeedItem(feedItem);
+            feed.Add(feedItem);
             RecentEvents = feed.TakeLast(200).ToList();
         }
         _credentials.Revision = result.Revision;
@@ -409,7 +432,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             {
                 _sharingPaused = true;
                 State = OnlineConnectionState.SharingPaused;
-                LastMessage = "Online sharing paused because the retry queue is full. Reconnect or leave the run.";
+                LastMessage = "Multiplayer sharing paused because the retry queue is full. Reconnect or leave the room.";
                 RaiseStateChanged();
                 return;
             }
@@ -429,12 +452,22 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     private async Task EndedAsync(string message)
     {
         _sessionCancellation?.Cancel();
+        ClearSession(message);
+        await Task.CompletedTask;
+    }
+
+    private void ClearSession(string message)
+    {
         DeleteResume();
         lock (_sync) _outbox.Clear();
         _credentials = null;
         _api = null;
+        OwnerParticipantId = null;
+        Participants = [];
+        RecentEvents = [];
+        _retryIndex = 0;
+        _sharingPaused = false;
         SetState(OnlineConnectionState.Offline, message);
-        await Task.CompletedTask;
     }
 
     private async Task StopSessionAsync()
@@ -459,8 +492,8 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     }
 
     private (OnlineApiClient Api, OnlineResumeRecord Credentials) RequireSession() =>
-        (_api ?? throw new OnlineApiException("runNotFound", "No online run is connected."),
-         _credentials ?? throw new OnlineApiException("runNotFound", "No online run is connected."));
+        (_api ?? throw new OnlineApiException("runNotFound", "You are not in a multiplayer room."),
+         _credentials ?? throw new OnlineApiException("runNotFound", "You are not in a multiplayer room."));
 
     private static OnlineRequest AuthenticatedRequest(
         OnlineResumeRecord credentials,
@@ -488,7 +521,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         if (!capabilities.ProtocolVersions.Contains(OnlineProtocol.Version))
             throw new OnlineApiException("unsupportedVersion", "The server does not support this Aviscribe protocol version.");
         if (!capabilities.Enabled)
-            throw new OnlineApiException("featureDisabled", "Aviscribe online runs are disabled on this server.");
+            throw new OnlineApiException("featureDisabled", "Aviscribe multiplayer is disabled on this server.");
     }
 
     private void PersistResume()
@@ -506,7 +539,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         {
             _sharingPaused = true;
             State = OnlineConnectionState.SharingPaused;
-            LastMessage = $"Online sharing paused because the resume queue could not be saved: {ex.Message}";
+            LastMessage = $"Multiplayer sharing paused because the rejoin queue could not be saved: {ex.Message}";
             RaiseStateChanged();
         }
     }
@@ -545,19 +578,42 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         return normalized.Length == 8 ? $"{normalized[..4]}-{normalized[4..]}" : value.Trim().ToUpperInvariant();
     }
 
-    private static string DescribeChange(OnlineRunChange change)
+    public string DescribeFeedItem(OnlineFeedItem item)
     {
-        var actor = string.IsNullOrWhiteSpace(change.ActorDisplayName)
-            ? "A participant"
-            : change.ActorDisplayName;
-        if (change.Event != null) return $"{actor} updated a moon.";
-        return change.Kind switch
+        var actor = string.IsNullOrWhiteSpace(item.ActorDisplayName)
+            ? "A player"
+            : item.ActorDisplayName;
+        if (item.Moon != null)
         {
-            "participantJoined" => $"{actor} joined.",
-            "participantLeft" => $"{actor} left.",
+            var moon = _runs.Catalog.Resolve(item.Moon.ToKey());
+            var target = moon == null
+                ? $"moon {item.Moon.KingdomId}:{item.Moon.MoonId}"
+                : $"{moon.Kingdom} #{moon.Id} — {moon.English}";
+            return item.Kind switch
+            {
+                nameof(RunEventKind.HintObserved) => $"{actor} found a hint for {target}.",
+                nameof(RunEventKind.CollectionObserved) => $"{actor} collected {target}.",
+                nameof(RunEventKind.SetPending) => $"{actor} moved {target} to Pending.",
+                nameof(RunEventKind.SetCounted) => $"{actor} marked {target} Counted.",
+                nameof(RunEventKind.SetUncounted) => $"{actor} marked {target} Wrong.",
+                nameof(RunEventKind.RemoveMoon) => $"{actor} removed {target} from the run.",
+                _ => $"{actor} updated {target}."
+            };
+        }
+        return item.Kind switch
+        {
+            "participantJoined" => $"{actor} joined the room.",
+            "participantLeft" => $"{actor} left the room.",
             "participantOnline" => $"{actor} reconnected.",
-            "participantOffline" => $"{actor} disconnected.",
-            "ownerChanged" => $"{actor} became the run owner.",
+            "participantOffline" => $"{actor} went offline.",
+            "ownerChanged" when actor == "none" => "The room has no owner.",
+            "ownerChanged" => $"{actor} became the room owner.",
+            "runCreated" => $"{actor} created the room.",
+            "runReset" => $"{actor} started a new run.",
+            "ended" or "endedByOperator" => "The run ended.",
+            "idleExpired" => "The room expired after being idle.",
+            "maximumLifetimeExpired" => "The room reached its maximum lifetime.",
+            _ when !string.IsNullOrWhiteSpace(item.Message) => item.Message,
             _ => $"{actor} updated the run."
         };
     }

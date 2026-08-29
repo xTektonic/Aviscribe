@@ -1,22 +1,43 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Aviscribe.UI.OnlineRunWindow"
-        Title="Online Run"
+        Title="Multiplayer"
         Width="760" Height="680"
         MinWidth="650" MinHeight="560"
         WindowStartupLocation="CenterOwner"
+        Icon="avares://Aviscribe.UI/Assets/aviscribe-icon.png"
         ShowInTaskbar="False">
+  <Window.Styles>
+    <Style Selector="Border.statusDot">
+      <Setter Property="Width" Value="9"/>
+      <Setter Property="Height" Value="9"/>
+      <Setter Property="CornerRadius" Value="5"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.statusDot.connected">
+      <Setter Property="Background" Value="{DynamicResource SuccessBrush}"/>
+    </Style>
+    <Style Selector="Border.statusDot.warning">
+      <Setter Property="Background" Value="{DynamicResource WarningBrush}"/>
+    </Style>
+    <Style Selector="Border.statusDot.disconnected">
+      <Setter Property="Background" Value="{DynamicResource DangerBrush}"/>
+    </Style>
+  </Window.Styles>
   <Grid Margin="22" RowDefinitions="Auto,Auto,*" RowSpacing="14">
     <Grid ColumnDefinitions="*,Auto">
       <StackPanel Spacing="3">
-        <TextBlock Classes="pageTitle" Text="Online Run"/>
-        <TextBlock Name="txtOnlineStatus" Classes="bodyMuted" Text="Offline" TextWrapping="Wrap"/>
+        <TextBlock Classes="pageTitle" Text="Multiplayer"/>
+        <StackPanel Orientation="Horizontal" Spacing="7">
+          <Border Name="multiplayerStatusDot" Classes="statusDot disconnected"/>
+          <TextBlock Name="txtOnlineStatus" Classes="bodyMuted" Text="Not in a room" TextWrapping="Wrap"/>
+        </StackPanel>
       </StackPanel>
       <Button Name="btnClose" Grid.Column="1" Content="Close" VerticalAlignment="Top"/>
     </Grid>
 
     <Border Grid.Row="1" Classes="soft">
-      <TextBlock Name="txtOnlineMessage" Classes="caption" Text="Connect to a SMOO+ server to share run state." TextWrapping="Wrap"/>
+      <TextBlock Name="txtOnlineMessage" Classes="caption" Text="Connect to a SMOO+ server to use multiplayer." TextWrapping="Wrap"/>
     </Border>
 
     <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
@@ -45,35 +66,51 @@
           <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
             <Border Classes="card">
               <StackPanel Spacing="10">
-                <TextBlock Classes="sectionTitle" Text="Start a new run"/>
-                <TextBlock Classes="bodyMuted" Text="Creates a blank shared run and gives you a join code." TextWrapping="Wrap"/>
-                <Button Name="btnCreateRun" Classes="primary" Content="Create Run" HorizontalAlignment="Left"/>
+                <TextBlock Classes="sectionTitle" Text="Create a room"/>
+                <TextBlock Classes="bodyMuted" Text="Starts a blank shared run and gives you a room join code." TextWrapping="Wrap"/>
+                <Button Name="btnCreateRun" Classes="primary" Content="Create Room" HorizontalAlignment="Left"/>
               </StackPanel>
             </Border>
             <Border Grid.Column="1" Classes="card">
               <StackPanel Spacing="10">
-                <TextBlock Classes="sectionTitle" Text="Join a run"/>
+                <TextBlock Classes="sectionTitle" Text="Join a room"/>
                 <TextBox Name="txtJoinCode" PlaceholderText="XXXX-XXXX" MaxLength="9"/>
-                <Button Name="btnJoinRun" Classes="primary" Content="Join" HorizontalAlignment="Left"/>
+                <Button Name="btnJoinRun" Classes="primary" Content="Join Room" HorizontalAlignment="Left"/>
               </StackPanel>
             </Border>
           </Grid>
-          <Button Name="btnResumeRun" Content="Resume previous online run" HorizontalAlignment="Left"/>
+          <Button Name="btnResumeRun" Content="Rejoin previous room" HorizontalAlignment="Left"/>
         </StackPanel>
 
         <StackPanel Name="pnlConnected" IsVisible="False" Spacing="14">
           <Border Classes="card">
             <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="10">
               <StackPanel Spacing="3">
-                <TextBlock Classes="caption" Text="JOIN CODE"/>
-                <TextBlock Name="txtConnectedCode" Classes="metric" Text="—"/>
+                <TextBlock Classes="caption" Text="ROOM JOIN CODE"/>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <TextBox Name="txtConnectedCode"
+                           IsReadOnly="True"
+                           Text="—"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           Padding="8,3"
+                           MinHeight="36"
+                           VerticalContentAlignment="Center"/>
+                  <Button Name="btnCopyJoinCode"
+                          Grid.Column="1"
+                          Content="Copy"
+                          ToolTip.Tip="Copy the room join code to the clipboard."/>
+                </Grid>
               </StackPanel>
               <StackPanel Grid.Column="1" Spacing="3">
                 <TextBlock Classes="caption" Text="CAPTURE SHARING"/>
-                <TextBlock Name="txtCaptureSharing" FontWeight="SemiBold" Text="Paused"/>
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                  <Border Name="captureSharingDot" Classes="statusDot disconnected"/>
+                  <TextBlock Name="txtCaptureSharing" FontWeight="SemiBold" Text="Paused · start capture"/>
+                </StackPanel>
               </StackPanel>
               <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Spacing="3">
-                <TextBlock Classes="caption" Text="CURRENT OWNER"/>
+                <TextBlock Classes="caption" Text="ROOM OWNER"/>
                 <TextBlock Name="txtOwner" FontWeight="SemiBold" Text="—"/>
               </StackPanel>
             </Grid>
@@ -82,32 +119,68 @@
           <Grid ColumnDefinitions="0.8*,1.2*" ColumnSpacing="12">
             <Border Classes="card">
               <Grid RowDefinitions="Auto,*" RowSpacing="8">
-                <TextBlock Classes="sectionTitle" Text="Participants"/>
-                <ListBox Name="lstOnlineParticipants" Grid.Row="1" MinHeight="160"/>
+                <TextBlock Classes="sectionTitle" Text="Players"/>
+                <ListBox Name="lstOnlineParticipants" Grid.Row="1" Height="160">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:CompileBindings="False">
+                      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="9" Margin="2,4">
+                        <Border Classes="statusDot" Background="{Binding StatusBrush}"/>
+                        <TextBlock Grid.Column="1" Text="{Binding DisplayName}"/>
+                        <TextBlock Grid.Column="2" Classes="caption" Text="{Binding Detail}"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
               </Grid>
             </Border>
             <Border Grid.Column="1" Classes="card">
               <Grid RowDefinitions="Auto,*" RowSpacing="8">
                 <TextBlock Classes="sectionTitle" Text="Recent activity"/>
-                <ListBox Name="lstOnlineEvents" Grid.Row="1" MinHeight="160"/>
+                <ListBox Name="lstOnlineEvents" Grid.Row="1" Height="160">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:CompileBindings="False">
+                      <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="2,4"/>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
               </Grid>
             </Border>
           </Grid>
 
           <Border Name="pnlOwnerControls" Classes="card" IsVisible="False">
-            <StackPanel Spacing="10">
-              <TextBlock Classes="sectionTitle" Text="Owner controls"/>
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                <ComboBox Name="cbOnlineCategory"/>
-                <CheckBox Name="chkOnlinePostgame" Grid.Column="1" Content="Include postgame" VerticalAlignment="Center"/>
-              </Grid>
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Name="btnOnlineReset" Content="Reset Run" Classes="danger"/>
-                <Button Name="btnOnlineEnd" Content="End Run" Classes="danger"/>
+            <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="14">
+              <StackPanel Spacing="3">
+                <TextBlock Classes="sectionTitle" Text="Run controls"/>
+                <TextBlock Classes="bodyMuted" Text="Only the room owner can change or end the current run." TextWrapping="Wrap"/>
               </StackPanel>
-            </StackPanel>
+
+              <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="14">
+                <StackPanel Spacing="4">
+                  <TextBlock Classes="caption" Text="RUN CATEGORY"/>
+                  <ComboBox Name="cbOnlineCategory"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="4">
+                  <TextBlock Classes="caption" Text="MOON LIST"/>
+                  <CheckBox Name="chkOnlinePostgame"
+                            Content="Include postgame kingdoms"
+                            MinHeight="34"
+                            VerticalContentAlignment="Center"/>
+                </StackPanel>
+              </Grid>
+
+              <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <StackPanel Spacing="3">
+                  <Button Name="btnOnlineReset" Content="Start New Run" HorizontalAlignment="Left"/>
+                  <TextBlock Classes="caption" Text="Clear shared moon state and use the settings above." TextWrapping="Wrap"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="3" HorizontalAlignment="Right">
+                  <Button Name="btnOnlineEnd" Content="End Run" Classes="danger" HorizontalAlignment="Right"/>
+                  <TextBlock Classes="caption" Text="End the run and close the room for everyone." TextAlignment="Right"/>
+                </StackPanel>
+              </Grid>
+            </Grid>
           </Border>
-          <Button Name="btnOnlineLeave" Content="Leave Run" HorizontalAlignment="Left"/>
+          <Button Name="btnOnlineLeave" Content="Leave Room" HorizontalAlignment="Left"/>
         </StackPanel>
       </StackPanel>
     </ScrollViewer>

@@ -50,7 +50,10 @@
       <Grid Margin="14" RowDefinitions="Auto,*,Auto" RowSpacing="10">
         <Border Classes="card compact">
           <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
-            <Grid ColumnDefinitions="200,Auto,Auto,Auto,*,Auto,Auto,Auto" ColumnSpacing="14">
+            <Grid ColumnDefinitions="200,Auto,Auto,Auto,*,Auto,Auto"
+                  RowDefinitions="Auto,Auto"
+                  ColumnSpacing="14"
+                  RowSpacing="8">
               <StackPanel Spacing="4">
                 <TextBlock Classes="caption" Text="CURRENT KINGDOM"/>
                 <ComboBox Name="cbKingdomSelect" Width="200" HorizontalAlignment="Left"
@@ -70,18 +73,34 @@
                            FontSize="{DynamicResource RequirementFontSize}"
                            FontWeight="SemiBold"/>
               </StackPanel>
-              <Button Name="btnOnlineRun" Grid.Column="5"
-                      Content="Offline"
-                      VerticalAlignment="Center"
-                      ToolTip.Tip="Create, join, or manage an online Talkatoo run."/>
-              <Button Name="btnUpdatePreview" Grid.Column="6" Classes="primary"
+              <Button Name="btnUpdatePreview" Grid.Column="5" Classes="primary"
                       Content="Start Capture"
                       VerticalAlignment="Center"
                       ToolTip.Tip="Start or restart capture with the source configured in Settings."/>
-              <Button Name="btnResetKingdom" Grid.Column="7" Classes="danger"
+              <Button Name="btnResetKingdom" Grid.Column="6" Classes="danger"
                       Content="Reset Run"
                       VerticalAlignment="Center"
+                      ToolTip.ShowOnDisabled="True"
                       ToolTip.Tip="Clear every kingdom list and all items waiting for review."/>
+              <StackPanel Grid.Row="1" Grid.Column="5" Grid.ColumnSpan="2"
+                          Orientation="Horizontal"
+                          HorizontalAlignment="Right"
+                          Spacing="9"
+                          VerticalAlignment="Center">
+                <StackPanel Name="pnlMultiplayerStatus"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            VerticalAlignment="Center">
+                  <Border Name="multiplayerStatusDot"
+                          Width="9" Height="9" CornerRadius="5"
+                          Background="{DynamicResource DangerBrush}"
+                          VerticalAlignment="Center"/>
+                  <TextBlock Name="txtMultiplayerStatus" Classes="caption" Text="Offline" VerticalAlignment="Center"/>
+                </StackPanel>
+                <Button Name="btnOnlineRun"
+                        Content="Multiplayer"
+                        ToolTip.Tip="Create, join, or manage a multiplayer room."/>
+              </StackPanel>
             </Grid>
 
             <Grid Grid.Row="1" ColumnDefinitions="96,Auto,Auto,*" ColumnSpacing="10">

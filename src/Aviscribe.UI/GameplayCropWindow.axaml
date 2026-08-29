@@ -4,6 +4,7 @@
         x:Class="Aviscribe.UI.GameplayCropWindow"
         Width="1220" Height="820"
         MinWidth="900" MinHeight="620"
+        Icon="avares://Aviscribe.UI/Assets/aviscribe-icon.png"
         Title="Crop Gameplay">
   <Grid Margin="20" RowDefinitions="Auto,*,Auto" RowSpacing="16">
     <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">

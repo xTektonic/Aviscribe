@@ -5,6 +5,7 @@
         Title="Choose Capture Source"
         Width="560" Height="500"
         MinWidth="420" MinHeight="360"
+        Icon="avares://Aviscribe.UI/Assets/aviscribe-icon.png"
         WindowStartupLocation="CenterOwner">
   <Grid RowDefinitions="Auto,*,Auto" Margin="24" RowSpacing="18">
     <StackPanel Spacing="5">

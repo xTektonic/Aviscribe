@@ -6,6 +6,7 @@
         MinWidth="720" MinHeight="520"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
+        Icon="avares://Aviscribe.UI/Assets/aviscribe-icon.png"
         ShowInTaskbar="False">
   <Grid Margin="28" RowDefinitions="Auto,*,Auto" RowSpacing="20">
     <StackPanel Spacing="6">
