@@ -6,9 +6,9 @@
     <Product>Aviscribe</Product>
     <Company>xTektonic</Company>
     <Authors>xTektonic</Authors>
-    <Version>1.0.1</Version>
-    <AssemblyVersion>1.0.1.0</AssemblyVersion>
-    <FileVersion>1.0.1.0</FileVersion>
+    <Version>1.0.2</Version>
+    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <FileVersion>1.0.2.0</FileVersion>
     <RepositoryUrl>https://github.com/xTektonic/Aviscribe</RepositoryUrl>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
