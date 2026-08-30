@@ -42,7 +42,7 @@
     </Grid>
 
     <Border Grid.Row="1" Classes="soft">
-      <TextBlock Name="txtOnlineMessage" Classes="caption" Text="Connect to a SMOO+ server to use multiplayer." TextWrapping="Wrap"/>
+      <TextBlock Name="txtOnlineMessage" Classes="caption" Text="Requires a SMOO+ Server build with Aviscribe integration." TextWrapping="Wrap"/>
     </Border>
 
     <Grid Grid.Row="2">
@@ -54,11 +54,11 @@
               <Grid ColumnDefinitions="*,120" ColumnSpacing="10">
                 <StackPanel Spacing="4">
                   <TextBlock Classes="caption" Text="ADDRESS"/>
-                  <TextBox Name="txtServerAddress" PlaceholderText="example.com"/>
+                  <TextBox Name="txtServerAddress" PlaceholderText="127.0.0.1"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="4">
                   <TextBlock Classes="caption" Text="PORT"/>
-                  <TextBox Name="txtServerPort" Text="1027"/>
+                  <TextBox Name="txtServerPort" PlaceholderText="1027"/>
                 </StackPanel>
               </Grid>
               <StackPanel Spacing="4">
@@ -92,10 +92,10 @@
         </StackPanel>
       </ScrollViewer>
 
-      <Grid Name="pnlConnected"
-            IsVisible="False"
-            RowDefinitions="Auto,Auto,*"
-            RowSpacing="14">
+      <ScrollViewer Name="pnlConnected"
+                    IsVisible="False"
+                    HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="14">
           <Border Classes="card">
             <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="10">
               <StackPanel Grid.ColumnSpan="2" Spacing="3">
@@ -129,7 +129,7 @@
             </Grid>
           </Border>
 
-          <Border Name="pnlOwnerControls" Grid.Row="1" Classes="card" IsVisible="False">
+          <Border Name="pnlOwnerControls" Classes="card" IsVisible="False">
             <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="14">
               <StackPanel Spacing="3">
                 <TextBlock Classes="sectionTitle" Text="Run controls"/>
@@ -163,8 +163,7 @@
             </Grid>
           </Border>
 
-          <Grid Grid.Row="2"
-                ColumnDefinitions="0.8*,1.2*"
+          <Grid ColumnDefinitions="0.8*,1.2*"
                 ColumnSpacing="12"
                 MinHeight="194">
             <Border Classes="card">
@@ -196,7 +195,8 @@
               </Grid>
             </Border>
           </Grid>
-      </Grid>
+        </StackPanel>
+      </ScrollViewer>
     </Grid>
   </Grid>
 </Window>

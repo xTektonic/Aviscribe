@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Aviscribe.Core;
 using Aviscribe.Core.Online;
+using System.Net.Sockets;
 
 namespace Aviscribe.UI;
 
@@ -21,6 +22,7 @@ public partial class OnlineRunWindow : Window
     private readonly Func<Task<bool>> _confirmReplace = null!;
     private readonly Func<RunSettings> _settings = null!;
     private bool _busy;
+    private string? _localMessage;
 
     public OnlineRunWindow()
     {
@@ -44,7 +46,9 @@ public partial class OnlineRunWindow : Window
         _settings = settings;
 
         this.GetControl<TextBox>("txtServerAddress").Text = preferences.OnlineServerAddress;
-        this.GetControl<TextBox>("txtServerPort").Text = preferences.OnlineServerPort.ToString();
+        this.GetControl<TextBox>("txtServerPort").Text = preferences.OnlineServerPort > 0
+            ? preferences.OnlineServerPort.ToString()
+            : string.Empty;
         this.GetControl<TextBox>("txtDisplayName").Text = preferences.OnlineDisplayName;
         this.GetControl<ComboBox>("cbOnlineCategory").ItemsSource = Enum.GetValues<RunCategory>();
         this.GetControl<ComboBox>("cbOnlineCategory").SelectedItem = settings().Category;
@@ -180,15 +184,26 @@ public partial class OnlineRunWindow : Window
     {
         if (_busy) return;
         _busy = true;
+        _localMessage = null;
         Refresh();
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             await action(timeout.Token);
         }
+        catch (OperationCanceledException)
+        {
+            ShowMessage("Could not connect to the SMOO+ server before the request timed out. Check that the server is running and that the address and port are correct.");
+        }
+        catch (SocketException)
+        {
+            ShowMessage("Could not connect to the SMOO+ server. Check that the server is running and that the address and port are correct.");
+        }
         catch (Exception ex)
         {
-            ShowMessage(ex.Message);
+            ShowMessage(string.IsNullOrWhiteSpace(ex.Message)
+                ? "The multiplayer request failed. Check that the SMOO+ server is running and supports Aviscribe integration."
+                : ex.Message);
         }
         finally
         {
@@ -214,8 +229,10 @@ public partial class OnlineRunWindow : Window
             _ => "Not in a room"
         };
         SetStatusDot(this.GetControl<Border>("multiplayerStatusDot"), _online.State);
-        if (!string.IsNullOrWhiteSpace(_online.LastMessage))
-            this.GetControl<TextBlock>("txtOnlineMessage").Text = _online.LastMessage;
+        this.GetControl<TextBlock>("txtOnlineMessage").Text = _localMessage ??
+            (!string.IsNullOrWhiteSpace(_online.LastMessage)
+                ? _online.LastMessage
+                : "Requires a SMOO+ Server build with Aviscribe integration.");
         this.GetControl<Button>("btnResumeRun").IsVisible = _online.HasPreviousRun;
         foreach (var name in new[] { "btnCreateRun", "btnJoinRun", "btnResumeRun", "btnOnlineLeave", "btnOnlineReset", "btnOnlineEnd", "btnCopyJoinCode" })
             this.GetControl<Button>(name).IsEnabled = !_busy;
@@ -243,8 +260,7 @@ public partial class OnlineRunWindow : Window
         this.GetControl<ListBox>("lstOnlineParticipants").ItemsSource = _online.Participants.Select(item =>
         {
             var isCurrentPlayerWaiting = item.ParticipantId == _online.ParticipantId &&
-                                         _online.State is OnlineConnectionState.Reconnecting or
-                                             OnlineConnectionState.SharingPaused;
+                                         _online.State == OnlineConnectionState.Reconnecting;
             var status = isCurrentPlayerWaiting ? "Connecting" : item.IsOnline ? "Online" : "Offline";
             var brush = isCurrentPlayerWaiting ? WarningBrush : item.IsOnline ? ConnectedBrush : DisconnectedBrush;
             var role = item.ParticipantId == _online.OwnerParticipantId ? " · Owner" : string.Empty;
@@ -273,8 +289,11 @@ public partial class OnlineRunWindow : Window
         dot.Classes.Add(statusClass);
     }
 
-    private void ShowMessage(string message) =>
+    private void ShowMessage(string message)
+    {
+        _localMessage = message;
         this.GetControl<TextBlock>("txtOnlineMessage").Text = message;
+    }
 
     private async Task<bool> ConfirmAsync(string title, string message, string action)
     {

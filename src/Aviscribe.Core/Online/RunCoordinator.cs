@@ -16,6 +16,7 @@ public sealed class RunCoordinator
 
     public OnlineCatalog Catalog { get; }
 
+    public event EventHandler<SharedRunEvent>? LocalEventObserved;
     public event EventHandler<SharedRunEvent>? LocalEventCreated;
 
     public IReadOnlyList<RunFactSnapshot> CreateFactSnapshot()
@@ -131,14 +132,14 @@ public sealed class RunCoordinator
     private bool ApplyLocal(RunEventKind kind, Moon moon, bool automaticCapture)
     {
         var changed = Apply(kind, moon);
+        var runEvent = new SharedRunEvent(
+            Guid.NewGuid(),
+            kind,
+            Catalog.ToWire(moon),
+            automaticCapture);
+        LocalEventObserved?.Invoke(this, runEvent);
         if (changed)
-        {
-            LocalEventCreated?.Invoke(this, new SharedRunEvent(
-                Guid.NewGuid(),
-                kind,
-                Catalog.ToWire(moon),
-                automaticCapture));
-        }
+            LocalEventCreated?.Invoke(this, runEvent);
         return changed;
     }
 

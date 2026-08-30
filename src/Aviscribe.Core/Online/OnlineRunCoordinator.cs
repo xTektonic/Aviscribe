@@ -45,6 +45,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         _runs = runs;
         _resumeStore = resumeStore ?? new OnlineResumeStore();
         _resumePath = resumePath ?? AppPaths.OnlineResumePath;
+        _runs.LocalEventObserved += OnLocalEventObserved;
         _runs.LocalEventCreated += OnLocalEventCreated;
     }
 
@@ -75,7 +76,8 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     public IReadOnlyList<OnlineFeedItem> RecentEvents { get; private set; } = [];
     public bool IsJoined => _credentials != null && _sessionCancellation is { IsCancellationRequested: false };
     public bool IsOwner => ParticipantId.HasValue && ParticipantId == OwnerParticipantId;
-    public bool HasPreviousRun => _resumeStore.Load(_resumePath) != null;
+    public bool HasPreviousRun => _credentials != null ||
+        _resumeStore.Load(_resumePath) != null;
 
     public bool IsPendingOwnedByLocalParticipant(Moon moon)
     {
@@ -218,6 +220,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _runs.LocalEventObserved -= OnLocalEventObserved;
         _runs.LocalEventCreated -= OnLocalEventCreated;
         await StopSessionAsync().ConfigureAwait(false);
         _publishSignal.Dispose();
@@ -447,17 +450,23 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         RaiseStateChanged();
     }
 
-    private void OnLocalEventCreated(object? sender, SharedRunEvent runEvent)
+    private void OnLocalEventObserved(object? sender, SharedRunEvent runEvent)
     {
-        OnlineResumeRecord? credentials;
-        lock (_sync) credentials = _credentials;
-        if (!IsJoined || credentials == null)
+        if (!IsJoined)
             return;
 
         lock (_sync)
             _localPendingMoons.Apply(runEvent.Moon, runEvent.Kind, addedByLocalParticipant: true);
         PersistResume();
         RaiseStateChanged();
+    }
+
+    private void OnLocalEventCreated(object? sender, SharedRunEvent runEvent)
+    {
+        OnlineResumeRecord? credentials;
+        lock (_sync) credentials = _credentials;
+        if (!IsJoined || credentials == null)
+            return;
 
         if (_sharingPaused ||
             (runEvent.IsAutomaticCaptureEvent && !CaptureSharingArmed)) return;
@@ -615,10 +624,11 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
 
     private void SetState(OnlineConnectionState state, string? message)
     {
-        State = state == OnlineConnectionState.Connected && _sharingPaused
-            ? OnlineConnectionState.SharingPaused
-            : state;
-        if (!string.IsNullOrWhiteSpace(message)) LastMessage = message;
+        var sharingPaused = state == OnlineConnectionState.Connected &&
+            _sharingPaused;
+        State = sharingPaused ? OnlineConnectionState.SharingPaused : state;
+        if (!sharingPaused && !string.IsNullOrWhiteSpace(message))
+            LastMessage = message;
         RaiseStateChanged();
     }
 

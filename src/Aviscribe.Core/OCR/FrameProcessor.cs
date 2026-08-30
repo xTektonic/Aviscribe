@@ -253,61 +253,14 @@ namespace Aviscribe.Core.Ocr
 
             OcrRegion? talkatooRegion = null;
             TalkatooConfirmationDecision talkatooDecision = default;
+            var storyMoonPresent = false;
 
-            foreach (var region in _regions)
+            // Collection overlays are time-sensitive and can overlap the Talkatoo
+            // crop. Inspect them first so adaptive Talkatoo work cannot delay or
+            // compete with story-moon confirmation.
+            foreach (var region in _regions.Where(item =>
+                         item.Type != OcrRegionType.Talkatoo))
             {
-                if (region.Type == OcrRegionType.Talkatoo)
-                {
-                    if (!_talkatooConfirmation.ShouldInspect(timestamp))
-                        continue;
-
-                    using var talkatooCrop = mat[region.DetectionBounds ?? region.Bounds];
-                    var useAdaptiveDetection =
-                        settings.AdaptiveTalkatooDetection &&
-                        region.Detector.GetType() == typeof(HeuristicTextPresenceDetector);
-                    bool talkatooPresent;
-                    TalkatooPromptSignature? signature;
-
-                    if (useAdaptiveDetection)
-                    {
-                        var analysis = _talkatooAdaptiveAnalyzer.Analyze(talkatooCrop);
-                        talkatooPresent = analysis.Present;
-                        signature = analysis.Present
-                            ? analysis.Adapted
-                                ? TalkatooPromptSignature.CaptureAdaptive(
-                                    talkatooCrop,
-                                    analysis)
-                                : TalkatooPromptSignature.Capture(talkatooCrop)
-                            : null;
-
-                        if (analysis.StartedAdaptiveRun)
-                        {
-                            _diagnostics.Debug(
-                                $"Adaptive Talkatoo detection selected " +
-                                $"{analysis.Gain:0.00}x gain.");
-                        }
-                    }
-                    else
-                    {
-                        _talkatooAdaptiveAnalyzer.Reset();
-                        var talkatooDetection = region.Detector.Detect(
-                            region.Type,
-                            talkatooCrop);
-                        talkatooPresent = talkatooDetection.Present;
-                        signature = talkatooDetection.Present
-                            ? TalkatooPromptSignature.Capture(talkatooCrop)
-                            : null;
-                    }
-
-                    var decision = _talkatooConfirmation.Observe(
-                        talkatooPresent,
-                        signature,
-                        timestamp);
-                    talkatooRegion = region;
-                    talkatooDecision = decision;
-                    continue;
-                }
-
                 if (!_collectionConfirmation.ShouldInspect(
                         region.Type,
                         timestamp))
@@ -317,10 +270,68 @@ namespace Aviscribe.Core.Ocr
 
                 using var detectionCrop = mat[region.DetectionBounds ?? region.Bounds];
                 var detection = region.Detector.Detect(region.Type, detectionCrop);
+                if (region.Type == OcrRegionType.StoryMoon)
+                    storyMoonPresent = detection.Present;
                 _collectionConfirmation.Observe(
                     region.Type,
                     detection.Present,
                     timestamp);
+            }
+
+            var candidateTalkatooRegion = _regions.First(item =>
+                item.Type == OcrRegionType.Talkatoo);
+            if (storyMoonPresent)
+            {
+                _talkatooConfirmation.Reset();
+                _talkatooAdaptiveAnalyzer.Reset();
+            }
+            else if (_talkatooConfirmation.ShouldInspect(timestamp))
+            {
+                using var talkatooCrop = mat[
+                    candidateTalkatooRegion.DetectionBounds ?? candidateTalkatooRegion.Bounds];
+                var useAdaptiveDetection =
+                    settings.AdaptiveTalkatooDetection &&
+                    candidateTalkatooRegion.Detector.GetType() ==
+                        typeof(HeuristicTextPresenceDetector);
+                bool talkatooPresent;
+                TalkatooPromptSignature? signature;
+
+                if (useAdaptiveDetection)
+                {
+                    var analysis = _talkatooAdaptiveAnalyzer.Analyze(talkatooCrop);
+                    talkatooPresent = analysis.Present;
+                    signature = analysis.Present
+                        ? analysis.Adapted
+                            ? TalkatooPromptSignature.CaptureAdaptive(
+                                talkatooCrop,
+                                analysis)
+                            : TalkatooPromptSignature.Capture(talkatooCrop)
+                        : null;
+
+                    if (analysis.StartedAdaptiveRun)
+                    {
+                        _diagnostics.Debug(
+                            $"Adaptive Talkatoo detection selected " +
+                            $"{analysis.Gain:0.00}x gain.");
+                    }
+                }
+                else
+                {
+                    _talkatooAdaptiveAnalyzer.Reset();
+                    var talkatooDetection = candidateTalkatooRegion.Detector.Detect(
+                        candidateTalkatooRegion.Type,
+                        talkatooCrop);
+                    talkatooPresent = talkatooDetection.Present;
+                    signature = talkatooDetection.Present
+                        ? TalkatooPromptSignature.Capture(talkatooCrop)
+                        : null;
+                }
+
+                talkatooDecision = _talkatooConfirmation.Observe(
+                    talkatooPresent,
+                    signature,
+                    timestamp);
+                talkatooRegion = candidateTalkatooRegion;
             }
 
             var collectionDecision = _collectionConfirmation.NextDecision();

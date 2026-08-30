@@ -185,6 +185,34 @@ public sealed class OnlineIntegrationTests
     }
 
     [Fact]
+    public void LocalHintObservationIsReportedWhenSharedFactAlreadyExists()
+    {
+        var repository = MoonRepository.LoadDefault();
+        var runs = new RunCoordinator(new GameState(), repository);
+        var moon = repository.Moons.First();
+        runs.ReplaceFacts(
+        [
+            new RunFactSnapshot(
+                moon.Kingdom,
+                moon.Id,
+                Hinted: true,
+                Collected: false,
+                ManualClassification.Automatic)
+        ]);
+        var observed = new List<SharedRunEvent>();
+        var created = new List<SharedRunEvent>();
+        runs.LocalEventObserved += (_, item) => observed.Add(item);
+        runs.LocalEventCreated += (_, item) => created.Add(item);
+
+        var changed = runs.ObserveHint(moon);
+
+        Assert.False(changed);
+        var item = Assert.Single(observed);
+        Assert.Equal(RunEventKind.HintObserved, item.Kind);
+        Assert.Empty(created);
+    }
+
+    [Fact]
     public async Task ApiClientAcceptsFragmentedFramesAndRejectsMismatchedResponses()
     {
         var (port, server) = StartFakeServerAsync(async (stream, request) =>
@@ -248,6 +276,9 @@ public sealed class OnlineIntegrationTests
                 "Runner",
                 new RunSettings(),
                 TestContext.Current.CancellationToken);
+
+            using (File.Open(resumePath, FileMode.Open, FileAccess.Read, FileShare.None))
+                Assert.True(online.HasPreviousRun);
 
             await Task.Run(() => online.CaptureSharingArmed = true);
             var moon = repository.Moons.First();

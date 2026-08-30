@@ -9,8 +9,8 @@ public sealed class AppPreferences
     public AccentColorPreference AccentColor { get; set; } = AccentColorPreference.System;
     public TextSizePreference TextSize { get; set; } =
         TextSizePreference.Default;
-    public string OnlineServerAddress { get; set; } = "127.0.0.1";
-    public int OnlineServerPort { get; set; } = 1027;
+    public string OnlineServerAddress { get; set; } = string.Empty;
+    public int OnlineServerPort { get; set; }
     public string OnlineDisplayName { get; set; } = string.Empty;
 }
 

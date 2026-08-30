@@ -113,6 +113,7 @@ namespace Aviscribe.UI
         private int _sourceWidth;
         private int _sourceHeight;
         private int _onlineGenerationSeen;
+        private OnlineRunWindow? _onlineRunWindow;
 
         public MainWindow()
             : this(new DesignVideoProvider(), NullAppDiagnostics.Instance)
@@ -147,6 +148,7 @@ namespace Aviscribe.UI
             {
                 UpdateOnlineUi();
                 UpdatePendingTitle();
+                UpdatePendingOwnershipHighlights();
             });
             NormalizeLanguageSettings();
             _outputWriter.Language = _state.Settings.OutputLanguage;
@@ -1236,6 +1238,18 @@ namespace Aviscribe.UI
             _pendingTitleText.Text = $"Pending ({pendingCount}/3)";
         }
 
+        private void UpdatePendingOwnershipHighlights()
+        {
+            if (_pendingList?.ItemsSource is not IEnumerable<MoonListItem> items)
+                return;
+
+            foreach (var item in items)
+            {
+                item.IsTracked = _onlineRun.IsJoined &&
+                    _onlineRun.IsPendingOwnedByLocalParticipant(item.Moon);
+            }
+        }
+
         private void RefreshKingdoms(string? preferredKingdom = null)
         {
             if (_kingdomSelect == null)
@@ -2251,10 +2265,13 @@ namespace Aviscribe.UI
 
         private MoonListItem CreatePendingListItem(Moon moon)
         {
-            return new MoonListItem(
+            var item = new MoonListItem(
                 moon,
                 $"{moon.Id}. {FormatMoon(moon)}",
                 _state.Settings.ShowPendingMoonImages ? GetMoonImage(moon) : null);
+            item.IsTracked = _onlineRun.IsJoined &&
+                _onlineRun.IsPendingOwnedByLocalParticipant(moon);
+            return item;
         }
 
         private Bitmap? GetMoonImage(Moon moon)
@@ -2355,17 +2372,24 @@ namespace Aviscribe.UI
             });
         }
 
-        private async void OpenOnlineRun(object? sender, RoutedEventArgs args)
+        private void OpenOnlineRun(object? sender, RoutedEventArgs args)
         {
+            if (_onlineRunWindow != null)
+            {
+                _onlineRunWindow.Activate();
+                return;
+            }
+
             UpdateCaptureSharingState();
-            var window = new OnlineRunWindow(
+            _onlineRunWindow = new OnlineRunWindow(
                 _onlineRun,
                 _preferences,
                 PersistAppPreferences,
                 () => _runCoordinator.CreateFactSnapshot().Count > 0,
                 ConfirmReplaceWithOnlineRunAsync,
                 () => _state.Settings.Clone());
-            await window.ShowDialog(this);
+            _onlineRunWindow.Closed += (_, _) => _onlineRunWindow = null;
+            _onlineRunWindow.Show(this);
         }
 
         private void UpdateCaptureSharingState(bool? isActive = null)

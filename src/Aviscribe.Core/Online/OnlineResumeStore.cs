@@ -36,7 +36,12 @@ public sealed class OnlineResumeStore
         if (!File.Exists(path)) return null;
         try
         {
-            return JsonSerializer.Deserialize<OnlineResumeRecord>(File.ReadAllText(path), JsonOptions);
+            using var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            return JsonSerializer.Deserialize<OnlineResumeRecord>(stream, JsonOptions);
         }
         catch
         {
@@ -49,9 +54,17 @@ public sealed class OnlineResumeStore
         var directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
         var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(record, JsonOptions));
-        File.Move(temporary, path, true);
-        RestrictPermissions(path);
+        try
+        {
+            File.WriteAllText(temporary, JsonSerializer.Serialize(record, JsonOptions));
+            File.Move(temporary, path, true);
+            RestrictPermissions(path);
+        }
+        finally
+        {
+            if (File.Exists(temporary))
+                File.Delete(temporary);
+        }
     }
 
     public void Delete(string path)

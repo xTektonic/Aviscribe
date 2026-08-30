@@ -4,6 +4,8 @@ Aviscribe is a cross-platform Talkatoo translator for Super Mario Odyssey. Curre
 
 Aviscribe works by capturing gameplay from a camera, capture card, virtual camera, or application window, recognizing Talkatoo and moon collection text, and displaying that info for the user to see.
 
+Multiplayer requires a SMOO+ Server build with Aviscribe integration.
+
 For support, feedback, and to be notified of new builds, join the [Discord server](https://discord.gg/ADDAuJVxjn).
 
 ![Aviscribe run interface](docs/images/aviscribe-ui.png)
@@ -107,18 +109,18 @@ dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-bui
 The packaging scripts produce self-contained builds for Windows x64, macOS Apple Silicon, and Linux x64. Set the version first if needed:
 
 ~~~powershell
-./tools/set-version.ps1 1.0.2
+./tools/set-version.ps1 1.0.3
 ~~~
 
 Run the package script on its target operating system:
 
 ~~~powershell
-./packaging/windows/package.ps1 -Version 1.0.2
+./packaging/windows/package.ps1 -Version 1.0.3
 ~~~
 
 ~~~text
-bash packaging/macos/package.sh 1.0.2
-bash packaging/linux/package.sh 1.0.2
+bash packaging/macos/package.sh 1.0.3
+bash packaging/linux/package.sh 1.0.3
 ~~~
 
 Packages and publish outputs are written to artifacts/.

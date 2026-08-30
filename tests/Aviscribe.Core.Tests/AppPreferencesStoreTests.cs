@@ -14,6 +14,8 @@ public sealed class AppPreferencesStoreTests
         var preferences = new AppPreferencesStore().Load(path);
 
         Assert.Equal(0, preferences.QuickStartVersionSeen);
+        Assert.Equal(string.Empty, preferences.OnlineServerAddress);
+        Assert.Equal(0, preferences.OnlineServerPort);
     }
 
     [Fact]
