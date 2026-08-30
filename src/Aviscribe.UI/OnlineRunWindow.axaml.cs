@@ -203,8 +203,9 @@ public partial class OnlineRunWindow : Window
     private void Refresh()
     {
         var joined = _online.IsJoined;
-        this.GetControl<StackPanel>("pnlDisconnected").IsVisible = !joined;
-        this.GetControl<StackPanel>("pnlConnected").IsVisible = joined;
+        this.GetControl<Control>("pnlDisconnected").IsVisible = !joined;
+        this.GetControl<Control>("pnlConnected").IsVisible = joined;
+        this.GetControl<Button>("btnOnlineLeave").IsVisible = joined;
         this.GetControl<TextBlock>("txtOnlineStatus").Text = _online.State switch
         {
             OnlineConnectionState.Connected => $"Room connected · {_online.Participants.Count(item => item.IsOnline)} players online",
