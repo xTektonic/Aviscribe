@@ -27,6 +27,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     private readonly string _resumePath;
     private readonly SemaphoreSlim _publishSignal = new(0, 1);
     private readonly List<PersistedOutboxEvent> _outbox = [];
+    private readonly LocalPendingMoonTracker _localPendingMoons = new();
     private volatile CancellationTokenSource? _sessionCancellation;
     private Task? _sessionTask;
     private volatile OnlineApiClient? _api;
@@ -76,6 +77,11 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     public bool IsOwner => ParticipantId.HasValue && ParticipantId == OwnerParticipantId;
     public bool HasPreviousRun => _resumeStore.Load(_resumePath) != null;
 
+    public bool IsPendingOwnedByLocalParticipant(Moon moon)
+    {
+        lock (_sync) return _localPendingMoons.Contains(_runs.Catalog.ToWire(moon));
+    }
+
     public async Task<OnlineCapabilities> ProbeAsync(
         string address,
         int port,
@@ -102,7 +108,11 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
                 Configuration = Configuration(settings)
             }
         }, cancellationToken).ConfigureAwait(false);
-        lock (_sync) _outbox.Clear();
+        lock (_sync)
+        {
+            _outbox.Clear();
+            _localPendingMoons.Clear();
+        }
         _runs.ResetLocal();
         BeginSession(api, result, address, port, displayName, result.JoinCode ?? string.Empty);
     }
@@ -127,7 +137,11 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
                 CatalogHash = _runs.Catalog.Hash
             }
         }, cancellationToken).ConfigureAwait(false);
-        lock (_sync) _outbox.Clear();
+        lock (_sync)
+        {
+            _outbox.Clear();
+            _localPendingMoons.Clear();
+        }
         BeginSession(api, result, address, port, displayName, FormatJoinCode(joinCode));
     }
 
@@ -148,6 +162,10 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             _outbox.Clear();
             _outbox.AddRange(saved.Outbox.Where(item =>
                 item.SessionId == result.SessionId && item.Generation == result.Generation));
+            _localPendingMoons.Restore(
+                saved.SessionId == result.SessionId && saved.Generation == result.Generation
+                    ? saved.LocallyOwnedPendingMoons.Select(item => item.ToKey())
+                    : []);
         }
         BeginSession(
             api,
@@ -361,6 +379,14 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         OwnerParticipantId = snapshot.OwnerParticipantId;
         Participants = snapshot.Participants.OrderBy(item => item.JoinedSequence).ToList();
         RecentEvents = snapshot.RecentEvents.TakeLast(200).ToList();
+        lock (_sync)
+        {
+            _localPendingMoons.Reconcile(
+                snapshot.MoonFacts,
+                RecentEvents,
+                _credentials.ParticipantId,
+                generationChanged);
+        }
         _runs.ApplySharedConfiguration(
             snapshot.Configuration.Category == "hardcore" ? RunCategory.Hardcore : RunCategory.Standard,
             snapshot.Configuration.IncludePostGame);
@@ -376,6 +402,16 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         if (_credentials == null) return;
         foreach (var change in result.Changes ?? [])
         {
+            if (change.Event != null)
+            {
+                lock (_sync)
+                {
+                    _localPendingMoons.Apply(
+                        new WireMoonKey(change.Event.KingdomId, change.Event.MoonId),
+                        change.Event.Kind,
+                        change.ActorParticipantId == _credentials.ParticipantId);
+                }
+            }
             if (change.Event != null) _runs.ApplyRemote(change.Event.ToShared());
             if (change.Kind == "participantLeft" && change.ActorParticipantId.HasValue)
                 Participants = Participants.Where(item => item.ParticipantId != change.ActorParticipantId).ToList();
@@ -415,7 +451,15 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     {
         OnlineResumeRecord? credentials;
         lock (_sync) credentials = _credentials;
-        if (!IsJoined || credentials == null || _sharingPaused ||
+        if (!IsJoined || credentials == null)
+            return;
+
+        lock (_sync)
+            _localPendingMoons.Apply(runEvent.Moon, runEvent.Kind, addedByLocalParticipant: true);
+        PersistResume();
+        RaiseStateChanged();
+
+        if (_sharingPaused ||
             (runEvent.IsAutomaticCaptureEvent && !CaptureSharingArmed)) return;
         lock (_sync)
         {
@@ -459,7 +503,11 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     private void ClearSession(string message)
     {
         DeleteResume();
-        lock (_sync) _outbox.Clear();
+        lock (_sync)
+        {
+            _outbox.Clear();
+            _localPendingMoons.Clear();
+        }
         _credentials = null;
         _api = null;
         OwnerParticipantId = null;
@@ -531,7 +579,11 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         {
             lock (_persistenceSync)
             {
-                lock (_sync) _credentials.Outbox = _outbox.ToList();
+                lock (_sync)
+                {
+                    _credentials.Outbox = _outbox.ToList();
+                    _credentials.LocallyOwnedPendingMoons = _localPendingMoons.CreateSnapshot().ToList();
+                }
                 _resumeStore.Save(_resumePath, _credentials);
             }
         }

@@ -14,6 +14,7 @@ public sealed class OnlineResumeRecord
     public string ParticipantToken { get; set; } = string.Empty;
     public string JoinCode { get; set; } = string.Empty;
     public List<PersistedOutboxEvent> Outbox { get; set; } = [];
+    public List<WireMoonKeyDto> LocallyOwnedPendingMoons { get; set; } = [];
 }
 
 public sealed class PersistedOutboxEvent

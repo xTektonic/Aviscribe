@@ -65,6 +65,7 @@ namespace Aviscribe.UI
         private TextBlock? _countedCountText;
         private TextBlock? _actualCountText;
         private TextBlock? _requirementText;
+        private TextBlock? _pendingTitleText;
         private TextBlock? _moonCountText;
         private TextBlock? _commandFeedbackText;
         private TextBlock? _reviewPromptText;
@@ -142,7 +143,11 @@ namespace Aviscribe.UI
             else
                 _runCoordinator.ImportLegacyProjection();
             _onlineRun = new OnlineRunCoordinator(_runCoordinator);
-            _onlineRun.StateChanged += (_, _) => Dispatcher.UIThread.Post(UpdateOnlineUi);
+            _onlineRun.StateChanged += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                UpdateOnlineUi();
+                UpdatePendingTitle();
+            });
             NormalizeLanguageSettings();
             _outputWriter.Language = _state.Settings.OutputLanguage;
             InitControls();
@@ -481,6 +486,7 @@ namespace Aviscribe.UI
             _countedCountText = this.FindControl<TextBlock>("txtCountedCount");
             _actualCountText = this.FindControl<TextBlock>("txtActualCount");
             _requirementText = this.FindControl<TextBlock>("txtRequirement");
+            _pendingTitleText = this.FindControl<TextBlock>("txtPendingTitle");
             _moonCountText = this.FindControl<TextBlock>("txtMoonCount");
             _commandFeedbackText = this.FindControl<TextBlock>("txtCommandFeedback");
             _moonList = this.FindControl<ListBox>("lstMoonList");
@@ -1178,6 +1184,8 @@ namespace Aviscribe.UI
                 if (_actualCountText != null)
                     _actualCountText.Text = snapshot.ActualMoonCount.ToString();
 
+                UpdatePendingTitle(snapshot);
+
                 UpdateKingdomHeader(snapshot.CurrentKingdom);
                 if (SynchronizeKingdomSelection(snapshot.CurrentKingdom))
                 {
@@ -1214,6 +1222,18 @@ namespace Aviscribe.UI
                 WriteOverlayOutput(snapshot);
                 PersistRunState(snapshot);
             });
+        }
+
+        private void UpdatePendingTitle(GameStateSnapshot? snapshot = null)
+        {
+            if (_pendingTitleText == null)
+                return;
+
+            snapshot ??= _state.CreateSnapshot();
+            var pendingCount = _onlineRun.IsJoined
+                ? snapshot.Pending.Count(_onlineRun.IsPendingOwnedByLocalParticipant)
+                : snapshot.Pending.Count;
+            _pendingTitleText.Text = $"Pending ({pendingCount}/3)";
         }
 
         private void RefreshKingdoms(string? preferredKingdom = null)

@@ -130,7 +130,7 @@
           <Border Classes="card" BorderBrush="{DynamicResource WarningBrush}">
             <Grid RowDefinitions="Auto,*" RowSpacing="10">
               <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Classes="sectionTitle" Text="Pending"/>
+                <TextBlock Name="txtPendingTitle" Classes="sectionTitle" Text="Pending (0/3)"/>
                 <TextBlock Grid.Column="1" Classes="caption" Text="Detected and waiting"/>
               </Grid>
               <ListBox Name="lstPending" Grid.Row="1" Classes="runList">

@@ -153,6 +153,38 @@ public sealed class OnlineIntegrationTests
     }
 
     [Fact]
+    public void MultiplayerPendingOwnershipCountsOnlyMoonsAddedByTheLocalPlayer()
+    {
+        var localPlayer = Guid.NewGuid();
+        var remotePlayer = Guid.NewGuid();
+        var localMoon = new WireMoonKey(1, 10);
+        var remoteMoon = new WireMoonKey(1, 11);
+        var tracker = new LocalPendingMoonTracker();
+
+        tracker.Apply(localMoon, RunEventKind.HintObserved, addedByLocalParticipant: true);
+        tracker.Apply(remoteMoon, RunEventKind.HintObserved, addedByLocalParticipant: false);
+
+        Assert.True(tracker.Contains(localMoon));
+        Assert.False(tracker.Contains(remoteMoon));
+
+        tracker.Reconcile(
+            [
+                Fact(localMoon, hinted: true, collected: false),
+                Fact(remoteMoon, hinted: true, collected: false)
+            ],
+            [Feed(1, localMoon, RunEventKind.HintObserved, localPlayer),
+             Feed(2, remoteMoon, RunEventKind.HintObserved, remotePlayer)],
+            localPlayer,
+            generationChanged: false);
+
+        Assert.True(tracker.Contains(localMoon));
+        Assert.False(tracker.Contains(remoteMoon));
+
+        tracker.Apply(localMoon, RunEventKind.CollectionObserved, addedByLocalParticipant: false);
+        Assert.False(tracker.Contains(localMoon));
+    }
+
+    [Fact]
     public async Task ApiClientAcceptsFragmentedFramesAndRejectsMismatchedResponses()
     {
         var (port, server) = StartFakeServerAsync(async (stream, request) =>
@@ -434,6 +466,23 @@ public sealed class OnlineIntegrationTests
 
     private static bool Same(Moon left, Moon right) => left.Id == right.Id &&
         left.Kingdom.Equals(right.Kingdom, StringComparison.OrdinalIgnoreCase);
+    private static OnlineMoonFact Fact(WireMoonKey moon, bool hinted, bool collected) => new()
+    {
+        Moon = new WireMoonKeyDto { KingdomId = moon.KingdomId, MoonId = moon.MoonId },
+        Hinted = hinted,
+        Collected = collected
+    };
+    private static OnlineFeedItem Feed(
+        long revision,
+        WireMoonKey moon,
+        RunEventKind kind,
+        Guid actorParticipantId) => new()
+    {
+        Revision = revision,
+        Kind = kind.ToString(),
+        ActorParticipantId = actorParticipantId,
+        Moon = new WireMoonKeyDto { KingdomId = moon.KingdomId, MoonId = moon.MoonId }
+    };
     private static SavedMoonReference Reference(Moon moon) => new() { Kingdom = moon.Kingdom, MoonId = moon.Id };
     private static Moon Copy(Moon moon) => new()
     {
