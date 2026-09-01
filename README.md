@@ -109,18 +109,18 @@ dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-bui
 The packaging scripts produce self-contained builds for Windows x64, macOS Apple Silicon, and Linux x64. Set the version first if needed:
 
 ~~~powershell
-./tools/set-version.ps1 1.0.3
+./tools/set-version.ps1 1.0.4
 ~~~
 
 Run the package script on its target operating system:
 
 ~~~powershell
-./packaging/windows/package.ps1 -Version 1.0.3
+./packaging/windows/package.ps1 -Version 1.0.4
 ~~~
 
 ~~~text
-bash packaging/macos/package.sh 1.0.3
-bash packaging/linux/package.sh 1.0.3
+bash packaging/macos/package.sh 1.0.4
+bash packaging/linux/package.sh 1.0.4
 ~~~
 
 Packages and publish outputs are written to artifacts/.
