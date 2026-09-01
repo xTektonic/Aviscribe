@@ -49,7 +49,10 @@ namespace Aviscribe.Core.Ocr
             RequiredPresentObservations: 2,
             // Named videos contain gaps up to four observations within one overlay.
             RequiredAbsentObservations: 8,
-            RetryPresentObservations: 3);
+            // A failed first read often occurs while the title is still animating.
+            // Wait for a meaningfully later frame instead of immediately reading
+            // the same transition/debug-overlay contamination a second time.
+            RetryPresentObservations: 20);
 
         internal static CollectionConfirmationProfile For(OcrRegionType regionType)
         {

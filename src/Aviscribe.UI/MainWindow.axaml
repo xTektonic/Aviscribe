@@ -90,7 +90,8 @@
                 <StackPanel Name="pnlMultiplayerStatus"
                             Orientation="Horizontal"
                             Spacing="6"
-                            VerticalAlignment="Center">
+                            VerticalAlignment="Center"
+                            ToolTip.Tip="Shows local capture status and, while in a room, whether automatic detections are being shared.">
                   <Border Name="multiplayerStatusDot"
                           Width="9" Height="9" CornerRadius="5"
                           Background="{DynamicResource DangerBrush}"
@@ -201,7 +202,8 @@
                 <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="7">
                   <ComboBox Name="cbReviewSelect" HorizontalAlignment="Stretch"
                             ToolTip.Tip="Choose the correct moon when a detected name has more than one likely match."/>
-                  <Button Name="btnReviewApply" Grid.Column="1" Content="Use"/>
+                  <Button Name="btnReviewApply" Grid.Column="1" Content="Use"
+                          ToolTip.Tip="Apply the selected moon to this OCR result."/>
                   <Button Name="btnReviewDismiss" Grid.Column="2" Content="Dismiss"
                           ToolTip.Tip="Remove this item without changing any run list."/>
                 </Grid>
@@ -211,8 +213,32 @@
         </Grid>
 
         <Border Grid.Row="2" Classes="soft">
-          <TextBlock Name="txtCommandFeedback" Text="Ready" Classes="caption"
-                     VerticalAlignment="Center"/>
+          <Grid ColumnDefinitions="1.7*,0.9*,1.1*" ColumnSpacing="10">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="9">
+              <TextBlock Classes="caption" Text="LATEST MOON ACTIONS" FontWeight="SemiBold"
+                         VerticalAlignment="Center"/>
+              <ItemsControl Name="lstMoonActions" Grid.Column="1" VerticalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="14"/>
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:CompileBindings="False">
+                    <TextBlock Text="{Binding}" Classes="caption" TextTrimming="CharacterEllipsis"
+                               MaxWidth="520"/>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Grid>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="9"
+                        VerticalAlignment="Center">
+              <TextBlock Classes="caption" Text="STATUS" FontWeight="SemiBold"
+                         VerticalAlignment="Center"/>
+              <TextBlock Name="txtCommandFeedback" Text="Ready" Classes="caption"
+                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
+            </StackPanel>
+          </Grid>
         </Border>
 
         <ComboBox Name="cbMoonSelect" IsVisible="False"/>
@@ -269,6 +295,9 @@
                     <TextBlock Classes="sectionTitle" Text="Overlay output"/>
                     <CheckBox Name="chkWriteOverlay" Content="Write pending moons to a file"
                               ToolTip.Tip="Keep a plain-text file synchronized with the Pending list."/>
+                    <CheckBox Name="chkOnlyWriteOwnHints"
+                              Content="Only include my hints in multiplayer"
+                              ToolTip.Tip="When you are in a multiplayer room, omit Pending moons found by other players from this text file. Single-player output is unchanged."/>
                     <TextBlock Text="Output path" FontWeight="SemiBold"
                                ToolTip.Tip="The text file Aviscribe updates whenever the Pending list changes."/>
                     <TextBox Name="txtOverlayPath"
@@ -434,7 +463,8 @@
                       <TextBlock Classes="bodyMuted" Text="Review the basics whenever you need a quick refresher." TextWrapping="Wrap"/>
                     </StackPanel>
                     <Button Name="btnOpenQuickStart" Grid.Column="1" Classes="primary"
-                            Content="Open Quick Start" VerticalAlignment="Center"/>
+                            Content="Open Quick Start" VerticalAlignment="Center"
+                            ToolTip.Tip="Open the quick-start guide."/>
                   </Grid>
                 </Border>
                 <Border Classes="card">

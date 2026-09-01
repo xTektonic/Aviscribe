@@ -43,7 +43,8 @@ public sealed record SharedRunEvent(
     Guid EventId,
     RunEventKind Kind,
     WireMoonKey Moon,
-    bool IsAutomaticCaptureEvent = false);
+    bool IsAutomaticCaptureEvent = false,
+    bool Changed = true);
 
 public static class RunFactReducer
 {

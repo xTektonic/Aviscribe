@@ -136,7 +136,8 @@ public sealed class RunCoordinator
             Guid.NewGuid(),
             kind,
             Catalog.ToWire(moon),
-            automaticCapture);
+            automaticCapture,
+            changed);
         LocalEventObserved?.Invoke(this, runEvent);
         if (changed)
             LocalEventCreated?.Invoke(this, runEvent);

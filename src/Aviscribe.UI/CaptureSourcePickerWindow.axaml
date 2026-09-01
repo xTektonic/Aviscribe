@@ -31,7 +31,8 @@
     <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
       <TextBlock Name="txtPickerStatus" VerticalAlignment="Center" Classes="caption"
                  TextWrapping="Wrap"/>
-      <Button Name="btnCancel" Grid.Column="1" Content="Cancel"/>
+      <Button Name="btnCancel" Grid.Column="1" Content="Cancel"
+              ToolTip.Tip="Close without changing the capture source."/>
       <Button Name="btnChoose" Grid.Column="2" Classes="primary" Content="Choose" IsDefault="True"
               ToolTip.Tip="Use the selected source for capture and preview."/>
     </Grid>

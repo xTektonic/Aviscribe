@@ -71,10 +71,12 @@
       <TextBlock Classes="caption" Text="You can reopen this guide from Settings > Help."
                  VerticalAlignment="Center"/>
       <Button Name="btnClose" Grid.Column="1" Content="Got it" MinWidth="96"
-              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+              ToolTip.Tip="Close the quick-start guide."/>
       <Button Name="btnOpenSettings" Grid.Column="2" Classes="primary"
               Content="Open Settings" MinWidth="132" IsDefault="True"
-              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+              ToolTip.Tip="Close this guide and open Aviscribe settings."/>
     </Grid>
   </Grid>
 </Window>

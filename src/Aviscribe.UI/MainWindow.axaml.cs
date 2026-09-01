@@ -68,6 +68,7 @@ namespace Aviscribe.UI
         private TextBlock? _pendingTitleText;
         private TextBlock? _moonCountText;
         private TextBlock? _commandFeedbackText;
+        private ItemsControl? _moonActionList;
         private TextBlock? _reviewPromptText;
         private ListBox? _moonList;
         private ListBox? _pendingList;
@@ -81,6 +82,8 @@ namespace Aviscribe.UI
         private CheckBox? _includePostGameCheck;
         private ComboBox? _categorySelect;
         private Button? _onlineRunButton;
+        private Button? _captureButton;
+        private Button? _settingsCaptureButton;
         private StackPanel? _multiplayerStatusPanel;
         private Border? _multiplayerStatusDot;
         private TextBlock? _multiplayerStatusText;
@@ -113,6 +116,10 @@ namespace Aviscribe.UI
         private int _sourceWidth;
         private int _sourceHeight;
         private int _onlineGenerationSeen;
+        private Guid? _onlineSessionSeen;
+        private long _latestOnlineActionRevision;
+        private (RunCategory Category, bool IncludePostGame)? _onlineConfigurationSeen;
+        private readonly Queue<string> _recentMoonActions = new();
         private OnlineRunWindow? _onlineRunWindow;
 
         public MainWindow()
@@ -149,7 +156,9 @@ namespace Aviscribe.UI
                 UpdateOnlineUi();
                 UpdatePendingTitle();
                 UpdatePendingOwnershipHighlights();
+                WriteOverlayOutput(_state.CreateSnapshot());
             });
+            _runCoordinator.LocalEventObserved += OnLocalMoonActionObserved;
             NormalizeLanguageSettings();
             _outputWriter.Language = _state.Settings.OutputLanguage;
             InitControls();
@@ -191,9 +200,11 @@ namespace Aviscribe.UI
             _resetRunButton = this.GetControl<Button>("btnResetKingdom");
 
             // Update Preview button
-            Button updatePreview = this.GetControl<Button>("btnUpdatePreview");
-            updatePreview.Click += StartPreview;
-            this.GetControl<Button>("btnSettingsUpdatePreview").Click += StartPreview;
+            _captureButton = this.GetControl<Button>("btnUpdatePreview");
+            _captureButton.Click += StartPreview;
+            _settingsCaptureButton =
+                this.GetControl<Button>("btnSettingsUpdatePreview");
+            _settingsCaptureButton.Click += StartPreview;
             this.GetControl<Button>("btnCropGameplay").Click += OpenCropWindow;
 
             _kingdomSelect = this.GetControl<ComboBox>("cbKingdomSelect");
@@ -491,6 +502,7 @@ namespace Aviscribe.UI
             _pendingTitleText = this.FindControl<TextBlock>("txtPendingTitle");
             _moonCountText = this.FindControl<TextBlock>("txtMoonCount");
             _commandFeedbackText = this.FindControl<TextBlock>("txtCommandFeedback");
+            _moonActionList = this.FindControl<ItemsControl>("lstMoonActions");
             _moonList = this.FindControl<ListBox>("lstMoonList");
             _pendingList = this.FindControl<ListBox>("lstPending");
             _collectedList = this.FindControl<ListBox>("lstCollected");
@@ -535,6 +547,22 @@ namespace Aviscribe.UI
                     PersistRunState(snapshot);
                 };
             }
+
+            var onlyWriteOwnHintsCheck =
+                this.GetControl<CheckBox>("chkOnlyWriteOwnHints");
+            onlyWriteOwnHintsCheck.IsChecked = _preferences.OnlyWriteOwnHints;
+            onlyWriteOwnHintsCheck.IsCheckedChanged += (_, _) =>
+            {
+                _preferences.OnlyWriteOwnHints =
+                    onlyWriteOwnHintsCheck.IsChecked == true;
+                PersistAppPreferences();
+                WriteOverlayOutput(_state.CreateSnapshot());
+                _diagnostics.Information(
+                    $"Only write own multiplayer hints = " +
+                    $"{_preferences.OnlyWriteOwnHints}.");
+            };
+
+            RefreshMoonActionLog();
 
             WireListInteractions();
             WireCommandControls();
@@ -1846,7 +1874,11 @@ namespace Aviscribe.UI
 
             try
             {
-                _outputWriter.WritePending(snapshot);
+                _outputWriter.WritePending(
+                    snapshot,
+                    moon => !_preferences.OnlyWriteOwnHints ||
+                        !_onlineRun.IsJoined ||
+                        _onlineRun.IsPendingOwnedByLocalParticipant(moon));
             }
             catch (Exception ex)
             {
@@ -2017,6 +2049,81 @@ namespace Aviscribe.UI
         {
             if (_commandFeedbackText != null)
                 _commandFeedbackText.Text = text;
+        }
+
+        private void OnLocalMoonActionObserved(
+            object? sender,
+            SharedRunEvent runEvent)
+        {
+            var moon = _runCoordinator.Catalog.Resolve(runEvent.Moon);
+            if (moon == null)
+                return;
+
+            var message = DescribeLocalMoonAction(runEvent, moon);
+            Dispatcher.UIThread.Post(() => AddMoonAction(message));
+        }
+
+        private string DescribeLocalMoonAction(
+            SharedRunEvent runEvent,
+            Moon moon)
+        {
+            var target = $"{moon.Kingdom} #{moon.Id} — {FormatMoon(moon)}";
+            if (!runEvent.Changed)
+            {
+                return runEvent.Kind switch
+                {
+                    RunEventKind.HintObserved =>
+                        $"Hint detected again: {target} (state unchanged)",
+                    RunEventKind.CollectionObserved =>
+                        $"Collection detected again: {target} (already recorded)",
+                    RunEventKind.SetPending => $"Manual: {target} is already Pending",
+                    RunEventKind.SetCounted => $"Manual: {target} is already Counted",
+                    RunEventKind.SetUncounted => $"Manual: {target} is already Wrong",
+                    RunEventKind.RemoveMoon => $"Manual: {target} was already absent",
+                    _ => $"Moon seen again: {target}"
+                };
+            }
+
+            return runEvent.Kind switch
+            {
+                RunEventKind.HintObserved => $"Hint detected: {target} → Pending",
+                RunEventKind.CollectionObserved =>
+                    $"Collection detected: {target} → {DescribeRecordedCollection(moon)}",
+                RunEventKind.SetPending => $"Manual: {target} → Pending",
+                RunEventKind.SetCounted => $"Manual: {target} → Counted",
+                RunEventKind.SetUncounted => $"Manual: {target} → Wrong",
+                RunEventKind.RemoveMoon => $"Manual: removed {target}",
+                _ => $"Updated {target}"
+            };
+        }
+
+        private string DescribeRecordedCollection(Moon moon)
+        {
+            var snapshot = _state.CreateSnapshot();
+            return snapshot.UncountedCollected.Any(item => SameMoon(item, moon))
+                ? "Wrong"
+                : "Counted";
+        }
+
+        private void AddMoonAction(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return;
+
+            _recentMoonActions.Enqueue(message);
+            while (_recentMoonActions.Count > 3)
+                _recentMoonActions.Dequeue();
+            RefreshMoonActionLog();
+        }
+
+        private void RefreshMoonActionLog()
+        {
+            if (_moonActionList == null)
+                return;
+
+            _moonActionList.ItemsSource = _recentMoonActions.Count == 0
+                ? ["No moon actions yet"]
+                : _recentMoonActions.Reverse().ToList();
         }
 
         private void WireListInteractions()
@@ -2396,7 +2503,11 @@ namespace Aviscribe.UI
         {
             var active = isActive ??
                 (_video?.State == CaptureState.Running && _processorRunning);
-            if (_onlineRun.CaptureSharingArmed == active) return;
+            if (_onlineRun.CaptureSharingArmed == active)
+            {
+                Dispatcher.UIThread.Post(UpdateOnlineUi);
+                return;
+            }
             _onlineRun.CaptureSharingArmed = active;
             _diagnostics.Debug(active
                 ? "Multiplayer capture sharing is active."
@@ -2412,32 +2523,107 @@ namespace Aviscribe.UI
         {
             if (_onlineRunButton == null) return;
             var joined = _onlineRun.IsJoined;
+            var captureActive = _onlineRun.CaptureSharingArmed;
+            var onlinePlayers = _onlineRun.Participants.Count(item => item.IsOnline);
+            var captureState = _video?.State ?? CaptureState.Stopped;
+            if (_captureButton != null)
+            {
+                _captureButton.Content = captureState switch
+                {
+                    CaptureState.Running => "Capture Running",
+                    CaptureState.Starting => "Starting Capture...",
+                    CaptureState.Stopping => "Stopping Capture...",
+                    CaptureState.Faulted => "Restart Capture",
+                    _ => "Start Capture"
+                };
+                _captureButton.IsEnabled = captureState is not
+                    (CaptureState.Starting or CaptureState.Stopping);
+            }
+            if (_settingsCaptureButton != null)
+            {
+                _settingsCaptureButton.Content = captureState switch
+                {
+                    CaptureState.Running => "Refresh Preview",
+                    CaptureState.Starting => "Starting Capture...",
+                    CaptureState.Stopping => "Stopping Capture...",
+                    CaptureState.Faulted => "Restart / Refresh Preview",
+                    _ => "Start / Refresh Preview"
+                };
+                _settingsCaptureButton.IsEnabled = captureState is not
+                    (CaptureState.Starting or CaptureState.Stopping);
+            }
             _onlineRunButton.Content = "Multiplayer";
             if (_multiplayerStatusPanel != null)
                 _multiplayerStatusPanel.IsVisible = true;
             if (_multiplayerStatusText != null)
-                _multiplayerStatusText.Text = _onlineRun.State switch
-                {
-                    OnlineConnectionState.Connected =>
-                        $"Connected · {_onlineRun.Participants.Count(item => item.IsOnline)} players",
-                    OnlineConnectionState.Reconnecting => "Reconnecting",
-                    OnlineConnectionState.SharingPaused => "Sharing paused",
-                    _ => "Offline"
-                };
+                _multiplayerStatusText.Text = !joined
+                    ? _video?.State switch
+                    {
+                        CaptureState.Running when captureActive => "Capture active",
+                        CaptureState.Starting => "Capture starting",
+                        CaptureState.Stopping => "Capture stopping",
+                        CaptureState.Faulted => "Capture faulted",
+                        _ => "Capture stopped"
+                    }
+                    : _onlineRun.State switch
+                    {
+                        OnlineConnectionState.Connected when captureActive =>
+                            $"Sharing capture · {onlinePlayers} players",
+                        OnlineConnectionState.Connected =>
+                            $"Room connected · capture paused · {onlinePlayers} players",
+                        OnlineConnectionState.Reconnecting when captureActive =>
+                            "Reconnecting · capture queued",
+                        OnlineConnectionState.Reconnecting =>
+                            "Reconnecting · capture paused",
+                        OnlineConnectionState.SharingPaused => "Room connected · sharing paused",
+                        _ => "Room offline"
+                    };
             if (_multiplayerStatusDot != null)
             {
-                _multiplayerStatusDot.Background = _onlineRun.State switch
-                {
-                    OnlineConnectionState.Connected => new SolidColorBrush(Color.Parse("#2E9B68")),
-                    OnlineConnectionState.Reconnecting or OnlineConnectionState.SharingPaused =>
-                        new SolidColorBrush(Color.Parse("#D99227")),
-                    _ => new SolidColorBrush(Color.Parse("#C65353"))
-                };
+                var color = !joined
+                    ? _video?.State switch
+                    {
+                        CaptureState.Running when captureActive => "#2E9B68",
+                        CaptureState.Starting or CaptureState.Stopping => "#D99227",
+                        _ => "#C65353"
+                    }
+                    : _onlineRun.State == OnlineConnectionState.Connected && captureActive
+                        ? "#2E9B68"
+                        : _onlineRun.State is OnlineConnectionState.Connected or
+                            OnlineConnectionState.Reconnecting or
+                            OnlineConnectionState.SharingPaused
+                            ? "#D99227"
+                            : "#C65353";
+                _multiplayerStatusDot.Background =
+                    new SolidColorBrush(Color.Parse(color));
             }
+
+            LogNewOnlineMoonActions(joined);
+
+            var configuration = (
+                _state.Settings.Category,
+                _state.Settings.IncludePostGameKingdoms);
+            if (joined && _onlineConfigurationSeen != configuration)
+            {
+                _onlineConfigurationSeen = configuration;
+                RefreshKingdoms(_state.CurrentKingdom);
+                RefreshMoonSelect();
+                RefreshMoonList();
+                ShowNextReview();
+            }
+            else if (!joined)
+            {
+                _onlineConfigurationSeen = null;
+            }
+
             if (_categorySelect != null)
             {
                 _categorySelect.IsEnabled = !joined;
-                if (joined) _categorySelect.SelectedItem = _state.Settings.Category;
+                if (joined &&
+                    !Equals(_categorySelect.SelectedItem, _state.Settings.Category))
+                {
+                    _categorySelect.SelectedItem = _state.Settings.Category;
+                }
             }
             if (_includePostGameCheck != null)
             {
@@ -2469,6 +2655,42 @@ namespace Aviscribe.UI
             else if (!joined)
             {
                 _onlineGenerationSeen = 0;
+            }
+        }
+
+        private void LogNewOnlineMoonActions(bool joined)
+        {
+            if (!joined || _onlineRun.SessionId == null)
+            {
+                _onlineSessionSeen = null;
+                _latestOnlineActionRevision = 0;
+                return;
+            }
+
+            if (_onlineSessionSeen != _onlineRun.SessionId)
+            {
+                _onlineSessionSeen = _onlineRun.SessionId;
+                _latestOnlineActionRevision = _onlineRun.Revision;
+                return;
+            }
+
+            var newItems = _onlineRun.RecentEvents
+                .Where(item =>
+                    item.Revision > _latestOnlineActionRevision &&
+                    item.Moon != null)
+                .OrderBy(item => item.Revision)
+                .ToList();
+            foreach (var item in newItems)
+            {
+                if (item.ActorParticipantId != _onlineRun.ParticipantId)
+                    AddMoonAction(_onlineRun.DescribeFeedItem(item));
+            }
+
+            if (newItems.Count > 0)
+            {
+                _latestOnlineActionRevision = Math.Max(
+                    _latestOnlineActionRevision,
+                    newItems.Max(item => item.Revision));
             }
         }
 

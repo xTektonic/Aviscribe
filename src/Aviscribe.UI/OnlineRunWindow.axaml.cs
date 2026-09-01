@@ -23,6 +23,8 @@ public partial class OnlineRunWindow : Window
     private readonly Func<RunSettings> _settings = null!;
     private bool _busy;
     private string? _localMessage;
+    private (Guid? SessionId, int Generation, RunCategory Category, bool IncludePostGame)?
+        _configurationSeen;
 
     public OnlineRunWindow()
     {
@@ -59,8 +61,9 @@ public partial class OnlineRunWindow : Window
         this.GetControl<Button>("btnJoinRun").Click += JoinRun;
         this.GetControl<Button>("btnResumeRun").Click += ResumeRun;
         this.GetControl<Button>("btnOnlineLeave").Click += LeaveRun;
+        this.GetControl<Button>("btnOnlineApplySettings").Click += ApplySettings;
         this.GetControl<Button>("btnOnlineReset").Click += ResetRun;
-        this.GetControl<Button>("btnOnlineEnd").Click += EndRun;
+        this.GetControl<Button>("btnOnlineEnd").Click += CloseRoom;
         this.GetControl<Button>("btnCopyJoinCode").Click += CopyJoinCode;
         _online.StateChanged += OnlineStateChanged;
         Closed += (_, _) => _online.StateChanged -= OnlineStateChanged;
@@ -114,19 +117,36 @@ public partial class OnlineRunWindow : Window
                 "Start a New Run?",
                 "This clears shared moon state for every player in the room and starts a new run.",
                 "Start New Run")) return;
-        var settings = _settings().Clone();
-        if (this.GetControl<ComboBox>("cbOnlineCategory").SelectedItem is RunCategory category)
-            settings.Category = category;
-        settings.IncludePostGameKingdoms = this.GetControl<CheckBox>("chkOnlinePostgame").IsChecked == true;
+        var settings = GetSelectedSettings();
         await RunBusyAsync(token => _online.ResetAsync(settings, token));
     }
 
-    private async void EndRun(object? sender, RoutedEventArgs args)
+    private async void ApplySettings(object? sender, RoutedEventArgs args)
+    {
+        var settings = GetSelectedSettings();
+        await RunBusyAsync(token =>
+            _online.UpdateConfigurationAsync(settings, token));
+    }
+
+    private RunSettings GetSelectedSettings()
+    {
+        var settings = _settings().Clone();
+        if (this.GetControl<ComboBox>("cbOnlineCategory").SelectedItem is
+            RunCategory category)
+        {
+            settings.Category = category;
+        }
+        settings.IncludePostGameKingdoms =
+            this.GetControl<CheckBox>("chkOnlinePostgame").IsChecked == true;
+        return settings;
+    }
+
+    private async void CloseRoom(object? sender, RoutedEventArgs args)
     {
         if (!await ConfirmAsync(
-                "End Multiplayer Run?",
-                "This ends the run and closes the room for every player. It cannot be resumed.",
-                "End Run")) return;
+                "Close Multiplayer Room?",
+                "This closes the room for every player. It cannot be resumed.",
+                "Close Room")) return;
         await RunBusyAsync(_online.EndAsync);
     }
 
@@ -234,9 +254,24 @@ public partial class OnlineRunWindow : Window
                 ? _online.LastMessage
                 : "Requires a SMOO+ Server build with Aviscribe integration.");
         this.GetControl<Button>("btnResumeRun").IsVisible = _online.HasPreviousRun;
-        foreach (var name in new[] { "btnCreateRun", "btnJoinRun", "btnResumeRun", "btnOnlineLeave", "btnOnlineReset", "btnOnlineEnd", "btnCopyJoinCode" })
+        foreach (var name in new[] { "btnCreateRun", "btnJoinRun", "btnResumeRun", "btnOnlineLeave", "btnOnlineApplySettings", "btnOnlineReset", "btnOnlineEnd", "btnCopyJoinCode" })
             this.GetControl<Button>(name).IsEnabled = !_busy;
         if (!joined) return;
+
+        var currentSettings = _settings();
+        var currentConfiguration = (
+            _online.SessionId,
+            _online.Generation,
+            currentSettings.Category,
+            currentSettings.IncludePostGameKingdoms);
+        if (_configurationSeen != currentConfiguration)
+        {
+            _configurationSeen = currentConfiguration;
+            this.GetControl<ComboBox>("cbOnlineCategory").SelectedItem =
+                currentSettings.Category;
+            this.GetControl<CheckBox>("chkOnlinePostgame").IsChecked =
+                currentSettings.IncludePostGameKingdoms;
+        }
 
         this.GetControl<TextBox>("txtConnectedCode").Text = string.IsNullOrWhiteSpace(_online.JoinCode) ? "—" : _online.JoinCode;
         this.GetControl<Button>("btnCopyJoinCode").IsEnabled = !_busy && !string.IsNullOrWhiteSpace(_online.JoinCode);
@@ -251,7 +286,7 @@ public partial class OnlineRunWindow : Window
         SetStatusDot(
             this.GetControl<Border>("captureSharingDot"),
             !_online.CaptureSharingArmed
-                ? "disconnected"
+                ? "warning"
                 : _online.State == OnlineConnectionState.Connected
                     ? "connected"
                     : "warning");

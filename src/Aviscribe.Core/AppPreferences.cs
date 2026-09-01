@@ -12,6 +12,7 @@ public sealed class AppPreferences
     public string OnlineServerAddress { get; set; } = string.Empty;
     public int OnlineServerPort { get; set; }
     public string OnlineDisplayName { get; set; } = string.Empty;
+    public bool OnlyWriteOwnHints { get; set; }
 }
 
 public enum AppThemePreference

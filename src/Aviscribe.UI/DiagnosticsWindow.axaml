@@ -55,7 +55,8 @@
                 HorizontalAlignment="Right">
       <Button Name="btnOpenLogFolder" Content="Open Log Folder"
               ToolTip.Tip="Open the folder containing Aviscribe diagnostic logs."/>
-      <Button Name="btnCloseDiagnostics" Classes="primary" Content="Close"/>
+      <Button Name="btnCloseDiagnostics" Classes="primary" Content="Close"
+              ToolTip.Tip="Close the diagnostics window."/>
     </StackPanel>
   </Grid>
 </Window>

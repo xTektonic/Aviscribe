@@ -87,9 +87,11 @@
     <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
       <TextBlock Classes="caption" Text="Changes take effect only when you choose Apply."
                  VerticalAlignment="Center"/>
-      <Button Name="btnCancel" Grid.Column="1" Content="Cancel" MinWidth="90"/>
+      <Button Name="btnCancel" Grid.Column="1" Content="Cancel" MinWidth="90"
+              ToolTip.Tip="Close without changing the gameplay crop."/>
       <Button Name="btnApply" Grid.Column="2" Classes="primary" Content="Apply" MinWidth="90"
-              IsDefault="True"/>
+              IsDefault="True"
+              ToolTip.Tip="Use the selected gameplay area for capture and OCR."/>
     </Grid>
   </Grid>
 </Window>

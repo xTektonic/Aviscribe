@@ -209,6 +209,21 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         ApplySnapshot(snapshot, generationChanged: true);
     }
 
+    public async Task UpdateConfigurationAsync(
+        RunSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var (api, credentials) = RequireSession();
+        var snapshot = await api.SendAsync<OnlineRunSnapshot>(AuthenticatedRequest(
+            credentials,
+            "updateConfiguration",
+            new OnlineUpdateConfigurationData
+            {
+                Configuration = Configuration(settings)
+            }), cancellationToken).ConfigureAwait(false);
+        ApplySnapshot(snapshot, generationChanged: false);
+    }
+
     public async Task EndAsync(CancellationToken cancellationToken)
     {
         var (api, credentials) = RequireSession();
@@ -416,6 +431,14 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
                 }
             }
             if (change.Event != null) _runs.ApplyRemote(change.Event.ToShared());
+            if (change.Configuration != null)
+            {
+                _runs.ApplySharedConfiguration(
+                    change.Configuration.Category == "hardcore"
+                        ? RunCategory.Hardcore
+                        : RunCategory.Standard,
+                    change.Configuration.IncludePostGame);
+            }
             if (change.Kind == "participantLeft" && change.ActorParticipantId.HasValue)
                 Participants = Participants.Where(item => item.ParticipantId != change.ActorParticipantId).ToList();
             else if (change.Participant != null)
@@ -672,6 +695,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             "ownerChanged" => $"{actor} became the room owner.",
             "runCreated" => $"{actor} created the room.",
             "runReset" => $"{actor} started a new run.",
+            "configurationChanged" => $"{actor} updated the run settings.",
             "ended" or "endedByOperator" => "The run ended.",
             "idleExpired" => "The room expired after being idle.",
             "maximumLifetimeExpired" => "The room reached its maximum lifetime.",

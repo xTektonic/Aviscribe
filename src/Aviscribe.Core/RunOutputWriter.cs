@@ -9,7 +9,9 @@ namespace Aviscribe.Core
         public string OutputPath { get; set; } = AppPaths.PendingOutputPath;
         public GameLanguage Language { get; set; } = GameLanguage.English;
 
-        public void WritePending(GameStateSnapshot snapshot)
+        public void WritePending(
+            GameStateSnapshot snapshot,
+            Func<Moon, bool>? include = null)
         {
             if (string.IsNullOrWhiteSpace(OutputPath))
                 return;
@@ -18,7 +20,10 @@ namespace Aviscribe.Core
             if (!string.IsNullOrWhiteSpace(directory))
                 Directory.CreateDirectory(directory);
 
-            var text = RunStateTextFormatter.FormatPending(snapshot, Language);
+            var text = RunStateTextFormatter.FormatPending(
+                snapshot,
+                Language,
+                include);
             var tempPath = $"{OutputPath}.{Guid.NewGuid():N}.tmp";
 
             File.WriteAllText(tempPath, text, Encoding.UTF8);

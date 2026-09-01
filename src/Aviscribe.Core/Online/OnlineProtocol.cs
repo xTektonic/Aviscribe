@@ -112,6 +112,11 @@ public sealed class OnlineResetData
     public OnlineRunConfiguration Configuration { get; set; } = new();
 }
 
+public sealed class OnlineUpdateConfigurationData
+{
+    public OnlineRunConfiguration Configuration { get; set; } = new();
+}
+
 public sealed class WireRunEvent
 {
     [JsonPropertyName("id")]
@@ -227,6 +232,7 @@ public sealed class OnlineRunChange
     public Guid? OwnerParticipantId { get; set; }
     public OnlineParticipant? Participant { get; set; }
     public int? Generation { get; set; }
+    public OnlineRunConfiguration? Configuration { get; set; }
 }
 
 public sealed class OnlineWaitResult

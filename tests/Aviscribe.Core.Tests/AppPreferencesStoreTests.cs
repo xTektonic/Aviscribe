@@ -16,6 +16,7 @@ public sealed class AppPreferencesStoreTests
         Assert.Equal(0, preferences.QuickStartVersionSeen);
         Assert.Equal(string.Empty, preferences.OnlineServerAddress);
         Assert.Equal(0, preferences.OnlineServerPort);
+        Assert.False(preferences.OnlyWriteOwnHints);
     }
 
     [Fact]

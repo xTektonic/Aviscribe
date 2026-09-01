@@ -156,6 +156,37 @@ public sealed class StoryMoonDetectionTests
             $"required={CollectionConfirmationProfile.StoryMoon.RequiredAbsentDuration}");
     }
 
+    [Fact]
+    public void FailedStoryMoonReadRetriesOnAMeaningfullyLaterFrame()
+    {
+        var profile = CollectionConfirmationProfile.StoryMoon;
+        var tracker = new CollectionConfirmationTracker(profile);
+        var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        tracker.Observe(present: true, start);
+        var confirmed = tracker.Observe(
+            present: true,
+            start + profile.DetectionInterval);
+        Assert.True(tracker.RecordEnqueued(confirmed.Generation, attempt: 1));
+        tracker.RecordOutcome(confirmed.Generation, resolved: false);
+
+        CollectionConfirmationSnapshot retry = default;
+        for (var index = 0;
+            index < profile.RetryPresentObservations;
+            index++)
+        {
+            retry = tracker.Observe(
+                present: true,
+                start + profile.DetectionInterval * (index + 2));
+            if (index < profile.RetryPresentObservations - 1)
+                Assert.False(retry.CanEnqueueRetry(profile));
+        }
+
+        Assert.True(retry.CanEnqueueRetry(profile));
+        Assert.True(
+            retry.ConsecutivePresentDuration >= TimeSpan.FromMilliseconds(250));
+    }
+
     private static Mat CreateMatchingBackground()
     {
         var image = new Mat(

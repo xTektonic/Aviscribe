@@ -209,6 +209,7 @@ public sealed class OnlineIntegrationTests
         Assert.False(changed);
         var item = Assert.Single(observed);
         Assert.Equal(RunEventKind.HintObserved, item.Kind);
+        Assert.False(item.Changed);
         Assert.Empty(created);
     }
 

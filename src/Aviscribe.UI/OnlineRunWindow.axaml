@@ -37,8 +37,10 @@
               Grid.Column="1"
               Content="Leave Room"
               IsVisible="False"
-              VerticalAlignment="Top"/>
-      <Button Name="btnClose" Grid.Column="2" Content="Close" VerticalAlignment="Top"/>
+              VerticalAlignment="Top"
+              ToolTip.Tip="Leave this room and delete the saved rejoin credential."/>
+      <Button Name="btnClose" Grid.Column="2" Content="Close" VerticalAlignment="Top"
+              ToolTip.Tip="Close this window without leaving the room."/>
     </Grid>
 
     <Border Grid.Row="1" Classes="soft">
@@ -73,7 +75,8 @@
               <StackPanel Spacing="10">
                 <TextBlock Classes="sectionTitle" Text="Create a room"/>
                 <TextBlock Classes="bodyMuted" Text="Starts a blank shared run and gives you a room join code." TextWrapping="Wrap"/>
-                <Button Name="btnCreateRun" Classes="primary" Content="Create Room" HorizontalAlignment="Left"/>
+                <Button Name="btnCreateRun" Classes="primary" Content="Create Room" HorizontalAlignment="Left"
+                        ToolTip.Tip="Create a multiplayer room using the server and display name above."/>
               </StackPanel>
             </Border>
             <Border Grid.Column="1" Classes="card">
@@ -84,11 +87,13 @@
                          HorizontalAlignment="Left"
                          PlaceholderText="XXXX-XXXX"
                          MaxLength="9"/>
-                <Button Name="btnJoinRun" Classes="primary" Content="Join Room" HorizontalAlignment="Left"/>
+                <Button Name="btnJoinRun" Classes="primary" Content="Join Room" HorizontalAlignment="Left"
+                        ToolTip.Tip="Join the room identified by the code above."/>
               </StackPanel>
             </Border>
           </Grid>
-          <Button Name="btnResumeRun" Content="Rejoin previous room" HorizontalAlignment="Left"/>
+          <Button Name="btnResumeRun" Content="Rejoin previous room" HorizontalAlignment="Left"
+                  ToolTip.Tip="Reconnect using the last saved room credential."/>
         </StackPanel>
       </ScrollViewer>
 
@@ -130,7 +135,7 @@
           </Border>
 
           <Border Name="pnlOwnerControls" Classes="card" IsVisible="False">
-            <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="14">
+            <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="14">
               <StackPanel Spacing="3">
                 <TextBlock Classes="sectionTitle" Text="Run controls"/>
                 <TextBlock Classes="bodyMuted" Text="Only the room owner can change or end the current run." TextWrapping="Wrap"/>
@@ -146,18 +151,30 @@
                   <CheckBox Name="chkOnlinePostgame"
                             Content="Include postgame kingdoms"
                             MinHeight="34"
-                            VerticalContentAlignment="Center"/>
+                            VerticalContentAlignment="Center"
+                            ToolTip.Tip="Allow Cloud, Ruined, Mushroom, Dark, and Darker kingdoms in the current shared run."/>
                 </StackPanel>
               </Grid>
 
-              <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+              <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                <Button Name="btnOnlineApplySettings" Classes="primary"
+                        Content="Apply Settings"
+                        ToolTip.Tip="Change the category and postgame mode without clearing shared moon state."/>
+                <TextBlock Grid.Column="1" Classes="caption"
+                           Text="Update this run in place for every player; existing moon state is preserved."
+                           TextWrapping="Wrap" VerticalAlignment="Center"/>
+              </Grid>
+
+              <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="12">
                 <StackPanel Spacing="3">
-                  <Button Name="btnOnlineReset" Content="Start New Run" HorizontalAlignment="Left"/>
+                  <Button Name="btnOnlineReset" Content="Start New Run" HorizontalAlignment="Left"
+                          ToolTip.Tip="Clear all shared moon state and start a new run with the selected settings."/>
                   <TextBlock Classes="caption" Text="Clear shared moon state and use the settings above." TextWrapping="Wrap"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="3" HorizontalAlignment="Right">
-                  <Button Name="btnOnlineEnd" Content="End Run" Classes="danger" HorizontalAlignment="Right"/>
-                  <TextBlock Classes="caption" Text="End the run and close the room for everyone." TextAlignment="Right"/>
+                  <Button Name="btnOnlineEnd" Content="Close Room" Classes="danger" HorizontalAlignment="Right"
+                          ToolTip.Tip="Permanently close this room for every player."/>
+                  <TextBlock Classes="caption" Text="Close the room for everyone." TextAlignment="Right"/>
                 </StackPanel>
               </Grid>
             </Grid>
