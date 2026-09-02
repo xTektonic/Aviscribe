@@ -1,17 +1,57 @@
-# Multiplayer rooms and runs
+# Multiplayer with SMOO+
 
-Aviscribe multiplayer can share Talkatoo run facts through a compatible SMOO+ server without interacting with the game connection. Select **Multiplayer** on the Run screen to create a room, join one with an `XXXX-XXXX` code, or explicitly rejoin a previous room.
+Aviscribe can synchronize Talkatoo hints, collected moons, and manual corrections between players in a shared run. Multiplayer uses a compatible SMOO+ server; it does not connect to or modify the game connection itself.
 
-The SMOO+ Server build must include Aviscribe integration.
+## Requirements
 
-A SMOO+ server port hosts one multiplayer room, matching the group playing on that port. The room has one current run, and its Aviscribe player limit is the server's normal maximum-player setting.
+- The SMOO+ server must be running a build with Aviscribe integration.
+- Each player needs the server address and port from the server operator.
+- Players should use compatible Aviscribe builds. If Aviscribe reports a catalog mismatch, update everyone to the same current build.
 
-The shared state is limited to moon hint/collection facts, manual counted/wrong overrides, category, postgame mode, players, room ownership, and the activity feed. The room owner can update category or postgame mode in place without clearing moon state, or start a new run when a clean slate is intended. Current kingdom, route ordering, language, capture and crop settings, OCR runtime, hotkeys, and overlay settings remain local to each Aviscribe instance.
+Each SMOO+ server port can host one Aviscribe room. The server's normal player limit also applies to the room.
 
-Automatic detections are shared only while capture is running. Deliberate corrections remain shareable while connected even if capture is paused. Network failures keep local corrections responsive and queue idempotent events for retry; sharing pauses with a warning if the persisted queue reaches 500 events or 1 MiB.
+## Create or join a room
 
-The text-file output can optionally include only Pending hints owned by the local player while connected to a room. That preference does not filter single-player output.
+1. On the **Run** screen, select **Multiplayer**.
+2. Enter the SMOO+ server address and port, plus the name other players should see.
+3. Choose one of the following:
+   - Select **Create Room** to start a blank shared run, then send the displayed join code to the other players.
+   - Enter a join code and select **Join Room** to connect to an existing run.
+4. Start capture when you are ready to share automatic detections.
 
-Closing Aviscribe retains a separate rejoin record but never reconnects automatically on the next launch. Choosing **Leave Room** removes that record. Expired or closed rooms keep the last synchronized moon state locally and leave multiplayer mode.
+Creating or joining a room replaces the current local moon state with the room's run. Aviscribe asks for confirmation first if the local run is not empty. Capture settings, route order, language, hotkeys, and overlay settings are kept.
 
-Moon identities use compact integer kingdom and moon IDs on the wire. The IDs are derived deterministically from the normalized local gameplay catalog. A SHA-256 catalog hash covers owning kingdom, moon ID, collection kingdom, story status, and multi-moon status; translated names and images are deliberately excluded.
+## During a run
+
+Aviscribe shares:
+
+- Talkatoo hints and collected moons
+- manual **Pending**, **Counted**, **Wrong**, and removal corrections
+- the run category and postgame setting
+- the player list and recent activity
+
+Capture, crop, language, route, hotkey, and overlay settings remain local to each player. Automatic detections are shared only while capture is running, but manual corrections are still shared while capture is paused.
+
+For an OBS text source, enable **Only include my hints in multiplayer** under **Settings > Overlay output** to exclude hints found by other players. This setting does not affect singleplayer output.
+
+## Room owner controls
+
+The room owner manages the shared run:
+
+- **Apply Settings** changes the category or postgame setting without clearing moon state.
+- **Start New Run** clears the shared moon state for every player.
+- **Close Room** permanently closes the room for everyone.
+
+## Leaving and reconnecting
+
+Aviscribe attempts to reconnect while it remains open. If the app is closed, it remembers the room but does not reconnect automatically at the next launch; open **Multiplayer** and select **Rejoin previous room**.
+
+Select **Leave Room** to disconnect and delete the saved rejoin information. The last synchronized moon state remains available locally after leaving, or after a room expires or is closed.
+
+## Troubleshooting
+
+- **Cannot connect:** Confirm that the server is running, the address and port are correct, and the server accepts connections from the player's network.
+- **Server does not support Aviscribe:** The server needs a SMOO+ build with Aviscribe integration and must have Aviscribe support enabled in the server config.
+- **Cannot join:** Check the join code and make sure the room is still open and has space.
+- **Catalog mismatch:** Update all players to the same current Aviscribe build before trying again.
+- **Sharing paused:** Read the message on the Multiplayer screen. Keep Aviscribe open while it reconnects. If it cannot recover, restart Aviscribe and select **Rejoin previous room**, or leave and join again with the room code.
