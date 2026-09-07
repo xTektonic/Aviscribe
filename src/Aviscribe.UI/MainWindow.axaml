@@ -271,13 +271,13 @@
                         <TextBlock Name="txtSelectedCaptureSource" Text="No capture source selected" TextWrapping="Wrap"/>
                       </Border>
                       <Button Name="btnChooseCaptureSource" Grid.Column="1" Classes="primary"
-                              Content="Choose Source..."
+                              Content="Choose Source"
                               ToolTip.Tip="Choose a capture card, camera, virtual camera, or supported application window."/>
                     </Grid>
                     <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
                       <Button Name="btnSettingsUpdatePreview" Content="Start / Refresh Preview"
                               ToolTip.Tip="Start capture from the selected source and refresh the preview below."/>
-                      <Button Name="btnCropGameplay" Grid.Column="1" Content="Crop Gameplay..."
+                      <Button Name="btnCropGameplay" Grid.Column="1" Classes="primary" Content="Crop Gameplay"
                               ToolTip.Tip="Select the 16:9 gameplay area when the source includes borders or other content."/>
                       <TextBlock Name="txtCropSummary" Grid.Column="2" Classes="caption"
                                  Text="Crop: Full frame (1920 x 1080)" TextWrapping="Wrap"
@@ -287,6 +287,9 @@
                             BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1">
                       <Image Name="imgPreview" Stretch="Uniform"/>
                     </Border>
+                    <TextBlock Classes="caption"
+                               Text="This preview is a static snapshot and does not update automatically. Select Start / Refresh Preview to update it."
+                               TextWrapping="Wrap"/>
                   </StackPanel>
                 </Border>
 
@@ -300,9 +303,16 @@
                               ToolTip.Tip="When you are in a multiplayer room, omit Pending moons found by other players from this text file. Single-player output is unchanged."/>
                     <TextBlock Text="Output path" FontWeight="SemiBold"
                                ToolTip.Tip="The text file Aviscribe updates whenever the Pending list changes."/>
-                    <TextBox Name="txtOverlayPath"
-                             PlaceholderText="Choose a path for pending-moons.txt"
-                             ToolTip.Tip="Enter the full path to the text file used by your overlay."/>
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                      <TextBox Name="txtOverlayPath" IsReadOnly="True"
+                               PlaceholderText="Choose a path for pending-moons.txt"
+                               ToolTip.Tip="The full path to the text file used by your overlay."/>
+                      <Button Name="btnBrowseOverlayPath" Grid.Column="1" Classes="primary" Content="Browse"
+                              ToolTip.Tip="Choose where Aviscribe writes the pending-moons text file."/>
+                      <Button Name="btnCopyOverlayPath" Grid.Column="2" Width="80" Content="Copy"
+                              HorizontalContentAlignment="Center"
+                              ToolTip.Tip="Copy the overlay output path to the clipboard."/>
+                    </Grid>
                     <TextBlock Classes="caption" Text="Add this file as a text source in OBS and enable reading from a file." TextWrapping="Wrap"/>
                   </StackPanel>
                 </Border>
@@ -341,10 +351,10 @@
                 <Border Classes="card">
                   <StackPanel Spacing="12">
                     <TextBlock Text="OCR processor" FontWeight="SemiBold"
-                               ToolTip.Tip="Choose the processor used for text recognition. CPU is the compatible default."/>
+                               ToolTip.Tip="Choose the processor used for text recognition. GPU is preferred and automatically falls back to CPU when unavailable."/>
                     <ComboBox Name="cbOcrModeSelect"
                               ToolTip.Tip="GPU mode accelerates supported work through WebGPU and safely falls back to CPU if unavailable."/>
-                    <TextBlock Classes="caption" Text="GPU mode can improve OCR performance on supported systems; CPU remains the safest default." TextWrapping="Wrap"/>
+                    <TextBlock Classes="caption" Text="GPU mode is used when available and automatically falls back to CPU when needed." TextWrapping="Wrap"/>
                     <Separator/>
                     <CheckBox Name="chkAdaptiveTalkatooDetection"
                               Content="Use adaptive Talkatoo detection"

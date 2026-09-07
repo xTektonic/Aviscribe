@@ -60,7 +60,7 @@ chmod +x Aviscribe-*-x86_64.AppImage
 4. Configure the run and language, then use the **Run** screen to review pending,
    counted, and uncounted results.
 
-OCR uses the CPU by default. An optional WebGPU processor is available under **Settings > Setup > OCR processor**. Using the GPU can significantly decrease text and moon recognition times. If it cannot initialize, Aviscribe falls back to CPU processing.
+OCR uses WebGPU by default when it is available, which can significantly decrease text and moon recognition times. If WebGPU cannot initialize or fails during processing, Aviscribe automatically falls back to CPU processing. You can explicitly select CPU under **Settings > Setup > OCR processor**.
 
 Capture permissions depend on the platform:
 

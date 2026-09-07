@@ -1,10 +1,12 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
@@ -90,6 +92,8 @@ namespace Aviscribe.UI
         private Button? _resetRunButton;
         private CheckBox? _writeOverlayCheck;
         private TextBox? _overlayPathText;
+        private Button? _browseOverlayPathButton;
+        private Button? _copyOverlayPathButton;
         private TextBox? _moonNumberText;
         private TextBlock? _cropSummaryText;
         private TextBlock? _selectedCaptureSourceText;
@@ -116,6 +120,7 @@ namespace Aviscribe.UI
         private int _sourceWidth;
         private int _sourceHeight;
         private int _onlineGenerationSeen;
+        private int _copyOverlayPathFeedbackVersion;
         private Guid? _onlineSessionSeen;
         private long _latestOnlineActionRevision;
         private (RunCategory Category, bool IncludePostGame)? _onlineConfigurationSeen;
@@ -454,8 +459,8 @@ namespace Aviscribe.UI
             var ocrModeSelect = this.GetControl<ComboBox>("cbOcrModeSelect");
             var ocrModes = new[]
             {
-                new OcrModeListItem(OcrMode.Cpu, "CPU (compatible default)"),
-                new OcrModeListItem(OcrMode.WebGpu, "GPU (WebGPU)")
+                new OcrModeListItem(OcrMode.Cpu, "CPU (compatibility)"),
+                new OcrModeListItem(OcrMode.WebGpu, "GPU (WebGPU, preferred)")
             };
             ocrModeSelect.ItemsSource = ocrModes;
             ocrModeSelect.SelectedItem = ocrModes.First(item => item.Mode == _state.Settings.OcrMode);
@@ -512,6 +517,8 @@ namespace Aviscribe.UI
             _reviewSelect = this.FindControl<ComboBox>("cbReviewSelect");
             _writeOverlayCheck = this.FindControl<CheckBox>("chkWriteOverlay");
             _overlayPathText = this.FindControl<TextBox>("txtOverlayPath");
+            _browseOverlayPathButton = this.FindControl<Button>("btnBrowseOverlayPath");
+            _copyOverlayPathButton = this.FindControl<Button>("btnCopyOverlayPath");
             _moonNumberText = this.FindControl<TextBox>("txtMoonNumber");
             _cropSummaryText = this.FindControl<TextBlock>("txtCropSummary");
             _mainTabs = this.FindControl<TabControl>("tabMain");
@@ -533,6 +540,18 @@ namespace Aviscribe.UI
                     _diagnostics.Information("Overlay output path updated.");
             }
 
+            if (_browseOverlayPathButton != null)
+            {
+                _browseOverlayPathButton.IsEnabled = _writeOverlayEnabled;
+                _browseOverlayPathButton.Click += BrowseOverlayPath;
+            }
+
+            if (_copyOverlayPathButton != null)
+            {
+                _copyOverlayPathButton.IsEnabled = _writeOverlayEnabled;
+                _copyOverlayPathButton.Click += CopyOverlayPath;
+            }
+
             if (_writeOverlayCheck != null)
             {
                 _writeOverlayCheck.IsChecked = _writeOverlayEnabled;
@@ -542,6 +561,10 @@ namespace Aviscribe.UI
                     _diagnostics.Information($"Overlay output enabled = {_writeOverlayEnabled}.");
                     if (_overlayPathText != null)
                         _overlayPathText.IsEnabled = _writeOverlayEnabled;
+                    if (_browseOverlayPathButton != null)
+                        _browseOverlayPathButton.IsEnabled = _writeOverlayEnabled;
+                    if (_copyOverlayPathButton != null)
+                        _copyOverlayPathButton.IsEnabled = _writeOverlayEnabled;
                     var snapshot = _state.CreateSnapshot();
                     WriteOverlayOutput(snapshot);
                     PersistRunState(snapshot);
@@ -1552,7 +1575,7 @@ namespace Aviscribe.UI
 
         private async void OpenDiscord(object? sender, RoutedEventArgs args)
         {
-            const string discordInvite = "https://discord.gg/ADDAuJVxjnn";
+            const string discordInvite = "https://discord.gg/ADDAuJVxjn";
             try
             {
                 var topLevel = TopLevel.GetTopLevel(this);
@@ -1883,6 +1906,87 @@ namespace Aviscribe.UI
             catch (Exception ex)
             {
                 SetStatus($"Could not write overlay file: {ex.Message}");
+            }
+        }
+
+        private async void BrowseOverlayPath(object? sender, RoutedEventArgs args)
+        {
+            try
+            {
+                var storageProvider = TopLevel.GetTopLevel(this)?.StorageProvider;
+                if (storageProvider?.CanSave != true)
+                {
+                    SetStatus("File browsing is unavailable");
+                    return;
+                }
+
+                var textFileType = new FilePickerFileType("Text files")
+                {
+                    Patterns = ["*.txt"]
+                };
+                var selectedFile = await storageProvider.SaveFilePickerAsync(
+                    new FilePickerSaveOptions
+                    {
+                        Title = "Choose Overlay Output File",
+                        SuggestedFileName = Path.GetFileName(_outputWriter.OutputPath),
+                        DefaultExtension = "txt",
+                        FileTypeChoices = [textFileType],
+                        SuggestedFileType = textFileType
+                    });
+                var selectedPath = selectedFile?.TryGetLocalPath();
+                if (string.IsNullOrWhiteSpace(selectedPath))
+                    return;
+
+                if (_overlayPathText != null)
+                    _overlayPathText.Text = selectedPath;
+                else
+                    _outputWriter.OutputPath = selectedPath;
+
+                _diagnostics.Information("Overlay output path selected.");
+                SetStatus("Overlay output path updated");
+            }
+            catch (Exception ex)
+            {
+                _diagnostics.Error("Could not choose the overlay output path.", ex);
+                SetStatus($"Could not choose the overlay output path: {ex.Message}");
+            }
+        }
+
+        private async void CopyOverlayPath(object? sender, RoutedEventArgs args)
+        {
+            try
+            {
+                var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+                if (clipboard == null)
+                {
+                    SetStatus("Clipboard access is unavailable");
+                    return;
+                }
+
+                await clipboard.SetTextAsync(_outputWriter.OutputPath);
+                var feedbackVersion = ++_copyOverlayPathFeedbackVersion;
+                if (_copyOverlayPathButton != null)
+                    _copyOverlayPathButton.Content = "Copied!";
+                SetStatus("Overlay output path copied");
+
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), _closingCancellation.Token);
+                }
+                catch (OperationCanceledException)
+                    when (_closingCancellation.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                if (_copyOverlayPathButton != null &&
+                    feedbackVersion == _copyOverlayPathFeedbackVersion)
+                    _copyOverlayPathButton.Content = "Copy";
+            }
+            catch (Exception ex)
+            {
+                _diagnostics.Error("Could not copy the overlay output path.", ex);
+                SetStatus($"Could not copy the overlay output path: {ex.Message}");
             }
         }
 

@@ -7,12 +7,12 @@ namespace Aviscribe.Core
         public bool IncludePostGameKingdoms { get; set; }
         public GameLanguage InputLanguage { get; set; } = GameLanguage.ChineseTraditional;
         public GameLanguage OutputLanguage { get; set; } = GameLanguage.English;
-        public bool WoodedBeforeLake { get; set; } = true;
-        public bool SeasideBeforeSnow { get; set; } = true;
-        public bool AutomaticallySwitchKingdoms { get; set; }
+        public bool WoodedBeforeLake { get; set; }
+        public bool SeasideBeforeSnow { get; set; }
+        public bool AutomaticallySwitchKingdoms { get; set; } = true;
         public bool AdaptiveTalkatooDetection { get; set; }
-        public bool ShowPendingMoonImages { get; set; }
-        public OcrMode OcrMode { get; set; } = OcrMode.Cpu;
+        public bool ShowPendingMoonImages { get; set; } = true;
+        public OcrMode OcrMode { get; set; } = OcrMode.WebGpu;
         public string FocusMoonNumberHotkey { get; set; } = "M";
         public string MoveToPendingHotkey { get; set; } = "P";
         public string MoveToCountedHotkey { get; set; } = "C";
