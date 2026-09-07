@@ -671,19 +671,20 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         if (item.Moon != null)
         {
             var moon = _runs.Catalog.Resolve(item.Moon.ToKey());
-            var target = moon == null
-                ? $"moon {item.Moon.KingdomId}:{item.Moon.MoonId}"
-                : $"{moon.Kingdom} #{moon.Id} — {moon.English}";
-            return item.Kind switch
+            var moonName = moon?.English ?? $"Moon {item.Moon.KingdomId}:{item.Moon.MoonId}";
+            var destination = item.Kind switch
             {
-                nameof(RunEventKind.HintObserved) => $"{actor} found a hint for {target}.",
-                nameof(RunEventKind.CollectionObserved) => $"{actor} collected {target}.",
-                nameof(RunEventKind.SetPending) => $"{actor} moved {target} to Pending.",
-                nameof(RunEventKind.SetCounted) => $"{actor} marked {target} Counted.",
-                nameof(RunEventKind.SetUncounted) => $"{actor} marked {target} Wrong.",
-                nameof(RunEventKind.RemoveMoon) => $"{actor} removed {target} from the run.",
-                _ => $"{actor} updated {target}."
+                nameof(RunEventKind.HintObserved) when moon != null =>
+                    FormatPlacement(_runs.GetPlacement(moon)),
+                nameof(RunEventKind.CollectionObserved) when moon != null =>
+                    FormatPlacement(_runs.GetPlacement(moon)),
+                nameof(RunEventKind.SetPending) => "Pending",
+                nameof(RunEventKind.SetCounted) => "Counted",
+                nameof(RunEventKind.SetUncounted) => "Wrong",
+                nameof(RunEventKind.RemoveMoon) => "Removed",
+                _ => "Updated"
             };
+            return $"{actor} - {moonName} → {destination}";
         }
         return item.Kind switch
         {
@@ -703,4 +704,12 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             _ => $"{actor} updated the run."
         };
     }
+
+    private static string FormatPlacement(RunMoonPlacement placement) => placement switch
+    {
+        RunMoonPlacement.Pending => "Pending",
+        RunMoonPlacement.Counted => "Counted",
+        RunMoonPlacement.Wrong => "Wrong",
+        _ => "Removed"
+    };
 }

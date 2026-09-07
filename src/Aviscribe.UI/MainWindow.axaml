@@ -82,26 +82,11 @@
                       VerticalAlignment="Center"
                       ToolTip.ShowOnDisabled="True"
                       ToolTip.Tip="Clear every kingdom list and all items waiting for review."/>
-              <StackPanel Grid.Row="1" Grid.Column="5" Grid.ColumnSpan="2"
-                          Orientation="Horizontal"
-                          HorizontalAlignment="Right"
-                          Spacing="9"
-                          VerticalAlignment="Center">
-                <StackPanel Name="pnlMultiplayerStatus"
-                            Orientation="Horizontal"
-                            Spacing="6"
-                            VerticalAlignment="Center"
-                            ToolTip.Tip="Shows local capture status and, while in a room, whether automatic detections are being shared.">
-                  <Border Name="multiplayerStatusDot"
-                          Width="9" Height="9" CornerRadius="5"
-                          Background="{DynamicResource DangerBrush}"
-                          VerticalAlignment="Center"/>
-                  <TextBlock Name="txtMultiplayerStatus" Classes="caption" Text="Offline" VerticalAlignment="Center"/>
-                </StackPanel>
-                <Button Name="btnOnlineRun"
-                        Content="Multiplayer"
-                        ToolTip.Tip="Create, join, or manage a multiplayer room."/>
-              </StackPanel>
+              <Button Name="btnOnlineRun"
+                      Grid.Row="1" Grid.Column="5" Grid.ColumnSpan="2"
+                      HorizontalAlignment="Right"
+                      Content="Multiplayer"
+                      ToolTip.Tip="Create, join, or manage a multiplayer room."/>
             </Grid>
 
             <Grid Grid.Row="1" ColumnDefinitions="96,Auto,Auto,*" ColumnSpacing="10">
@@ -214,10 +199,22 @@
 
         <Border Grid.Row="2" Classes="soft">
           <Grid ColumnDefinitions="1.7*,0.9*,1.1*" ColumnSpacing="10">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="9">
-              <TextBlock Classes="caption" Text="LATEST MOON ACTIONS" FontWeight="SemiBold"
+            <StackPanel Name="pnlMultiplayerStatus"
+                        Orientation="Horizontal"
+                        Spacing="6"
+                        VerticalAlignment="Center"
+                        ToolTip.Tip="Shows local capture status and, while in a room, whether automatic detections are being shared.">
+              <Border Name="multiplayerStatusDot"
+                      Width="9" Height="9" CornerRadius="5"
+                      Background="{DynamicResource DangerBrush}"
+                      VerticalAlignment="Center"/>
+              <TextBlock Name="txtMultiplayerStatus" Classes="caption" Text="Offline"
+                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
+            </StackPanel>
+            <Grid Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="9">
+              <TextBlock Classes="caption" Text="LATEST ACTION" FontWeight="SemiBold"
                          VerticalAlignment="Center"/>
-              <ItemsControl Name="lstMoonActions" Grid.Column="1" VerticalAlignment="Center">
+              <ItemsControl Name="lstActions" Grid.Column="1" VerticalAlignment="Center">
                 <ItemsControl.ItemsPanel>
                   <ItemsPanelTemplate>
                     <StackPanel Orientation="Horizontal" Spacing="14"/>
@@ -231,13 +228,6 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
             </Grid>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="9"
-                        VerticalAlignment="Center">
-              <TextBlock Classes="caption" Text="STATUS" FontWeight="SemiBold"
-                         VerticalAlignment="Center"/>
-              <TextBlock Name="txtCommandFeedback" Text="Ready" Classes="caption"
-                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
-            </StackPanel>
           </Grid>
         </Border>
 

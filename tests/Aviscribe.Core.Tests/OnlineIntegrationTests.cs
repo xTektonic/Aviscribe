@@ -135,6 +135,7 @@ public sealed class OnlineIntegrationTests
         var online = new OnlineRunCoordinator(runs);
         var moon = repository.Moons.First();
         var wire = runs.Catalog.ToWire(moon);
+        runs.SetCounted(moon);
 
         var collection = online.DescribeFeedItem(new OnlineFeedItem
         {
@@ -148,7 +149,7 @@ public sealed class OnlineIntegrationTests
             ActorDisplayName = "Owner"
         });
 
-        Assert.Equal($"Runner collected {moon.Kingdom} #{moon.Id} — {moon.English}.", collection);
+        Assert.Equal($"Runner - {moon.English} → Counted", collection);
         Assert.Equal("Owner started a new run.", reset);
     }
 

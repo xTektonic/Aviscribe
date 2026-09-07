@@ -20,6 +20,14 @@ public enum ManualClassification
     Uncounted = 2
 }
 
+public enum RunMoonPlacement
+{
+    None,
+    Pending,
+    Counted,
+    Wrong
+}
+
 public readonly record struct MoonFactKey(string Kingdom, int MoonId)
 {
     public static MoonFactKey FromMoon(Moon moon) => new(moon.Kingdom, moon.Id);

@@ -447,7 +447,7 @@ namespace Aviscribe.Core.Ocr
                         {
                             _diagnostics.Debug(
                                 $"RESOLVED AMBIGUOUS OCR ({item.Type}): " +
-                                $"\"{text}\" -> {resolvedMatch.English}");
+                                $"\"{text}\" → {resolvedMatch.English}");
                             RecordConfirmationOutcome(item, resolved: true);
                             Handle(item.Type, resolvedMatch);
                             continue;
@@ -473,7 +473,7 @@ namespace Aviscribe.Core.Ocr
                     {
                         _diagnostics.Debug(
                             $"RESOLVED WEAK OCR ({item.Type}): " +
-                            $"\"{text}\" -> {weakResolvedMatch.English}");
+                            $"\"{text}\" → {weakResolvedMatch.English}");
                         RecordConfirmationOutcome(item, resolved: true);
                         Handle(item.Type, weakResolvedMatch);
                         continue;

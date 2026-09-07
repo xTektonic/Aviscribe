@@ -70,7 +70,7 @@ namespace Aviscribe.UI
         private TextBlock? _pendingTitleText;
         private TextBlock? _moonCountText;
         private TextBlock? _commandFeedbackText;
-        private ItemsControl? _moonActionList;
+        private ItemsControl? _actionList;
         private TextBlock? _reviewPromptText;
         private ListBox? _moonList;
         private ListBox? _pendingList;
@@ -124,7 +124,8 @@ namespace Aviscribe.UI
         private Guid? _onlineSessionSeen;
         private long _latestOnlineActionRevision;
         private (RunCategory Category, bool IncludePostGame)? _onlineConfigurationSeen;
-        private readonly Queue<string> _recentMoonActions = new();
+        private readonly Queue<string> _recentActions = new();
+        private string _lastActionKingdom = string.Empty;
         private OnlineRunWindow? _onlineRunWindow;
 
         public MainWindow()
@@ -168,7 +169,8 @@ namespace Aviscribe.UI
             _outputWriter.Language = _state.Settings.OutputLanguage;
             InitControls();
             InitFrameProcessor();
-            _state.Changed += (_, _) => UpdateRunState();
+            _lastActionKingdom = _state.CurrentKingdom;
+            _state.Changed += OnGameStateChanged;
             UpdateRunState();
             UpdateOnlineUi();
             Opened += InitializePlatformAppearance;
@@ -507,7 +509,7 @@ namespace Aviscribe.UI
             _pendingTitleText = this.FindControl<TextBlock>("txtPendingTitle");
             _moonCountText = this.FindControl<TextBlock>("txtMoonCount");
             _commandFeedbackText = this.FindControl<TextBlock>("txtCommandFeedback");
-            _moonActionList = this.FindControl<ItemsControl>("lstMoonActions");
+            _actionList = this.FindControl<ItemsControl>("lstActions");
             _moonList = this.FindControl<ListBox>("lstMoonList");
             _pendingList = this.FindControl<ListBox>("lstPending");
             _collectedList = this.FindControl<ListBox>("lstCollected");
@@ -585,7 +587,7 @@ namespace Aviscribe.UI
                     $"{_preferences.OnlyWriteOwnHints}.");
             };
 
-            RefreshMoonActionLog();
+            RefreshActionLog();
 
             WireListInteractions();
             WireCommandControls();
@@ -1223,6 +1225,24 @@ namespace Aviscribe.UI
             _cropSummaryText.Text =
                 $"Crop: X {crop.X}, Y {crop.Y}, {crop.Width} × {crop.Height} " +
                 $"(source {crop.SourceWidth} × {crop.SourceHeight})";
+        }
+
+        private void OnGameStateChanged(object? sender, EventArgs args)
+        {
+            var currentKingdom = _state.CurrentKingdom;
+            var previousKingdom = Interlocked.Exchange(
+                ref _lastActionKingdom,
+                currentKingdom);
+            if (!string.IsNullOrWhiteSpace(previousKingdom) &&
+                !currentKingdom.Equals(
+                    previousKingdom,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                Dispatcher.UIThread.Post(() =>
+                    AddAction($"Switched to {currentKingdom}"));
+            }
+
+            UpdateRunState();
         }
 
         private void UpdateRunState()
@@ -2123,17 +2143,17 @@ namespace Aviscribe.UI
             {
                 case ManualMoonTarget.Pending:
                     _runCoordinator.SetPending(moon);
-                    SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} -> pending");
+                    SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} → pending");
                     break;
 
                 case ManualMoonTarget.Collected:
                     _runCoordinator.SetCounted(moon);
-                    SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} -> counted");
+                    SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} → counted");
                     break;
 
                 case ManualMoonTarget.Uncounted:
                     _runCoordinator.SetUncounted(moon);
-                    SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} -> wrong");
+                    SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} → wrong");
                     break;
 
                 case ManualMoonTarget.All:
@@ -2143,7 +2163,7 @@ namespace Aviscribe.UI
             }
 
             _diagnostics.Information(
-                $"Manual moon update: {_state.CurrentKingdom} #{moonNumber} -> {target}.");
+                $"Manual moon update: {_state.CurrentKingdom} #{moonNumber} → {target}.");
 
             _moonNumberText.Focus();
             _moonNumberText.SelectAll();
@@ -2164,70 +2184,68 @@ namespace Aviscribe.UI
                 return;
 
             var message = DescribeLocalMoonAction(runEvent, moon);
-            Dispatcher.UIThread.Post(() => AddMoonAction(message));
+            Dispatcher.UIThread.Post(() => AddAction(message));
         }
 
         private string DescribeLocalMoonAction(
             SharedRunEvent runEvent,
             Moon moon)
         {
-            var target = $"{moon.Kingdom} #{moon.Id} — {FormatMoon(moon)}";
-            if (!runEvent.Changed)
-            {
-                return runEvent.Kind switch
-                {
-                    RunEventKind.HintObserved =>
-                        $"Hint detected again: {target} (state unchanged)",
-                    RunEventKind.CollectionObserved =>
-                        $"Collection detected again: {target} (already recorded)",
-                    RunEventKind.SetPending => $"Manual: {target} is already Pending",
-                    RunEventKind.SetCounted => $"Manual: {target} is already Counted",
-                    RunEventKind.SetUncounted => $"Manual: {target} is already Wrong",
-                    RunEventKind.RemoveMoon => $"Manual: {target} was already absent",
-                    _ => $"Moon seen again: {target}"
-                };
-            }
+            var subject = FormatLocalActionSubject(moon);
+            if (!runEvent.Changed && runEvent.Kind == RunEventKind.HintObserved)
+                return $"[DUPE] {subject} → {DescribeCurrentMoonList(moon)}";
 
-            return runEvent.Kind switch
-            {
-                RunEventKind.HintObserved => $"Hint detected: {target} → Pending",
-                RunEventKind.CollectionObserved =>
-                    $"Collection detected: {target} → {DescribeRecordedCollection(moon)}",
-                RunEventKind.SetPending => $"Manual: {target} → Pending",
-                RunEventKind.SetCounted => $"Manual: {target} → Counted",
-                RunEventKind.SetUncounted => $"Manual: {target} → Wrong",
-                RunEventKind.RemoveMoon => $"Manual: removed {target}",
-                _ => $"Updated {target}"
-            };
+            return $"{subject} → {DescribeCurrentMoonList(moon)}";
         }
 
-        private string DescribeRecordedCollection(Moon moon)
+        private string FormatLocalActionSubject(Moon moon)
+        {
+            var moonName = FormatMoon(moon);
+            if (!_onlineRun.IsJoined)
+                return moonName;
+
+            var displayName = _onlineRun.Participants
+                .FirstOrDefault(item => item.ParticipantId == _onlineRun.ParticipantId)
+                ?.DisplayName;
+            if (string.IsNullOrWhiteSpace(displayName))
+                displayName = _preferences.OnlineDisplayName;
+
+            return string.IsNullOrWhiteSpace(displayName)
+                ? moonName
+                : $"{displayName} - {moonName}";
+        }
+
+        private string DescribeCurrentMoonList(Moon moon)
         {
             var snapshot = _state.CreateSnapshot();
-            return snapshot.UncountedCollected.Any(item => SameMoon(item, moon))
-                ? "Wrong"
-                : "Counted";
+            if (snapshot.Pending.Any(item => SameMoon(item, moon)))
+                return "Pending";
+            if (snapshot.Collected.Any(item => SameMoon(item, moon)))
+                return "Counted";
+            if (snapshot.UncountedCollected.Any(item => SameMoon(item, moon)))
+                return "Wrong";
+            return "Removed";
         }
 
-        private void AddMoonAction(string message)
+        private void AddAction(string message)
         {
             if (string.IsNullOrWhiteSpace(message))
                 return;
 
-            _recentMoonActions.Enqueue(message);
-            while (_recentMoonActions.Count > 3)
-                _recentMoonActions.Dequeue();
-            RefreshMoonActionLog();
+            _recentActions.Enqueue(message);
+            while (_recentActions.Count > 1)
+                _recentActions.Dequeue();
+            RefreshActionLog();
         }
 
-        private void RefreshMoonActionLog()
+        private void RefreshActionLog()
         {
-            if (_moonActionList == null)
+            if (_actionList == null)
                 return;
 
-            _moonActionList.ItemsSource = _recentMoonActions.Count == 0
-                ? ["No moon actions yet"]
-                : _recentMoonActions.Reverse().ToList();
+            _actionList.ItemsSource = _recentActions.Count == 0
+                ? ["No actions yet"]
+                : _recentActions.Reverse().ToList();
         }
 
         private void WireListInteractions()
@@ -2787,7 +2805,7 @@ namespace Aviscribe.UI
             foreach (var item in newItems)
             {
                 if (item.ActorParticipantId != _onlineRun.ParticipantId)
-                    AddMoonAction(_onlineRun.DescribeFeedItem(item));
+                    AddAction(_onlineRun.DescribeFeedItem(item));
             }
 
             if (newItems.Count > 0)

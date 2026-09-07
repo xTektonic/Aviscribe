@@ -106,6 +106,22 @@ public sealed class RunCoordinator
     public bool SetUncounted(Moon moon) => ApplyLocal(RunEventKind.SetUncounted, moon, false);
     public bool Remove(Moon moon) => ApplyLocal(RunEventKind.RemoveMoon, moon, false);
 
+    public RunMoonPlacement GetPlacement(Moon moon)
+    {
+        lock (_sync)
+        {
+            if (!_facts.TryGetValue(Key(moon), out var fact))
+                return RunMoonPlacement.None;
+            if (fact.Hinted && !fact.Collected)
+                return RunMoonPlacement.Pending;
+            if (!fact.Collected)
+                return RunMoonPlacement.None;
+            return Counts(fact, moon)
+                ? RunMoonPlacement.Counted
+                : RunMoonPlacement.Wrong;
+        }
+    }
+
     public void ResetLocal()
     {
         lock (_sync) _facts.Clear();
