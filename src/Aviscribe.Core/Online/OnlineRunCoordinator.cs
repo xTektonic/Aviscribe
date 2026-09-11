@@ -31,6 +31,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     private volatile CancellationTokenSource? _sessionCancellation;
     private Task? _sessionTask;
     private volatile OnlineApiClient? _api;
+    private volatile OnlineCapabilities? _capabilities;
     private volatile OnlineResumeRecord? _credentials;
     private int _retryIndex;
     private int _state = (int)OnlineConnectionState.Offline;
@@ -99,7 +100,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     {
         await StopSessionAsync().ConfigureAwait(false);
         var api = new OnlineApiClient(address, port);
-        await ValidateCapabilitiesAsync(api, cancellationToken).ConfigureAwait(false);
+        var capabilities = await ValidateCapabilitiesAsync(api, cancellationToken).ConfigureAwait(false);
         var result = await api.SendAsync<OnlineConnectionResult>(new OnlineRequest
         {
             Operation = "createRun",
@@ -116,7 +117,8 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             _localPendingMoons.Clear();
         }
         _runs.ResetLocal();
-        BeginSession(api, result, address, port, displayName, result.JoinCode ?? string.Empty);
+        BeginSession(api, capabilities, result, address, port, displayName,
+            result.JoinCode ?? string.Empty, result.Snapshot.Revision);
     }
 
     public async Task JoinAsync(
@@ -128,7 +130,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     {
         await StopSessionAsync().ConfigureAwait(false);
         var api = new OnlineApiClient(address, port);
-        await ValidateCapabilitiesAsync(api, cancellationToken).ConfigureAwait(false);
+        var capabilities = await ValidateCapabilitiesAsync(api, cancellationToken).ConfigureAwait(false);
         var result = await api.SendAsync<OnlineConnectionResult>(new OnlineRequest
         {
             Operation = "joinRun",
@@ -144,7 +146,8 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             _outbox.Clear();
             _localPendingMoons.Clear();
         }
-        BeginSession(api, result, address, port, displayName, FormatJoinCode(joinCode));
+        BeginSession(api, capabilities, result, address, port, displayName,
+            FormatJoinCode(joinCode), result.Snapshot.Revision);
     }
 
     public async Task ResumePreviousAsync(CancellationToken cancellationToken)
@@ -153,7 +156,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         var saved = _resumeStore.Load(_resumePath) ??
                     throw new OnlineApiException("runNotFound", "There is no previous multiplayer room to rejoin.");
         var api = new OnlineApiClient(saved.ServerAddress, saved.ServerPort);
-        await ValidateCapabilitiesAsync(api, cancellationToken).ConfigureAwait(false);
+        var capabilities = await ValidateCapabilitiesAsync(api, cancellationToken).ConfigureAwait(false);
         var result = await api.SendAsync<OnlineConnectionResult>(AuthenticatedRequest(
             saved,
             "resumeRun",
@@ -171,11 +174,15 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         }
         BeginSession(
             api,
+            capabilities,
             result,
             saved.ServerAddress,
             saved.ServerPort,
             saved.DisplayName,
-            result.JoinCode ?? saved.JoinCode);
+            result.JoinCode ?? saved.JoinCode,
+            saved.SessionId == result.SessionId && saved.Generation == result.Generation
+                ? saved.Revision
+                : result.Snapshot.Revision);
     }
 
     public async Task LeaveAsync(CancellationToken cancellationToken)
@@ -243,13 +250,16 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
 
     private void BeginSession(
         OnlineApiClient api,
+        OnlineCapabilities capabilities,
         OnlineConnectionResult result,
         string address,
         int port,
         string displayName,
-        string joinCode)
+        string joinCode,
+        long previousRevision)
     {
         _api = api;
+        _capabilities = capabilities;
         _sharingPaused = false;
         _credentials = new OnlineResumeRecord
         {
@@ -258,7 +268,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             DisplayName = displayName,
             SessionId = result.SessionId,
             Generation = result.Generation,
-            Revision = result.Snapshot.Revision,
+            Revision = previousRevision,
             ParticipantId = result.ParticipantId,
             ParticipantToken = result.ParticipantToken,
             JoinCode = joinCode
@@ -329,7 +339,11 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             while (true)
             {
                 PersistedOutboxEvent[] batch;
-                lock (_sync) batch = _outbox.Take(50).ToArray();
+                var capabilities = _capabilities;
+                var maximumEvents = capabilities?.MaximumEventsPerPublish > 0
+                    ? Math.Min(50, capabilities.MaximumEventsPerPublish)
+                    : 50;
+                lock (_sync) batch = _outbox.Take(maximumEvents).ToArray();
                 if (batch.Length == 0) break;
                 try
                 {
@@ -343,15 +357,21 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
                         PersistResume();
                         break;
                     }
-                    var response = await api.SendAsync<OnlinePublishResult>(AuthenticatedRequest(
-                        credentials,
-                        "publishEvents",
-                        new OnlinePublishData
-                        {
-                            Generation = credentials.Generation,
-                            BaseRevision = credentials.Revision,
-                            Events = batch.Select(item => item.Event).ToList()
-                        }), cancellationToken).ConfigureAwait(false);
+                    var request = CreatePublishRequest(credentials, batch);
+                    var maximumRequestBytes = capabilities?.MaximumRequestBytes > 0
+                        ? Math.Min(OnlineProtocol.MaximumRequestSize, capabilities.MaximumRequestBytes)
+                        : OnlineProtocol.MaximumRequestSize;
+                    while (batch.Length > 1 &&
+                           JsonSerializer.SerializeToUtf8Bytes(
+                               request,
+                               OnlineProtocol.JsonOptions).Length > maximumRequestBytes)
+                    {
+                        batch = batch[..^1];
+                        request = CreatePublishRequest(credentials, batch);
+                    }
+                    var response = await api.SendAsync<OnlinePublishResult>(
+                        request,
+                        cancellationToken).ConfigureAwait(false);
                     var accepted = response.Events.Select(item => item.EventId).ToHashSet();
                     lock (_sync) _outbox.RemoveAll(item => accepted.Contains(item.Event.EventId));
                     credentials.Revision = Math.Max(credentials.Revision, response.Revision);
@@ -388,6 +408,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
     private void ApplySnapshot(OnlineRunSnapshot snapshot, bool generationChanged)
     {
         if (_credentials == null) return;
+        var previousRevision = _credentials.Revision;
         if (generationChanged || snapshot.Generation != _credentials.Generation)
         {
             lock (_sync) _outbox.Clear();
@@ -403,7 +424,8 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
                 snapshot.MoonFacts,
                 RecentEvents,
                 _credentials.ParticipantId,
-                generationChanged);
+                generationChanged,
+                previousRevision);
         }
         _runs.ApplySharedConfiguration(
             snapshot.Configuration.Category == "hardcore" ? RunCategory.Hardcore : RunCategory.Standard,
@@ -542,6 +564,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         }
         _credentials = null;
         _api = null;
+        _capabilities = null;
         OwnerParticipantId = null;
         Participants = [];
         RecentEvents = [];
@@ -593,7 +616,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         IncludePostGame = settings.IncludePostGameKingdoms
     };
 
-    private static async Task ValidateCapabilitiesAsync(
+    private static async Task<OnlineCapabilities> ValidateCapabilitiesAsync(
         OnlineApiClient api,
         CancellationToken cancellationToken)
     {
@@ -602,7 +625,27 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             throw new OnlineApiException("unsupportedVersion", "The server does not support this Aviscribe protocol version.");
         if (!capabilities.Enabled)
             throw new OnlineApiException("featureDisabled", "Aviscribe multiplayer is disabled on this server.");
+        if (capabilities.WaitTimeoutSeconds > 0)
+        {
+            api.WaitTimeout = TimeSpan.FromSeconds(Math.Clamp(
+                (long)capabilities.WaitTimeoutSeconds + 5,
+                15L,
+                300L));
+        }
+        return capabilities;
     }
+
+    private static OnlineRequest CreatePublishRequest(
+        OnlineResumeRecord credentials,
+        IEnumerable<PersistedOutboxEvent> batch) => AuthenticatedRequest(
+        credentials,
+        "publishEvents",
+        new OnlinePublishData
+        {
+            Generation = credentials.Generation,
+            BaseRevision = credentials.Revision,
+            Events = batch.Select(item => item.Event).ToList()
+        });
 
     private void PersistResume()
     {

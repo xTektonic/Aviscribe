@@ -24,9 +24,6 @@ public static class AppPaths
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         Environment.GetEnvironmentVariable("XDG_STATE_HOME"));
 
-    public static string TessData =>
-        Path.Combine(DataFolder, "tessdata");
-
     public static string MoonList =>
         Path.Combine(DataFolder, "moon-list.json");
 

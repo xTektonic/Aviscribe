@@ -8,6 +8,7 @@ public sealed class OnlineApiClient(string host, int port)
 {
     public string Host { get; } = host;
     public int Port { get; } = port;
+    public TimeSpan WaitTimeout { get; set; } = TimeSpan.FromSeconds(35);
 
     public Task<OnlineCapabilities> GetCapabilitiesAsync(CancellationToken cancellationToken) =>
         SendAsync<OnlineCapabilities>(new OnlineRequest { Operation = "capabilities" }, cancellationToken);
@@ -23,7 +24,7 @@ public sealed class OnlineApiClient(string host, int port)
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(request.Operation == "waitForChanges"
-            ? TimeSpan.FromSeconds(35)
+            ? WaitTimeout
             : TimeSpan.FromSeconds(10));
         var requestCancellation = timeout.Token;
 

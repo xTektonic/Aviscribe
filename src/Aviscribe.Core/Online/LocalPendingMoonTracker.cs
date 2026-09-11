@@ -32,12 +32,15 @@ internal sealed class LocalPendingMoonTracker
         IEnumerable<OnlineMoonFact> facts,
         IEnumerable<OnlineFeedItem> recentEvents,
         Guid participantId,
-        bool generationChanged)
+        bool generationChanged,
+        long afterRevision)
     {
         if (generationChanged)
             _moons.Clear();
 
-        foreach (var item in recentEvents.OrderBy(item => item.Revision))
+        foreach (var item in recentEvents
+                     .Where(item => generationChanged || item.Revision > afterRevision)
+                     .OrderBy(item => item.Revision))
         {
             if (item.Moon == null ||
                 !Enum.TryParse<RunEventKind>(item.Kind, out var kind))

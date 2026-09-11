@@ -176,13 +176,33 @@ public sealed class OnlineIntegrationTests
             [Feed(1, localMoon, RunEventKind.HintObserved, localPlayer),
              Feed(2, remoteMoon, RunEventKind.HintObserved, remotePlayer)],
             localPlayer,
-            generationChanged: false);
+            generationChanged: false,
+            afterRevision: 0);
 
         Assert.True(tracker.Contains(localMoon));
         Assert.False(tracker.Contains(remoteMoon));
 
         tracker.Apply(localMoon, RunEventKind.CollectionObserved, addedByLocalParticipant: false);
         Assert.False(tracker.Contains(localMoon));
+    }
+
+    [Fact]
+    public void SnapshotDoesNotReplayEventsOlderThanALocalHintObservation()
+    {
+        var localPlayer = Guid.NewGuid();
+        var remotePlayer = Guid.NewGuid();
+        var moon = new WireMoonKey(1, 10);
+        var tracker = new LocalPendingMoonTracker();
+        tracker.Apply(moon, RunEventKind.HintObserved, addedByLocalParticipant: true);
+
+        tracker.Reconcile(
+            [Fact(moon, hinted: true, collected: false)],
+            [Feed(4, moon, RunEventKind.HintObserved, remotePlayer)],
+            localPlayer,
+            generationChanged: false,
+            afterRevision: 4);
+
+        Assert.True(tracker.Contains(moon));
     }
 
     [Fact]
