@@ -10,7 +10,7 @@ using System.Net.Sockets;
 
 namespace Aviscribe.UI;
 
-public partial class OnlineRunWindow : Window
+public partial class OnlineRunView : UserControl, IDisposable
 {
     private static readonly IBrush ConnectedBrush = new SolidColorBrush(Color.Parse("#2E9B68"));
     private static readonly IBrush WarningBrush = new SolidColorBrush(Color.Parse("#D99227"));
@@ -26,18 +26,19 @@ public partial class OnlineRunWindow : Window
     private (Guid? SessionId, int Generation, RunCategory Category, bool IncludePostGame)?
         _configurationSeen;
 
-    public OnlineRunWindow()
+    public OnlineRunView()
     {
         InitializeComponent();
     }
 
-    public OnlineRunWindow(
+    public OnlineRunView(
         OnlineRunCoordinator online,
         AppPreferences preferences,
         Action savePreferences,
         Func<bool> hasLocalState,
         Func<Task<bool>> confirmReplace,
-        Func<RunSettings> settings)
+        Func<RunSettings> settings,
+        bool showCloseButton = false)
         : this()
     {
         _online = online;
@@ -46,6 +47,9 @@ public partial class OnlineRunWindow : Window
         _hasLocalState = hasLocalState;
         _confirmReplace = confirmReplace;
         _settings = settings;
+
+        if (showCloseButton)
+            this.GetControl<Grid>("layoutRoot").Margin = new Thickness(22);
 
         this.GetControl<TextBox>("txtServerAddress").Text = preferences.OnlineServerAddress;
         this.GetControl<TextBox>("txtServerPort").Text = preferences.OnlineServerPort > 0
@@ -56,7 +60,8 @@ public partial class OnlineRunWindow : Window
         this.GetControl<ComboBox>("cbOnlineCategory").SelectedItem = settings().Category;
         this.GetControl<CheckBox>("chkOnlinePostgame").IsChecked = settings().IncludePostGameKingdoms;
 
-        this.GetControl<Button>("btnClose").Click += (_, _) => Close();
+        this.GetControl<Button>("btnClose").IsVisible = showCloseButton;
+        this.GetControl<Button>("btnClose").Click += (_, _) => CloseRequested?.Invoke(this, EventArgs.Empty);
         this.GetControl<Button>("btnCreateRun").Click += CreateRun;
         this.GetControl<Button>("btnJoinRun").Click += JoinRun;
         this.GetControl<Button>("btnResumeRun").Click += ResumeRun;
@@ -66,9 +71,12 @@ public partial class OnlineRunWindow : Window
         this.GetControl<Button>("btnOnlineEnd").Click += CloseRoom;
         this.GetControl<Button>("btnCopyJoinCode").Click += CopyJoinCode;
         _online.StateChanged += OnlineStateChanged;
-        Closed += (_, _) => _online.StateChanged -= OnlineStateChanged;
         Refresh();
     }
+
+    public event EventHandler? CloseRequested;
+
+    public void Dispose() => _online.StateChanged -= OnlineStateChanged;
 
     private async void CreateRun(object? sender, RoutedEventArgs args)
     {
@@ -340,7 +348,7 @@ public partial class OnlineRunWindow : Window
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ShowInTaskbar = false,
-            Icon = Icon
+            Icon = (TopLevel.GetTopLevel(this) as Window)?.Icon
         };
         var confirm = new Button { Content = action };
         confirm.Classes.Add("danger");
@@ -364,7 +372,8 @@ public partial class OnlineRunWindow : Window
                 }
             }
         };
-        return await confirmation.ShowDialog<bool>(this);
+        var owner = TopLevel.GetTopLevel(this) as Window;
+        return owner != null && await confirmation.ShowDialog<bool>(owner);
     }
 
     private sealed record PlayerListItem(string DisplayName, string Detail, IBrush StatusBrush);

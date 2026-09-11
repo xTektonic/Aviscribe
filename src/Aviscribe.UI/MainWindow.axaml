@@ -41,6 +41,7 @@
     <Style Selector="TabControl.settings > TabItem">
       <Setter Property="MinWidth" Value="205"/>
       <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="VerticalContentAlignment" Value="Stretch"/>
       <Setter Property="Padding" Value="14,11"/>
     </Style>
   </Window.Styles>
@@ -86,6 +87,7 @@
                       Grid.Row="1" Grid.Column="5" Grid.ColumnSpan="2"
                       HorizontalAlignment="Right"
                       Content="Multiplayer"
+                      IsVisible="False"
                       ToolTip.Tip="Create, join, or manage a multiplayer room."/>
             </Grid>
 
@@ -248,7 +250,7 @@
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="20,0,12,20" Spacing="14" MaxWidth="1120" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="3">
-                  <TextBlock Classes="sectionTitle" Text="Setup"/>
+                  <TextBlock Classes="pageTitle" Text="Setup"/>
                   <TextBlock Classes="bodyMuted" Text="Complete the initial setup needed to use the translator."/>
                 </StackPanel>
 
@@ -362,7 +364,7 @@
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="20,0,12,20" Spacing="14" MaxWidth="960" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="3">
-                  <TextBlock Classes="sectionTitle" Text="Run Configuration"/>
+                  <TextBlock Classes="pageTitle" Text="Run Configuration"/>
                   <TextBlock Classes="bodyMuted" Text="Adjust specific run settings."/>
                 </StackPanel>
                 <Border Classes="card">
@@ -389,11 +391,17 @@
             </ScrollViewer>
           </TabItem>
 
+          <TabItem Header="Multiplayer">
+            <ContentControl Name="multiplayerSettingsHost"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"/>
+          </TabItem>
+
           <TabItem Header="Hotkeys">
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="20,0,12,20" Spacing="14" MaxWidth="900" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="3">
-                  <TextBlock Classes="sectionTitle" Text="Hotkeys"/>
+                  <TextBlock Classes="pageTitle" Text="Hotkeys"/>
                   <TextBlock Classes="bodyMuted" Text="Hotkeys work from the Run screen. Focus the moon-number box before using an action shortcut."/>
                 </StackPanel>
                 <Border Classes="card">
@@ -425,7 +433,7 @@
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="20,0,12,20" Spacing="14" MaxWidth="700" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="3">
-                  <TextBlock Classes="sectionTitle" Text="Appearance"/>
+                  <TextBlock Classes="pageTitle" Text="Appearance"/>
                   <TextBlock Classes="bodyMuted" Text="Choose the app theme, accent color, and text size."/>
                 </StackPanel>
                 <Border Classes="card">
@@ -454,7 +462,7 @@
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="20,0,12,20" Spacing="14" MaxWidth="960" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="3">
-                  <TextBlock Classes="sectionTitle" Text="Help"/>
+                  <TextBlock Classes="pageTitle" Text="Help"/>
                 </StackPanel>
                 <Border Classes="card">
                   <Grid ColumnDefinitions="*,Auto" ColumnSpacing="18">

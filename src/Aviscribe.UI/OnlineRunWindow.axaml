@@ -1,13 +1,7 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="Aviscribe.UI.OnlineRunWindow"
-        Title="Multiplayer"
-        Width="760" Height="680"
-        MinWidth="650" MinHeight="560"
-        WindowStartupLocation="CenterOwner"
-        Icon="avares://Aviscribe.UI/Assets/aviscribe-icon.png"
-        ShowInTaskbar="False">
-  <Window.Styles>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Aviscribe.UI.OnlineRunView">
+  <UserControl.Styles>
     <Style Selector="Border.statusDot">
       <Setter Property="Width" Value="9"/>
       <Setter Property="Height" Value="9"/>
@@ -23,8 +17,13 @@
     <Style Selector="Border.statusDot.disconnected">
       <Setter Property="Background" Value="{DynamicResource DangerBrush}"/>
     </Style>
-  </Window.Styles>
-  <Grid Margin="22" RowDefinitions="Auto,Auto,*" RowSpacing="14">
+  </UserControl.Styles>
+  <Grid Name="layoutRoot"
+        Margin="20,0,12,20"
+        MaxWidth="960"
+        HorizontalAlignment="Stretch"
+        RowDefinitions="Auto,Auto,*"
+        RowSpacing="14">
     <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
       <StackPanel Spacing="3">
         <TextBlock Classes="pageTitle" Text="Multiplayer"/>
@@ -99,8 +98,9 @@
 
       <ScrollViewer Name="pnlConnected"
                     IsVisible="False"
+                    VerticalContentAlignment="Stretch"
                     HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="14">
+        <Grid RowDefinitions="Auto,Auto,*" RowSpacing="14">
           <Border Classes="card">
             <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="10">
               <StackPanel Grid.ColumnSpan="2" Spacing="3">
@@ -134,7 +134,7 @@
             </Grid>
           </Border>
 
-          <Border Name="pnlOwnerControls" Classes="card" IsVisible="False">
+          <Border Name="pnlOwnerControls" Grid.Row="1" Classes="card" IsVisible="False">
             <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="14">
               <StackPanel Spacing="3">
                 <TextBlock Classes="sectionTitle" Text="Run controls"/>
@@ -180,7 +180,8 @@
             </Grid>
           </Border>
 
-          <Grid ColumnDefinitions="0.8*,1.2*"
+          <Grid Grid.Row="2"
+                ColumnDefinitions="0.8*,1.2*"
                 ColumnSpacing="12"
                 MinHeight="194">
             <Border Classes="card">
@@ -212,8 +213,8 @@
               </Grid>
             </Border>
           </Grid>
-        </StackPanel>
+        </Grid>
       </ScrollViewer>
     </Grid>
   </Grid>
-</Window>
+</UserControl>

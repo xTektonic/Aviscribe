@@ -126,7 +126,8 @@ namespace Aviscribe.UI
         private (RunCategory Category, bool IncludePostGame)? _onlineConfigurationSeen;
         private readonly Queue<string> _recentActions = new();
         private string _lastActionKingdom = string.Empty;
-        private OnlineRunWindow? _onlineRunWindow;
+        private OnlineRunHostWindow? _onlineRunWindow;
+        private OnlineRunView? _settingsOnlineRunView;
 
         public MainWindow()
             : this(new DesignVideoProvider(), NullAppDiagnostics.Instance)
@@ -201,6 +202,9 @@ namespace Aviscribe.UI
 
             _onlineRunButton = this.GetControl<Button>("btnOnlineRun");
             _onlineRunButton.Click += OpenOnlineRun;
+            _settingsOnlineRunView = CreateOnlineRunView();
+            this.GetControl<ContentControl>("multiplayerSettingsHost").Content =
+                _settingsOnlineRunView;
             _multiplayerStatusPanel = this.GetControl<StackPanel>("pnlMultiplayerStatus");
             _multiplayerStatusDot = this.GetControl<Border>("multiplayerStatusDot");
             _multiplayerStatusText = this.GetControl<TextBlock>("txtMultiplayerStatus");
@@ -2603,6 +2607,9 @@ namespace Aviscribe.UI
 
         private void OpenOnlineRun(object? sender, RoutedEventArgs args)
         {
+            if (!_onlineRun.IsJoined)
+                return;
+
             if (_onlineRunWindow != null)
             {
                 _onlineRunWindow.Activate();
@@ -2610,16 +2617,21 @@ namespace Aviscribe.UI
             }
 
             UpdateCaptureSharingState();
-            _onlineRunWindow = new OnlineRunWindow(
+            _onlineRunWindow = new OnlineRunHostWindow(CreateOnlineRunView(
+                showCloseButton: true));
+            _onlineRunWindow.Closed += (_, _) => _onlineRunWindow = null;
+            _onlineRunWindow.Show(this);
+        }
+
+        private OnlineRunView CreateOnlineRunView(bool showCloseButton = false) =>
+            new(
                 _onlineRun,
                 _preferences,
                 PersistAppPreferences,
                 () => _runCoordinator.CreateFactSnapshot().Count > 0,
                 ConfirmReplaceWithOnlineRunAsync,
-                () => _state.Settings.Clone());
-            _onlineRunWindow.Closed += (_, _) => _onlineRunWindow = null;
-            _onlineRunWindow.Show(this);
-        }
+                () => _state.Settings.Clone(),
+                showCloseButton);
 
         private void UpdateCaptureSharingState(bool? isActive = null)
         {
@@ -2675,6 +2687,7 @@ namespace Aviscribe.UI
                     (CaptureState.Starting or CaptureState.Stopping);
             }
             _onlineRunButton.Content = "Multiplayer";
+            _onlineRunButton.IsVisible = joined;
             if (_multiplayerStatusPanel != null)
                 _multiplayerStatusPanel.IsVisible = true;
             if (_multiplayerStatusText != null)
@@ -2840,6 +2853,8 @@ namespace Aviscribe.UI
             }
 
             _processor?.Dispose();
+            _settingsOnlineRunView?.Dispose();
+            _settingsOnlineRunView = null;
             try
             {
                 _onlineRun.DisposeAsync().AsTask().GetAwaiter().GetResult();

@@ -12,7 +12,7 @@ Each SMOO+ server port can host one Aviscribe room. The server's normal player l
 
 ## Create or join a room
 
-1. On the **Run** screen, select **Multiplayer**.
+1. Open **Settings > Multiplayer**.
 2. Enter the SMOO+ server address and port, plus the name other players should see.
 3. Choose one of the following:
    - Select **Create Room** to start a blank shared run, then send the displayed join code to the other players.
@@ -31,6 +31,8 @@ Aviscribe shares:
 - the player list and recent activity
 
 Capture, crop, language, route, hotkey, and overlay settings remain local to each player. Automatic detections are shared only while capture is running, but manual corrections are still shared while capture is paused.
+
+While you are in a room, the Run screen shows a **Multiplayer** button that opens the same room status, feed, player list, and run controls in a separate window.
 
 For an OBS text source, enable **Only include my hints in multiplayer** under **Settings > Overlay output** to exclude hints found by other players. This setting does not affect singleplayer output.
 
