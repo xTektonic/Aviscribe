@@ -30,6 +30,31 @@ public sealed class OnlineIntegrationTests
     }
 
     [Fact]
+    public void ProjectionReplacementPreservesActiveKingdomAndSettings()
+    {
+        var repository = MoonRepository.LoadDefault();
+        var state = new GameState();
+        state.SetKingdom("Sand");
+        state.Settings.Category = RunCategory.Hardcore;
+
+        var cascadeMoon = repository.Moons.First(moon => moon.Kingdom == "Cascade");
+        state.ReplaceRunProjection(new Dictionary<string, KingdomStateSnapshot>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            ["Cascade"] = new KingdomStateSnapshot([cascadeMoon], [], [])
+        });
+
+        Assert.Equal("Sand", state.CurrentKingdom);
+        Assert.Equal(RunCategory.Hardcore, state.Settings.Category);
+        Assert.Empty(state.Pending);
+        Assert.Empty(state.Collected);
+        Assert.Empty(state.UncountedCollected);
+
+        state.SetKingdom("Cascade");
+        Assert.Equal([cascadeMoon], state.Pending);
+    }
+
+    [Fact]
     public void RemoteApplicationDoesNotEchoAndProjectionHandlesHintArtAndMultiMoons()
     {
         var repository = MoonRepository.LoadDefault();
@@ -393,6 +418,12 @@ public sealed class OnlineIntegrationTests
             Assert.Equal(RunEventKind.CollectionObserved, published.Kind);
             Assert.Equal(expected.KingdomId, published.KingdomId);
             Assert.Equal(expected.MoonId, published.MoonId);
+
+            var resumeStore = new OnlineResumeStore();
+            await WaitForAsync(
+                () => resumeStore.Load(resumePath)?.Outbox.Count == 0,
+                TimeSpan.FromSeconds(5));
+            Assert.Equal(1, online.Revision);
         }
         finally
         {
@@ -584,6 +615,15 @@ public sealed class OnlineIntegrationTests
         payload.CopyTo(frame, 4);
         foreach (var value in frame)
             await stream.WriteAsync(new byte[] { value }, TestContext.Current.CancellationToken);
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!condition() && DateTime.UtcNow < deadline)
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+
+        Assert.True(condition(), "The expected state was not reached before the timeout.");
     }
 
     private static async Task ReadExactAsync(Stream stream, Memory<byte> buffer)

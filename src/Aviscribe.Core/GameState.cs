@@ -357,6 +357,18 @@ namespace Aviscribe.Core
             OnChanged();
         }
 
+        internal void ReplaceRunProjection(
+            IReadOnlyDictionary<string, KingdomStateSnapshot> kingdomStates)
+        {
+            lock (_sync)
+            {
+                RestoreKingdomStates(kingdomStates);
+                ApplyKingdomState(GetOrCreateKingdomState(CurrentKingdom));
+            }
+
+            OnChanged();
+        }
+
         public GameStateSnapshot CreateSnapshot()
         {
             lock (_sync)

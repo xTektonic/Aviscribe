@@ -208,14 +208,11 @@ public sealed class RunCoordinator
                 }
             }
 
-            var current = _state.CreateSnapshot();
             var states = projected.ToDictionary(
                 item => item.Key,
                 item => new KingdomStateSnapshot(item.Value.Pending, item.Value.Counted, item.Value.Wrong),
                 StringComparer.OrdinalIgnoreCase);
-            if (!states.ContainsKey(current.CurrentKingdom))
-                states[current.CurrentKingdom] = new KingdomStateSnapshot([], [], []);
-            _state.RestoreRun(current.CurrentKingdom, _state.Settings, states);
+            _state.ReplaceRunProjection(states);
         }
     }
 

@@ -374,7 +374,6 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
                         cancellationToken).ConfigureAwait(false);
                     var accepted = response.Events.Select(item => item.EventId).ToHashSet();
                     lock (_sync) _outbox.RemoveAll(item => accepted.Contains(item.Event.EventId));
-                    credentials.Revision = Math.Max(credentials.Revision, response.Revision);
                     PersistResume();
                     SetState(OnlineConnectionState.Connected, null);
                 }
@@ -686,7 +685,14 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
 
     private void SignalPublisher()
     {
-        if (_publishSignal.CurrentCount == 0) _publishSignal.Release();
+        try
+        {
+            _publishSignal.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+            // A pending wake-up already covers this publication.
+        }
     }
 
     private void SetState(OnlineConnectionState state, string? message)
@@ -694,8 +700,13 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         var sharingPaused = state == OnlineConnectionState.Connected &&
             _sharingPaused;
         State = sharingPaused ? OnlineConnectionState.SharingPaused : state;
-        if (!sharingPaused && !string.IsNullOrWhiteSpace(message))
-            LastMessage = message;
+        if (!sharingPaused)
+        {
+            if (!string.IsNullOrWhiteSpace(message))
+                LastMessage = message;
+            else if (state == OnlineConnectionState.Connected)
+                LastMessage = null;
+        }
         RaiseStateChanged();
     }
 
