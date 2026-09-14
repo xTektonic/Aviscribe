@@ -23,7 +23,7 @@
     <FluentTheme />
 
     <Style Selector="Window">
-      <Setter Property="FontFamily" Value="Inter, Segoe UI, sans-serif"/>
+      <Setter Property="FontFamily" Value="fonts:Inter#Inter"/>
     </Style>
 
     <Style Selector="TextBlock.pageTitle">
@@ -72,6 +72,7 @@
       <Setter Property="MinHeight" Value="34"/>
       <Setter Property="Padding" Value="14,6"/>
       <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
     <Style Selector="Button.primary">
       <Setter Property="Background" Value="{DynamicResource SystemControlHighlightAccentBrush}"/>
@@ -84,9 +85,11 @@
 
     <Style Selector="ComboBox">
       <Setter Property="MinHeight" Value="34"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
     <Style Selector="TextBox">
       <Setter Property="MinHeight" Value="34"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
 
     <Style Selector="ToolTip">

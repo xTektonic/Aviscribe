@@ -8,6 +8,7 @@ internal sealed class FlashCapVideoCapture : IVideoCapture
 {
     private readonly CaptureDeviceDescriptor _descriptor;
     private readonly VideoCharacteristics _characteristics;
+    private readonly PixelBufferArrivedDelegate _pixelBufferCallback;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private CaptureDevice? _captureDevice;
     private CancellationTokenSource? _runCancellation;
@@ -26,6 +27,7 @@ internal sealed class FlashCapVideoCapture : IVideoCapture
         SelectedFormat = selectedFormat;
         _descriptor = descriptor;
         _characteristics = characteristics;
+        _pixelBufferCallback = OnPixelBuffer;
     }
 
     public event Action<VideoFrame>? FrameReceived;
@@ -58,7 +60,7 @@ internal sealed class FlashCapVideoCapture : IVideoCapture
                     TranscodeFormats.Auto,
                     isScattering: false,
                     maxQueuingFrames: 1,
-                    OnPixelBuffer,
+                    _pixelBufferCallback,
                     cancellationToken).ConfigureAwait(false);
 
                 await _captureDevice

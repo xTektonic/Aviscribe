@@ -48,13 +48,19 @@ try {
     Invoke-Checked "FlashCap checkout" {
         git -C $flashCapSource checkout --detach $FlashCapCommit
     }
-
     foreach ($project in @("FlashCap.Core", "FlashCap")) {
         $projectPath = Join-Path $flashCapSource "$project/$project.csproj"
+        $targetFramework = if ($project -eq "FlashCap.Core") {
+            "netstandard2.0"
+        }
+        else {
+            "net10.0"
+        }
         Invoke-Checked "$project pack" {
             dotnet pack $projectPath `
                 --configuration Release `
                 --output $output `
+                -p:TargetFrameworks=$targetFramework `
                 -p:Version=$FlashCapVersion `
                 -p:PackageVersion=$FlashCapVersion
         }
