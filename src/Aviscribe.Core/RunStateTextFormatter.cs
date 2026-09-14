@@ -11,9 +11,19 @@ namespace Aviscribe.Core
 
         public static string FormatPending(GameStateSnapshot snapshot, GameLanguage language)
         {
+            return FormatPending(snapshot, language, null);
+        }
+
+        public static string FormatPending(
+            GameStateSnapshot snapshot,
+            GameLanguage language,
+            Func<Moon, bool>? include)
+        {
             return string.Join(
                 System.Environment.NewLine,
-                snapshot.Pending.Select(moon => MoonDisplay.Format(moon, language)));
+                snapshot.Pending
+                    .Where(moon => include?.Invoke(moon) ?? true)
+                    .Select(moon => MoonDisplay.Format(moon, language)));
         }
     }
 }

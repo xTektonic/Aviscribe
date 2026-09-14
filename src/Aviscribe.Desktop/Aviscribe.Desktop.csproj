@@ -6,6 +6,7 @@
     <RootNamespace>Aviscribe.Desktop</RootNamespace>
     <ApplicationTitle>Aviscribe</ApplicationTitle>
     <ApplicationId>io.github.xtektonic.aviscribe</ApplicationId>
+    <ApplicationIcon>Assets\aviscribe.ico</ApplicationIcon>
     <RuntimeIdentifiers>win-x64;osx-arm64;linux-x64</RuntimeIdentifiers>
     <PublishSingleFile>false</PublishSingleFile>
     <SelfContained>true</SelfContained>

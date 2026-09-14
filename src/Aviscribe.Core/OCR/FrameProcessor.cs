@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Aviscribe.Core.Online;
 
 namespace Aviscribe.Core.Ocr
 {
@@ -15,6 +16,7 @@ namespace Aviscribe.Core.Ocr
         private readonly IOcrService _ocr;
         private readonly MoonMatcher _matcher;
         private readonly GameState _state;
+        private readonly RunCoordinator? _runCoordinator;
         private readonly IAppDiagnostics _diagnostics;
 
         private readonly object _lock = new();
@@ -58,11 +60,13 @@ namespace Aviscribe.Core.Ocr
             ITextPresenceDetector? textDetector = null,
             CaptureCropSettings? cropSettings = null,
             IAppDiagnostics? diagnostics = null,
-            IKingdomDetector? kingdomDetector = null)
+            IKingdomDetector? kingdomDetector = null,
+            RunCoordinator? runCoordinator = null)
         {
             _ocr = ocr;
             _matcher = matcher;
             _state = state;
+            _runCoordinator = runCoordinator;
             _diagnostics = diagnostics ?? NullAppDiagnostics.Instance;
             _textDetector = textDetector ?? new HeuristicTextPresenceDetector();
             _kingdomDetector = kingdomDetector;
@@ -249,61 +253,14 @@ namespace Aviscribe.Core.Ocr
 
             OcrRegion? talkatooRegion = null;
             TalkatooConfirmationDecision talkatooDecision = default;
+            var storyMoonPresent = false;
 
-            foreach (var region in _regions)
+            // Collection overlays are time-sensitive and can overlap the Talkatoo
+            // crop. Inspect them first so adaptive Talkatoo work cannot delay or
+            // compete with story-moon confirmation.
+            foreach (var region in _regions.Where(item =>
+                         item.Type != OcrRegionType.Talkatoo))
             {
-                if (region.Type == OcrRegionType.Talkatoo)
-                {
-                    if (!_talkatooConfirmation.ShouldInspect(timestamp))
-                        continue;
-
-                    using var talkatooCrop = mat[region.DetectionBounds ?? region.Bounds];
-                    var useAdaptiveDetection =
-                        settings.AdaptiveTalkatooDetection &&
-                        region.Detector.GetType() == typeof(HeuristicTextPresenceDetector);
-                    bool talkatooPresent;
-                    TalkatooPromptSignature? signature;
-
-                    if (useAdaptiveDetection)
-                    {
-                        var analysis = _talkatooAdaptiveAnalyzer.Analyze(talkatooCrop);
-                        talkatooPresent = analysis.Present;
-                        signature = analysis.Present
-                            ? analysis.Adapted
-                                ? TalkatooPromptSignature.CaptureAdaptive(
-                                    talkatooCrop,
-                                    analysis)
-                                : TalkatooPromptSignature.Capture(talkatooCrop)
-                            : null;
-
-                        if (analysis.StartedAdaptiveRun)
-                        {
-                            _diagnostics.Debug(
-                                $"Adaptive Talkatoo detection selected " +
-                                $"{analysis.Gain:0.00}x gain.");
-                        }
-                    }
-                    else
-                    {
-                        _talkatooAdaptiveAnalyzer.Reset();
-                        var talkatooDetection = region.Detector.Detect(
-                            region.Type,
-                            talkatooCrop);
-                        talkatooPresent = talkatooDetection.Present;
-                        signature = talkatooDetection.Present
-                            ? TalkatooPromptSignature.Capture(talkatooCrop)
-                            : null;
-                    }
-
-                    var decision = _talkatooConfirmation.Observe(
-                        talkatooPresent,
-                        signature,
-                        timestamp);
-                    talkatooRegion = region;
-                    talkatooDecision = decision;
-                    continue;
-                }
-
                 if (!_collectionConfirmation.ShouldInspect(
                         region.Type,
                         timestamp))
@@ -313,10 +270,68 @@ namespace Aviscribe.Core.Ocr
 
                 using var detectionCrop = mat[region.DetectionBounds ?? region.Bounds];
                 var detection = region.Detector.Detect(region.Type, detectionCrop);
+                if (region.Type == OcrRegionType.StoryMoon)
+                    storyMoonPresent = detection.Present;
                 _collectionConfirmation.Observe(
                     region.Type,
                     detection.Present,
                     timestamp);
+            }
+
+            var candidateTalkatooRegion = _regions.First(item =>
+                item.Type == OcrRegionType.Talkatoo);
+            if (storyMoonPresent)
+            {
+                _talkatooConfirmation.Reset();
+                _talkatooAdaptiveAnalyzer.Reset();
+            }
+            else if (_talkatooConfirmation.ShouldInspect(timestamp))
+            {
+                using var talkatooCrop = mat[
+                    candidateTalkatooRegion.DetectionBounds ?? candidateTalkatooRegion.Bounds];
+                var useAdaptiveDetection =
+                    settings.AdaptiveTalkatooDetection &&
+                    candidateTalkatooRegion.Detector.GetType() ==
+                        typeof(HeuristicTextPresenceDetector);
+                bool talkatooPresent;
+                TalkatooPromptSignature? signature;
+
+                if (useAdaptiveDetection)
+                {
+                    var analysis = _talkatooAdaptiveAnalyzer.Analyze(talkatooCrop);
+                    talkatooPresent = analysis.Present;
+                    signature = analysis.Present
+                        ? analysis.Adapted
+                            ? TalkatooPromptSignature.CaptureAdaptive(
+                                talkatooCrop,
+                                analysis)
+                            : TalkatooPromptSignature.Capture(talkatooCrop)
+                        : null;
+
+                    if (analysis.StartedAdaptiveRun)
+                    {
+                        _diagnostics.Debug(
+                            $"Adaptive Talkatoo detection selected " +
+                            $"{analysis.Gain:0.00}x gain.");
+                    }
+                }
+                else
+                {
+                    _talkatooAdaptiveAnalyzer.Reset();
+                    var talkatooDetection = candidateTalkatooRegion.Detector.Detect(
+                        candidateTalkatooRegion.Type,
+                        talkatooCrop);
+                    talkatooPresent = talkatooDetection.Present;
+                    signature = talkatooDetection.Present
+                        ? TalkatooPromptSignature.Capture(talkatooCrop)
+                        : null;
+                }
+
+                talkatooDecision = _talkatooConfirmation.Observe(
+                    talkatooPresent,
+                    signature,
+                    timestamp);
+                talkatooRegion = candidateTalkatooRegion;
             }
 
             var collectionDecision = _collectionConfirmation.NextDecision();
@@ -432,7 +447,7 @@ namespace Aviscribe.Core.Ocr
                         {
                             _diagnostics.Debug(
                                 $"RESOLVED AMBIGUOUS OCR ({item.Type}): " +
-                                $"\"{text}\" -> {resolvedMatch.English}");
+                                $"\"{text}\" → {resolvedMatch.English}");
                             RecordConfirmationOutcome(item, resolved: true);
                             Handle(item.Type, resolvedMatch);
                             continue;
@@ -458,7 +473,7 @@ namespace Aviscribe.Core.Ocr
                     {
                         _diagnostics.Debug(
                             $"RESOLVED WEAK OCR ({item.Type}): " +
-                            $"\"{text}\" -> {weakResolvedMatch.English}");
+                            $"\"{text}\" → {weakResolvedMatch.English}");
                         RecordConfirmationOutcome(item, resolved: true);
                         Handle(item.Type, weakResolvedMatch);
                         continue;
@@ -847,13 +862,14 @@ namespace Aviscribe.Core.Ocr
             switch (type)
             {
                 case OcrRegionType.Talkatoo:
-                    if (_state.TryAddPending(match))
+                    if (_runCoordinator?.ObserveHint(match) ?? _state.TryAddPending(match))
                         _diagnostics.Debug($"ADD: {match.English}");
                     break;
 
                 case OcrRegionType.MoonGet:
                 case OcrRegionType.StoryMoon:
-                    var outcome = _state.MarkCollected(match);
+                    var outcome = _runCoordinator?.ObserveCollection(match) ??
+                                  _state.MarkCollected(match);
                     switch (outcome)
                     {
                         case CollectionOutcome.Counted:

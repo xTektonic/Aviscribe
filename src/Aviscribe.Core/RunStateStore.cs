@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using Aviscribe.Core.Capture;
 using Aviscribe.Core.Ocr;
+using Aviscribe.Core.Online;
 
 namespace Aviscribe.Core
 {
@@ -39,7 +40,8 @@ namespace Aviscribe.Core
             IReadOnlyDictionary<string, CaptureCropSettings>? captureCropsByDevice = null,
             CaptureSourceKind captureSourceKind = CaptureSourceKind.VideoDevice,
             IReadOnlyDictionary<CaptureSourceKind, string>? captureSourceIdsByKind = null,
-            IEnumerable<KingdomAmbiguousReview>? ambiguousReviews = null)
+            IEnumerable<KingdomAmbiguousReview>? ambiguousReviews = null,
+            IEnumerable<RunFactSnapshot>? runFacts = null)
         {
             var state = new SavedRunState
             {
@@ -82,6 +84,16 @@ namespace Aviscribe.Core
                 PendingMoonIds = snapshot.Pending.Select(moon => moon.Id).ToList(),
                 CollectedMoonIds = snapshot.Collected.Select(moon => moon.Id).ToList(),
                 UncountedCollectedMoonIds = snapshot.UncountedCollected.Select(moon => moon.Id).ToList(),
+                RunFacts = (runFacts ?? Array.Empty<RunFactSnapshot>())
+                    .Select(fact => new SavedRunFact
+                    {
+                        Kingdom = fact.Kingdom,
+                        MoonId = fact.MoonId,
+                        Hinted = fact.Hinted,
+                        Collected = fact.Collected,
+                        ManualClassification = fact.ManualClassification
+                    })
+                    .ToList(),
                 KingdomStates = snapshot.KingdomStates.ToDictionary(
                     item => item.Key,
                     item => new SavedKingdomState
@@ -116,6 +128,35 @@ namespace Aviscribe.Core
             var tempPath = $"{path}.{Guid.NewGuid():N}.tmp";
             File.WriteAllText(tempPath, JsonSerializer.Serialize(state, JsonOptions));
             File.Move(tempPath, path, overwrite: true);
+        }
+
+        public IReadOnlyList<RunFactSnapshot> RestoreFacts(SavedRunState savedState)
+        {
+            if (savedState.RunFacts?.Count > 0)
+            {
+                return savedState.RunFacts.Select(fact => new RunFactSnapshot(
+                    fact.Kingdom,
+                    fact.MoonId,
+                    fact.Hinted,
+                    fact.Collected,
+                    fact.ManualClassification)).ToList();
+            }
+
+            var facts = new Dictionary<MoonFactKey, RunFactSnapshot>();
+            foreach (var state in savedState.KingdomStates?.Values ??
+                         Enumerable.Empty<SavedKingdomState>())
+            {
+                foreach (var moon in state.Pending ?? [])
+                    facts[new MoonFactKey(moon.Kingdom, moon.MoonId)] =
+                        new RunFactSnapshot(moon.Kingdom, moon.MoonId, true, false, ManualClassification.Automatic);
+                foreach (var moon in state.Collected ?? [])
+                    facts[new MoonFactKey(moon.Kingdom, moon.MoonId)] =
+                        new RunFactSnapshot(moon.Kingdom, moon.MoonId, false, true, ManualClassification.Counted);
+                foreach (var moon in state.UncountedCollected ?? [])
+                    facts[new MoonFactKey(moon.Kingdom, moon.MoonId)] =
+                        new RunFactSnapshot(moon.Kingdom, moon.MoonId, false, true, ManualClassification.Uncounted);
+            }
+            return facts.Values.ToList();
         }
 
         public void Restore(GameState gameState, SavedRunState savedState)

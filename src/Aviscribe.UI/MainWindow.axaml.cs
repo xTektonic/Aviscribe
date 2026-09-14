@@ -1,10 +1,12 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
@@ -14,9 +16,11 @@ using Aviscribe.Core.Capture;
 using Aviscribe.Core.Diagnostics;
 using Aviscribe.Core.KingdomDetection;
 using Aviscribe.Core.Ocr;
+using Aviscribe.Core.Online;
 using OpenCvSharp;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -32,7 +36,10 @@ namespace Aviscribe.UI
         private readonly IAppDiagnostics _diagnostics;
         private readonly MoonRepository _repo;
         private readonly GameState _state = new();
+        private readonly RunCoordinator _runCoordinator;
+        private readonly OnlineRunCoordinator _onlineRun;
         private readonly RunStateStore _stateStore;
+        private SavedRunState? _loadedRunState;
         private readonly AppPreferencesStore _preferencesStore = new();
         private AppPreferences _preferences = new();
         private readonly RunOutputWriter _outputWriter = new();
@@ -60,8 +67,10 @@ namespace Aviscribe.UI
         private TextBlock? _countedCountText;
         private TextBlock? _actualCountText;
         private TextBlock? _requirementText;
+        private TextBlock? _pendingTitleText;
         private TextBlock? _moonCountText;
         private TextBlock? _commandFeedbackText;
+        private ItemsControl? _actionList;
         private TextBlock? _reviewPromptText;
         private ListBox? _moonList;
         private ListBox? _pendingList;
@@ -73,8 +82,18 @@ namespace Aviscribe.UI
         private ComboBox? _inputLanguageSelect;
         private ComboBox? _outputLanguageSelect;
         private CheckBox? _includePostGameCheck;
+        private ComboBox? _categorySelect;
+        private Button? _onlineRunButton;
+        private Button? _captureButton;
+        private Button? _settingsCaptureButton;
+        private StackPanel? _multiplayerStatusPanel;
+        private Border? _multiplayerStatusDot;
+        private TextBlock? _multiplayerStatusText;
+        private Button? _resetRunButton;
         private CheckBox? _writeOverlayCheck;
         private TextBox? _overlayPathText;
+        private Button? _browseOverlayPathButton;
+        private Button? _copyOverlayPathButton;
         private TextBox? _moonNumberText;
         private TextBlock? _cropSummaryText;
         private TextBlock? _selectedCaptureSourceText;
@@ -100,6 +119,15 @@ namespace Aviscribe.UI
         private int _previewRequested;
         private int _sourceWidth;
         private int _sourceHeight;
+        private int _onlineGenerationSeen;
+        private int _copyOverlayPathFeedbackVersion;
+        private Guid? _onlineSessionSeen;
+        private long _latestOnlineActionRevision;
+        private (RunCategory Category, bool IncludePostGame)? _onlineConfigurationSeen;
+        private readonly Queue<string> _recentActions = new();
+        private string _lastActionKingdom = string.Empty;
+        private OnlineRunHostWindow? _onlineRunWindow;
+        private OnlineRunView? _settingsOnlineRunView;
 
         public MainWindow()
             : this(new DesignVideoProvider(), NullAppDiagnostics.Instance)
@@ -119,13 +147,33 @@ namespace Aviscribe.UI
             LoadAppPreferences();
             ApplyThemePreference();
             ApplyAccentColorPreference();
+            ApplyTextSizePreference();
             LoadSavedRunState();
+            _runCoordinator = new RunCoordinator(_state, _repo);
+            var restoredFacts = _loadedRunState == null
+                ? []
+                : _stateStore.RestoreFacts(_loadedRunState);
+            if (restoredFacts.Count > 0)
+                _runCoordinator.ReplaceFacts(restoredFacts);
+            else
+                _runCoordinator.ImportLegacyProjection();
+            _onlineRun = new OnlineRunCoordinator(_runCoordinator);
+            _onlineRun.StateChanged += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                UpdateOnlineUi();
+                UpdatePendingTitle();
+                UpdatePendingOwnershipHighlights();
+                WriteOverlayOutput(_state.CreateSnapshot());
+            });
+            _runCoordinator.LocalEventObserved += OnLocalMoonActionObserved;
             NormalizeLanguageSettings();
             _outputWriter.Language = _state.Settings.OutputLanguage;
             InitControls();
             InitFrameProcessor();
-            _state.Changed += (_, _) => UpdateRunState();
+            _lastActionKingdom = _state.CurrentKingdom;
+            _state.Changed += OnGameStateChanged;
             UpdateRunState();
+            UpdateOnlineUi();
             Opened += InitializePlatformAppearance;
             Opened += ShowFirstRunQuickStart;
         }
@@ -152,10 +200,22 @@ namespace Aviscribe.UI
             this.GetControl<Button>("btnChooseCaptureSource").Click +=
                 ChooseCaptureSource;
 
+            _onlineRunButton = this.GetControl<Button>("btnOnlineRun");
+            _onlineRunButton.Click += OpenOnlineRun;
+            _settingsOnlineRunView = CreateOnlineRunView();
+            this.GetControl<ContentControl>("multiplayerSettingsHost").Content =
+                _settingsOnlineRunView;
+            _multiplayerStatusPanel = this.GetControl<StackPanel>("pnlMultiplayerStatus");
+            _multiplayerStatusDot = this.GetControl<Border>("multiplayerStatusDot");
+            _multiplayerStatusText = this.GetControl<TextBlock>("txtMultiplayerStatus");
+            _resetRunButton = this.GetControl<Button>("btnResetKingdom");
+
             // Update Preview button
-            Button updatePreview = this.GetControl<Button>("btnUpdatePreview");
-            updatePreview.Click += StartPreview;
-            this.GetControl<Button>("btnSettingsUpdatePreview").Click += StartPreview;
+            _captureButton = this.GetControl<Button>("btnUpdatePreview");
+            _captureButton.Click += StartPreview;
+            _settingsCaptureButton =
+                this.GetControl<Button>("btnSettingsUpdatePreview");
+            _settingsCaptureButton.Click += StartPreview;
             this.GetControl<Button>("btnCropGameplay").Click += OpenCropWindow;
 
             _kingdomSelect = this.GetControl<ComboBox>("cbKingdomSelect");
@@ -174,14 +234,15 @@ namespace Aviscribe.UI
                 }
             };
 
-            ComboBox categorySelect = this.GetControl<ComboBox>("cbCategorySelect");
-            categorySelect.ItemsSource = Enum.GetValues<RunCategory>();
-            categorySelect.SelectedItem = _state.Settings.Category;
-            categorySelect.SelectionChanged += (_, _) =>
+            _categorySelect = this.GetControl<ComboBox>("cbCategorySelect");
+            _categorySelect.ItemsSource = Enum.GetValues<RunCategory>();
+            _categorySelect.SelectedItem = _state.Settings.Category;
+            _categorySelect.SelectionChanged += (_, _) =>
             {
-                if (categorySelect.SelectedItem is RunCategory category)
+                if (_categorySelect.SelectedItem is RunCategory category)
                 {
                     _state.Settings.Category = category;
+                    _runCoordinator.Reproject();
                     _diagnostics.Information($"Run category changed to {category}.");
                     _state.NotifySettingsChanged();
                 }
@@ -253,6 +314,10 @@ namespace Aviscribe.UI
                     ClearAmbiguousReviews();
 
                 _state.SetIncludePostGameKingdoms(includePostGameKingdoms);
+                if (includePostGameKingdoms)
+                    _runCoordinator.Reproject();
+                else
+                    _runCoordinator.ResetLocal();
                 _diagnostics.Information(includePostGameKingdoms
                     ? "Postgame kingdoms enabled."
                     : "Postgame kingdoms disabled and run state reset.");
@@ -372,11 +437,36 @@ namespace Aviscribe.UI
                 _diagnostics.Information($"Application accent color changed to {item.Name}.");
             };
 
+            var textSizeSelect =
+                this.GetControl<ComboBox>("cbTextSizeSelect");
+            var textSizes = new[]
+            {
+                new TextSizeListItem(TextSizePreference.Small, "Small"),
+                new TextSizeListItem(TextSizePreference.Default, "Default"),
+                new TextSizeListItem(TextSizePreference.Large, "Large"),
+                new TextSizeListItem(TextSizePreference.ExtraLarge, "Extra large")
+            };
+            textSizeSelect.ItemsSource = textSizes;
+            textSizeSelect.SelectedItem = textSizes.First(item =>
+                item.Preference == _preferences.TextSize);
+            textSizeSelect.SelectionChanged += (_, _) =>
+            {
+                if (textSizeSelect.SelectedItem is not TextSizeListItem item ||
+                    item.Preference == _preferences.TextSize)
+                    return;
+
+                _preferences.TextSize = item.Preference;
+                ApplyTextSizePreference();
+                PersistAppPreferences();
+                _diagnostics.Information(
+                    $"Text size changed to {item.Name}.");
+            };
+
             var ocrModeSelect = this.GetControl<ComboBox>("cbOcrModeSelect");
             var ocrModes = new[]
             {
-                new OcrModeListItem(OcrMode.Cpu, "CPU (compatible default)"),
-                new OcrModeListItem(OcrMode.WebGpu, "GPU (WebGPU)")
+                new OcrModeListItem(OcrMode.Cpu, "CPU (compatibility)"),
+                new OcrModeListItem(OcrMode.WebGpu, "GPU (WebGPU, preferred)")
             };
             ocrModeSelect.ItemsSource = ocrModes;
             ocrModeSelect.SelectedItem = ocrModes.First(item => item.Mode == _state.Settings.OcrMode);
@@ -420,8 +510,10 @@ namespace Aviscribe.UI
             _countedCountText = this.FindControl<TextBlock>("txtCountedCount");
             _actualCountText = this.FindControl<TextBlock>("txtActualCount");
             _requirementText = this.FindControl<TextBlock>("txtRequirement");
+            _pendingTitleText = this.FindControl<TextBlock>("txtPendingTitle");
             _moonCountText = this.FindControl<TextBlock>("txtMoonCount");
             _commandFeedbackText = this.FindControl<TextBlock>("txtCommandFeedback");
+            _actionList = this.FindControl<ItemsControl>("lstActions");
             _moonList = this.FindControl<ListBox>("lstMoonList");
             _pendingList = this.FindControl<ListBox>("lstPending");
             _collectedList = this.FindControl<ListBox>("lstCollected");
@@ -431,6 +523,8 @@ namespace Aviscribe.UI
             _reviewSelect = this.FindControl<ComboBox>("cbReviewSelect");
             _writeOverlayCheck = this.FindControl<CheckBox>("chkWriteOverlay");
             _overlayPathText = this.FindControl<TextBox>("txtOverlayPath");
+            _browseOverlayPathButton = this.FindControl<Button>("btnBrowseOverlayPath");
+            _copyOverlayPathButton = this.FindControl<Button>("btnCopyOverlayPath");
             _moonNumberText = this.FindControl<TextBox>("txtMoonNumber");
             _cropSummaryText = this.FindControl<TextBlock>("txtCropSummary");
             _mainTabs = this.FindControl<TabControl>("tabMain");
@@ -452,6 +546,18 @@ namespace Aviscribe.UI
                     _diagnostics.Information("Overlay output path updated.");
             }
 
+            if (_browseOverlayPathButton != null)
+            {
+                _browseOverlayPathButton.IsEnabled = _writeOverlayEnabled;
+                _browseOverlayPathButton.Click += BrowseOverlayPath;
+            }
+
+            if (_copyOverlayPathButton != null)
+            {
+                _copyOverlayPathButton.IsEnabled = _writeOverlayEnabled;
+                _copyOverlayPathButton.Click += CopyOverlayPath;
+            }
+
             if (_writeOverlayCheck != null)
             {
                 _writeOverlayCheck.IsChecked = _writeOverlayEnabled;
@@ -461,11 +567,31 @@ namespace Aviscribe.UI
                     _diagnostics.Information($"Overlay output enabled = {_writeOverlayEnabled}.");
                     if (_overlayPathText != null)
                         _overlayPathText.IsEnabled = _writeOverlayEnabled;
+                    if (_browseOverlayPathButton != null)
+                        _browseOverlayPathButton.IsEnabled = _writeOverlayEnabled;
+                    if (_copyOverlayPathButton != null)
+                        _copyOverlayPathButton.IsEnabled = _writeOverlayEnabled;
                     var snapshot = _state.CreateSnapshot();
                     WriteOverlayOutput(snapshot);
                     PersistRunState(snapshot);
                 };
             }
+
+            var onlyWriteOwnHintsCheck =
+                this.GetControl<CheckBox>("chkOnlyWriteOwnHints");
+            onlyWriteOwnHintsCheck.IsChecked = _preferences.OnlyWriteOwnHints;
+            onlyWriteOwnHintsCheck.IsCheckedChanged += (_, _) =>
+            {
+                _preferences.OnlyWriteOwnHints =
+                    onlyWriteOwnHintsCheck.IsChecked == true;
+                PersistAppPreferences();
+                WriteOverlayOutput(_state.CreateSnapshot());
+                _diagnostics.Information(
+                    $"Only write own multiplayer hints = " +
+                    $"{_preferences.OnlyWriteOwnHints}.");
+            };
+
+            RefreshActionLog();
 
             WireListInteractions();
             WireCommandControls();
@@ -474,25 +600,25 @@ namespace Aviscribe.UI
             this.GetControl<Button>("btnManualPending").Click += (_, _) =>
             {
                 if (GetSelectedMoon() is { } moon)
-                    _state.AddPending(moon);
+                    _runCoordinator.SetPending(moon);
             };
 
             this.GetControl<Button>("btnManualCollected").Click += (_, _) =>
             {
                 if (GetSelectedMoon() is { } moon)
-                    _state.MarkCollected(moon);
+                    _runCoordinator.SetCounted(moon);
             };
 
             this.GetControl<Button>("btnManualUncounted").Click += (_, _) =>
             {
                 if (GetSelectedMoon() is { } moon)
-                    _state.MarkUncounted(moon);
+                    _runCoordinator.SetUncounted(moon);
             };
 
             this.GetControl<Button>("btnManualRemove").Click += (_, _) =>
             {
                 if (GetSelectedStateMoon() is { } moon)
-                    _state.Remove(moon);
+                    _runCoordinator.Remove(moon);
             };
 
             this.GetControl<Button>("btnResetKingdom").Click += async (_, _) =>
@@ -501,7 +627,7 @@ namespace Aviscribe.UI
                     return;
 
                 ClearAmbiguousReviews();
-                _state.ResetRun();
+                _runCoordinator.ResetLocal();
                 _diagnostics.Information("Run reset by the user.");
                 RefreshKingdoms(_state.CurrentKingdom);
                 RefreshMoonSelect();
@@ -685,7 +811,8 @@ namespace Aviscribe.UI
                 detector,
                 GetCropForDevice(_captureDeviceId),
                 _diagnostics,
-                kingdomDetector);
+                kingdomDetector,
+                _runCoordinator);
             _processorCaptureDeviceId = _captureDeviceId;
             _processor.AmbiguousMatchReceived += (_, result) =>
             {
@@ -731,6 +858,8 @@ namespace Aviscribe.UI
 
         private void OnFrame(VideoFrame frame)
         {
+            if (!_onlineRun.CaptureSharingArmed)
+                UpdateCaptureSharingState();
             VideoFrame? ownedFrame = frame;
             try
             {
@@ -804,6 +933,7 @@ namespace Aviscribe.UI
                     _video?.State == CaptureState.Running &&
                     _processorRunning)
                 {
+                    UpdateCaptureSharingState();
                     return;
                 }
 
@@ -867,6 +997,7 @@ namespace Aviscribe.UI
                     throw;
                 }
 
+                UpdateCaptureSharingState();
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (_selectedCaptureSourceText != null)
@@ -956,6 +1087,7 @@ namespace Aviscribe.UI
                 {
                     _processor?.Stop();
                     _processorRunning = false;
+                    UpdateCaptureSharingState(isActive: false);
                     _currentDevice = null;
                 }
             }
@@ -965,6 +1097,7 @@ namespace Aviscribe.UI
             object? sender,
             CaptureErrorEventArgs args)
         {
+            UpdateCaptureSharingState(isActive: false);
             _snapshotBroker.Cancel(
                 args.Exception ?? new IOException(args.Message));
             _diagnostics.Error(
@@ -983,8 +1116,12 @@ namespace Aviscribe.UI
         {
             _diagnostics.Debug(
                 $"Capture state changed from {args.Previous} to {args.Current}.");
+            UpdateCaptureSharingState(
+                isActive: args.Current == CaptureState.Running && _processorRunning);
             if (args.Current == CaptureState.Faulted)
+            {
                 SetStatus("Capture entered a faulted state");
+            }
         }
 
         private void UpdatePreview(Mat source)
@@ -1094,6 +1231,24 @@ namespace Aviscribe.UI
                 $"(source {crop.SourceWidth} × {crop.SourceHeight})";
         }
 
+        private void OnGameStateChanged(object? sender, EventArgs args)
+        {
+            var currentKingdom = _state.CurrentKingdom;
+            var previousKingdom = Interlocked.Exchange(
+                ref _lastActionKingdom,
+                currentKingdom);
+            if (!string.IsNullOrWhiteSpace(previousKingdom) &&
+                !currentKingdom.Equals(
+                    previousKingdom,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                Dispatcher.UIThread.Post(() =>
+                    AddAction($"Switched to {currentKingdom}"));
+            }
+
+            UpdateRunState();
+        }
+
         private void UpdateRunState()
         {
             var snapshot = _state.CreateSnapshot();
@@ -1105,6 +1260,8 @@ namespace Aviscribe.UI
 
                 if (_actualCountText != null)
                     _actualCountText.Text = snapshot.ActualMoonCount.ToString();
+
+                UpdatePendingTitle(snapshot);
 
                 UpdateKingdomHeader(snapshot.CurrentKingdom);
                 if (SynchronizeKingdomSelection(snapshot.CurrentKingdom))
@@ -1142,6 +1299,30 @@ namespace Aviscribe.UI
                 WriteOverlayOutput(snapshot);
                 PersistRunState(snapshot);
             });
+        }
+
+        private void UpdatePendingTitle(GameStateSnapshot? snapshot = null)
+        {
+            if (_pendingTitleText == null)
+                return;
+
+            snapshot ??= _state.CreateSnapshot();
+            var pendingCount = _onlineRun.IsJoined
+                ? snapshot.Pending.Count(_onlineRun.IsPendingOwnedByLocalParticipant)
+                : snapshot.Pending.Count;
+            _pendingTitleText.Text = $"Pending ({pendingCount}/3)";
+        }
+
+        private void UpdatePendingOwnershipHighlights()
+        {
+            if (_pendingList?.ItemsSource is not IEnumerable<MoonListItem> items)
+                return;
+
+            foreach (var item in items)
+            {
+                item.IsTracked = _onlineRun.IsJoined &&
+                    _onlineRun.IsPendingOwnedByLocalParticipant(item.Moon);
+            }
         }
 
         private void RefreshKingdoms(string? preferredKingdom = null)
@@ -1239,12 +1420,20 @@ namespace Aviscribe.UI
                 _moonCountText.Text = $"{moons.Count} moons";
             UpdateMoonListHighlights(_state.CreateSnapshot());
             _updatingLists = false;
+
+            if (moons.Count > 0)
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (ReferenceEquals(_moonList?.ItemsSource, moons))
+                        _moonList.ScrollIntoView(0);
+                }, DispatcherPriority.Loaded);
+            }
         }
 
         private void UpdateMoonListHighlights(GameStateSnapshot snapshot)
         {
-            if (_moonList?.ItemsSource is not IEnumerable<MoonListItem> items ||
-                _moonList.SelectedItems == null)
+            if (_moonList?.ItemsSource is not IEnumerable<MoonListItem> items)
                 return;
 
             var tracked = snapshot.Pending
@@ -1252,12 +1441,9 @@ namespace Aviscribe.UI
                 .Concat(snapshot.UncountedCollected)
                 .ToList();
 
-            _moonList.SelectedItems.Clear();
-            foreach (var item in items.Where(item =>
-                         tracked.Any(moon => SameMoon(moon, item.Moon))))
-            {
-                _moonList.SelectedItems.Add(item);
-            }
+            _moonList.SelectedItem = null;
+            foreach (var item in items)
+                item.IsTracked = tracked.Any(moon => SameMoon(moon, item.Moon));
         }
 
         private void UpdateKingdomHeader(string kingdom)
@@ -1295,6 +1481,25 @@ namespace Aviscribe.UI
                 AppThemePreference.Dark => ThemeVariant.Dark,
                 _ => ThemeVariant.Default
             };
+        }
+
+        private void ApplyTextSizePreference()
+        {
+            if (Application.Current?.Resources == null)
+                return;
+
+            var sizes = _preferences.TextSize switch
+            {
+                TextSizePreference.Small => (12d, 14d, 25d, 16d),
+                TextSizePreference.Large => (15d, 17d, 32d, 21d),
+                TextSizePreference.ExtraLarge => (17d, 19d, 36d, 24d),
+                _ => (13d, 15d, 28d, 18d)
+            };
+
+            Application.Current.Resources["FontSize"] = sizes.Item1;
+            Application.Current.Resources["SectionFontSize"] = sizes.Item2;
+            Application.Current.Resources["MetricFontSize"] = sizes.Item3;
+            Application.Current.Resources["RequirementFontSize"] = sizes.Item4;
         }
 
         private void InitializePlatformAppearance(object? sender, EventArgs args)
@@ -1394,7 +1599,7 @@ namespace Aviscribe.UI
 
         private async void OpenDiscord(object? sender, RoutedEventArgs args)
         {
-            const string discordInvite = "https://discord.gg/ADDAuJVxjnn";
+            const string discordInvite = "https://discord.gg/ADDAuJVxjn";
             try
             {
                 var topLevel = TopLevel.GetTopLevel(this);
@@ -1445,6 +1650,7 @@ namespace Aviscribe.UI
                 if (savedState == null)
                     return;
 
+                _loadedRunState = savedState;
                 _stateStore.Restore(_state, savedState);
                 foreach (var review in _stateStore.RestoreReviews(savedState))
                 {
@@ -1497,7 +1703,8 @@ namespace Aviscribe.UI
                     GetCaptureCropSnapshot(),
                     _captureSourceSelection.Kind,
                     _captureSourceSelection.Snapshot(),
-                    GetReviewSnapshot());
+                    GetReviewSnapshot(),
+                    _runCoordinator.CreateFactSnapshot());
             }
             catch (Exception ex)
             {
@@ -1576,13 +1783,15 @@ namespace Aviscribe.UI
             switch (type)
             {
                 case OcrRegionType.Talkatoo:
-                    _state.AddPending(moon);
+                    _runCoordinator.ObserveHint(moon, automaticCapture: false);
                     SetStatus($"Added {moon.English}");
                     break;
 
                 case OcrRegionType.MoonGet:
                 case OcrRegionType.StoryMoon:
-                    var outcome = _state.MarkCollected(moon);
+                    var outcome = _runCoordinator.ObserveCollection(
+                        moon,
+                        automaticCapture: false);
                     SetStatus(outcome == CollectionOutcome.Uncounted
                         ? $"Tracked wrong moon: {moon.English}"
                         : $"Collected {moon.English}");
@@ -1651,7 +1860,8 @@ namespace Aviscribe.UI
                 Height = 205,
                 CanResize = false,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                ShowInTaskbar = false
+                ShowInTaskbar = false,
+                Icon = Icon
             };
             var resetButton = new Button { Content = confirmButtonText };
             resetButton.Classes.Add("danger");
@@ -1711,11 +1921,96 @@ namespace Aviscribe.UI
 
             try
             {
-                _outputWriter.WritePending(snapshot);
+                _outputWriter.WritePending(
+                    snapshot,
+                    moon => !_preferences.OnlyWriteOwnHints ||
+                        !_onlineRun.IsJoined ||
+                        _onlineRun.IsPendingOwnedByLocalParticipant(moon));
             }
             catch (Exception ex)
             {
                 SetStatus($"Could not write overlay file: {ex.Message}");
+            }
+        }
+
+        private async void BrowseOverlayPath(object? sender, RoutedEventArgs args)
+        {
+            try
+            {
+                var storageProvider = TopLevel.GetTopLevel(this)?.StorageProvider;
+                if (storageProvider?.CanSave != true)
+                {
+                    SetStatus("File browsing is unavailable");
+                    return;
+                }
+
+                var textFileType = new FilePickerFileType("Text files")
+                {
+                    Patterns = ["*.txt"]
+                };
+                var selectedFile = await storageProvider.SaveFilePickerAsync(
+                    new FilePickerSaveOptions
+                    {
+                        Title = "Choose Overlay Output File",
+                        SuggestedFileName = Path.GetFileName(_outputWriter.OutputPath),
+                        DefaultExtension = "txt",
+                        FileTypeChoices = [textFileType],
+                        SuggestedFileType = textFileType
+                    });
+                var selectedPath = selectedFile?.TryGetLocalPath();
+                if (string.IsNullOrWhiteSpace(selectedPath))
+                    return;
+
+                if (_overlayPathText != null)
+                    _overlayPathText.Text = selectedPath;
+                else
+                    _outputWriter.OutputPath = selectedPath;
+
+                _diagnostics.Information("Overlay output path selected.");
+                SetStatus("Overlay output path updated");
+            }
+            catch (Exception ex)
+            {
+                _diagnostics.Error("Could not choose the overlay output path.", ex);
+                SetStatus($"Could not choose the overlay output path: {ex.Message}");
+            }
+        }
+
+        private async void CopyOverlayPath(object? sender, RoutedEventArgs args)
+        {
+            try
+            {
+                var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+                if (clipboard == null)
+                {
+                    SetStatus("Clipboard access is unavailable");
+                    return;
+                }
+
+                await clipboard.SetTextAsync(_outputWriter.OutputPath);
+                var feedbackVersion = ++_copyOverlayPathFeedbackVersion;
+                if (_copyOverlayPathButton != null)
+                    _copyOverlayPathButton.Content = "Copied!";
+                SetStatus("Overlay output path copied");
+
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), _closingCancellation.Token);
+                }
+                catch (OperationCanceledException)
+                    when (_closingCancellation.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                if (_copyOverlayPathButton != null &&
+                    feedbackVersion == _copyOverlayPathFeedbackVersion)
+                    _copyOverlayPathButton.Content = "Copy";
+            }
+            catch (Exception ex)
+            {
+                _diagnostics.Error("Could not copy the overlay output path.", ex);
+                SetStatus($"Could not copy the overlay output path: {ex.Message}");
             }
         }
 
@@ -1851,28 +2146,28 @@ namespace Aviscribe.UI
             switch (target)
             {
                 case ManualMoonTarget.Pending:
-                    _state.MoveToPending(moon);
-                    SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} -> pending");
+                    _runCoordinator.SetPending(moon);
+                    SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} → pending");
                     break;
 
                 case ManualMoonTarget.Collected:
-                    _state.MoveToCollected(moon);
-                    SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} -> counted");
+                    _runCoordinator.SetCounted(moon);
+                    SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} → counted");
                     break;
 
                 case ManualMoonTarget.Uncounted:
-                    _state.MoveToUncounted(moon);
-                    SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} -> wrong");
+                    _runCoordinator.SetUncounted(moon);
+                    SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} → wrong");
                     break;
 
                 case ManualMoonTarget.All:
-                    _state.Remove(moon);
+                    _runCoordinator.Remove(moon);
                     SetCommandFeedback($"#{moonNumber} {FormatMoon(moon)} removed");
                     break;
             }
 
             _diagnostics.Information(
-                $"Manual moon update: {_state.CurrentKingdom} #{moonNumber} -> {target}.");
+                $"Manual moon update: {_state.CurrentKingdom} #{moonNumber} → {target}.");
 
             _moonNumberText.Focus();
             _moonNumberText.SelectAll();
@@ -1882,6 +2177,79 @@ namespace Aviscribe.UI
         {
             if (_commandFeedbackText != null)
                 _commandFeedbackText.Text = text;
+        }
+
+        private void OnLocalMoonActionObserved(
+            object? sender,
+            SharedRunEvent runEvent)
+        {
+            var moon = _runCoordinator.Catalog.Resolve(runEvent.Moon);
+            if (moon == null)
+                return;
+
+            var message = DescribeLocalMoonAction(runEvent, moon);
+            Dispatcher.UIThread.Post(() => AddAction(message));
+        }
+
+        private string DescribeLocalMoonAction(
+            SharedRunEvent runEvent,
+            Moon moon)
+        {
+            var subject = FormatLocalActionSubject(moon);
+            if (!runEvent.Changed)
+                return $"[DUPE] {subject} → {DescribeCurrentMoonList(moon)}";
+
+            return $"{subject} → {DescribeCurrentMoonList(moon)}";
+        }
+
+        private string FormatLocalActionSubject(Moon moon)
+        {
+            var moonName = FormatMoon(moon);
+            if (!_onlineRun.IsJoined)
+                return moonName;
+
+            var displayName = _onlineRun.Participants
+                .FirstOrDefault(item => item.ParticipantId == _onlineRun.ParticipantId)
+                ?.DisplayName;
+            if (string.IsNullOrWhiteSpace(displayName))
+                displayName = _preferences.OnlineDisplayName;
+
+            return string.IsNullOrWhiteSpace(displayName)
+                ? moonName
+                : $"{displayName} - {moonName}";
+        }
+
+        private string DescribeCurrentMoonList(Moon moon)
+        {
+            var snapshot = _state.CreateSnapshot();
+            if (snapshot.Pending.Any(item => SameMoon(item, moon)))
+                return "Pending";
+            if (snapshot.Collected.Any(item => SameMoon(item, moon)))
+                return "Counted";
+            if (snapshot.UncountedCollected.Any(item => SameMoon(item, moon)))
+                return "Wrong";
+            return "Removed";
+        }
+
+        private void AddAction(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return;
+
+            _recentActions.Enqueue(message);
+            while (_recentActions.Count > 1)
+                _recentActions.Dequeue();
+            RefreshActionLog();
+        }
+
+        private void RefreshActionLog()
+        {
+            if (_actionList == null)
+                return;
+
+            _actionList.ItemsSource = _recentActions.Count == 0
+                ? ["No actions yet"]
+                : _recentActions.Reverse().ToList();
         }
 
         private void WireListInteractions()
@@ -1909,7 +2277,7 @@ namespace Aviscribe.UI
                     {
                         if (target != ManualMoonTarget.All)
                         {
-                            _state.Remove(item.Moon);
+                            _runCoordinator.Remove(item.Moon);
                             SetStatus($"Removed {FormatMoon(item.Moon)}");
                         }
 
@@ -2043,18 +2411,18 @@ namespace Aviscribe.UI
             switch (source)
             {
                 case ManualMoonTarget.All:
-                    _state.MoveToPending(moon);
+                    _runCoordinator.SetPending(moon);
                     SetStatus($"Added {FormatMoon(moon)} to pending");
                     break;
 
                 case ManualMoonTarget.Pending:
-                    _state.MoveToCollected(moon);
+                    _runCoordinator.SetCounted(moon);
                     SetStatus($"Collected {FormatMoon(moon)}");
                     break;
 
                 case ManualMoonTarget.Collected:
                 case ManualMoonTarget.Uncounted:
-                    _state.MoveToPending(moon);
+                    _runCoordinator.SetPending(moon);
                     SetStatus($"Moved {FormatMoon(moon)} to pending");
                     break;
             }
@@ -2073,23 +2441,23 @@ namespace Aviscribe.UI
                 case ManualMoonTarget.All:
                     if (source != ManualMoonTarget.All)
                     {
-                        _state.Remove(moon);
+                        _runCoordinator.Remove(moon);
                         SetStatus($"Removed {FormatMoon(moon)}");
                     }
                     break;
 
                 case ManualMoonTarget.Pending:
-                    _state.MoveToPending(moon);
+                    _runCoordinator.SetPending(moon);
                     SetStatus($"Moved {FormatMoon(moon)} to pending");
                     break;
 
                 case ManualMoonTarget.Collected:
-                    _state.MoveToCollected(moon);
+                    _runCoordinator.SetCounted(moon);
                     SetStatus($"Moved {FormatMoon(moon)} to collected");
                     break;
 
                 case ManualMoonTarget.Uncounted:
-                    _state.MoveToUncounted(moon);
+                    _runCoordinator.SetUncounted(moon);
                     SetStatus($"Moved {FormatMoon(moon)} to wrong moons");
                     break;
             }
@@ -2130,10 +2498,13 @@ namespace Aviscribe.UI
 
         private MoonListItem CreatePendingListItem(Moon moon)
         {
-            return new MoonListItem(
+            var item = new MoonListItem(
                 moon,
                 $"{moon.Id}. {FormatMoon(moon)}",
                 _state.Settings.ShowPendingMoonImages ? GetMoonImage(moon) : null);
+            item.IsTracked = _onlineRun.IsJoined &&
+                _onlineRun.IsPendingOwnedByLocalParticipant(moon);
+            return item;
         }
 
         private Bitmap? GetMoonImage(Moon moon)
@@ -2234,6 +2605,230 @@ namespace Aviscribe.UI
             });
         }
 
+        private void OpenOnlineRun(object? sender, RoutedEventArgs args)
+        {
+            if (!_onlineRun.IsJoined)
+                return;
+
+            if (_onlineRunWindow != null)
+            {
+                _onlineRunWindow.Activate();
+                return;
+            }
+
+            UpdateCaptureSharingState();
+            _onlineRunWindow = new OnlineRunHostWindow(CreateOnlineRunView(
+                showCloseButton: true));
+            _onlineRunWindow.Closed += (_, _) => _onlineRunWindow = null;
+            _onlineRunWindow.Show(this);
+        }
+
+        private OnlineRunView CreateOnlineRunView(bool showCloseButton = false) =>
+            new(
+                _onlineRun,
+                _preferences,
+                PersistAppPreferences,
+                () => _runCoordinator.CreateFactSnapshot().Count > 0,
+                ConfirmReplaceWithOnlineRunAsync,
+                () => _state.Settings.Clone(),
+                showCloseButton);
+
+        private void UpdateCaptureSharingState(bool? isActive = null)
+        {
+            var active = isActive ??
+                (_video?.State == CaptureState.Running && _processorRunning);
+            if (_onlineRun.CaptureSharingArmed == active)
+            {
+                Dispatcher.UIThread.Post(UpdateOnlineUi);
+                return;
+            }
+            _onlineRun.CaptureSharingArmed = active;
+            _diagnostics.Debug(active
+                ? "Multiplayer capture sharing is active."
+                : "Multiplayer capture sharing is paused.");
+        }
+
+        private Task<bool> ConfirmReplaceWithOnlineRunAsync() => ConfirmRunResetAsync(
+            "Replace Local Run?",
+            "Joining a multiplayer room will replace the current local moon state with the room's run. Local capture, route order, language, hotkeys, and overlay settings are kept.",
+            "Replace and Connect");
+
+        private void UpdateOnlineUi()
+        {
+            if (_onlineRunButton == null) return;
+            var joined = _onlineRun.IsJoined;
+            var captureActive = _onlineRun.CaptureSharingArmed;
+            var onlinePlayers = _onlineRun.Participants.Count(item => item.IsOnline);
+            var captureState = _video?.State ?? CaptureState.Stopped;
+            if (_captureButton != null)
+            {
+                _captureButton.Content = captureState switch
+                {
+                    CaptureState.Running => "Capture Running",
+                    CaptureState.Starting => "Starting Capture...",
+                    CaptureState.Stopping => "Stopping Capture...",
+                    CaptureState.Faulted => "Restart Capture",
+                    _ => "Start Capture"
+                };
+                _captureButton.IsEnabled = captureState is not
+                    (CaptureState.Starting or CaptureState.Stopping);
+            }
+            if (_settingsCaptureButton != null)
+            {
+                _settingsCaptureButton.Content = captureState switch
+                {
+                    CaptureState.Running => "Refresh Preview",
+                    CaptureState.Starting => "Starting Capture...",
+                    CaptureState.Stopping => "Stopping Capture...",
+                    CaptureState.Faulted => "Restart / Refresh Preview",
+                    _ => "Start / Refresh Preview"
+                };
+                _settingsCaptureButton.IsEnabled = captureState is not
+                    (CaptureState.Starting or CaptureState.Stopping);
+            }
+            _onlineRunButton.Content = "Multiplayer";
+            _onlineRunButton.IsVisible = joined;
+            if (_multiplayerStatusPanel != null)
+                _multiplayerStatusPanel.IsVisible = true;
+            if (_multiplayerStatusText != null)
+                _multiplayerStatusText.Text = !joined
+                    ? _video?.State switch
+                    {
+                        CaptureState.Running when captureActive => "Capture active",
+                        CaptureState.Starting => "Capture starting",
+                        CaptureState.Stopping => "Capture stopping",
+                        CaptureState.Faulted => "Capture faulted",
+                        _ => "Capture stopped"
+                    }
+                    : _onlineRun.State switch
+                    {
+                        OnlineConnectionState.Connected when captureActive =>
+                            $"Sharing capture · {onlinePlayers} players",
+                        OnlineConnectionState.Connected =>
+                            $"Room connected · capture paused · {onlinePlayers} players",
+                        OnlineConnectionState.Reconnecting when captureActive =>
+                            "Reconnecting · capture queued",
+                        OnlineConnectionState.Reconnecting =>
+                            "Reconnecting · capture paused",
+                        OnlineConnectionState.SharingPaused => "Room connected · sharing paused",
+                        _ => "Room offline"
+                    };
+            if (_multiplayerStatusDot != null)
+            {
+                var color = !joined
+                    ? _video?.State switch
+                    {
+                        CaptureState.Running when captureActive => "#2E9B68",
+                        CaptureState.Starting or CaptureState.Stopping => "#D99227",
+                        _ => "#C65353"
+                    }
+                    : _onlineRun.State == OnlineConnectionState.Connected && captureActive
+                        ? "#2E9B68"
+                        : _onlineRun.State is OnlineConnectionState.Connected or
+                            OnlineConnectionState.Reconnecting or
+                            OnlineConnectionState.SharingPaused
+                            ? "#D99227"
+                            : "#C65353";
+                _multiplayerStatusDot.Background =
+                    new SolidColorBrush(Color.Parse(color));
+            }
+
+            LogNewOnlineMoonActions(joined);
+
+            var configuration = (
+                _state.Settings.Category,
+                _state.Settings.IncludePostGameKingdoms);
+            if (joined && _onlineConfigurationSeen != configuration)
+            {
+                _onlineConfigurationSeen = configuration;
+                RefreshKingdoms(_state.CurrentKingdom);
+                RefreshMoonSelect();
+                RefreshMoonList();
+                ShowNextReview();
+            }
+            else if (!joined)
+            {
+                _onlineConfigurationSeen = null;
+            }
+
+            if (_categorySelect != null)
+            {
+                _categorySelect.IsEnabled = !joined;
+                if (joined &&
+                    !Equals(_categorySelect.SelectedItem, _state.Settings.Category))
+                {
+                    _categorySelect.SelectedItem = _state.Settings.Category;
+                }
+            }
+            if (_includePostGameCheck != null)
+            {
+                _includePostGameCheck.IsEnabled = !joined;
+                if (joined)
+                {
+                    _updatingIncludePostGameCheck = true;
+                    _includePostGameCheck.IsChecked = _state.Settings.IncludePostGameKingdoms;
+                    _updatingIncludePostGameCheck = false;
+                }
+            }
+            if (_resetRunButton != null)
+            {
+                _resetRunButton.IsEnabled = !joined;
+                ToolTip.SetTip(
+                    _resetRunButton,
+                    joined
+                        ? "Reset the run from the Multiplayer screen while connected to a room."
+                        : "Clear every kingdom list and all items waiting for review.");
+                ToolTip.SetShowOnDisabled(_resetRunButton, true);
+            }
+
+            if (joined && _onlineGenerationSeen != _onlineRun.Generation)
+            {
+                _onlineGenerationSeen = _onlineRun.Generation;
+                ClearAmbiguousReviews();
+                ShowNextReview();
+            }
+            else if (!joined)
+            {
+                _onlineGenerationSeen = 0;
+            }
+        }
+
+        private void LogNewOnlineMoonActions(bool joined)
+        {
+            if (!joined || _onlineRun.SessionId == null)
+            {
+                _onlineSessionSeen = null;
+                _latestOnlineActionRevision = 0;
+                return;
+            }
+
+            if (_onlineSessionSeen != _onlineRun.SessionId)
+            {
+                _onlineSessionSeen = _onlineRun.SessionId;
+                _latestOnlineActionRevision = _onlineRun.Revision;
+                return;
+            }
+
+            var newItems = _onlineRun.RecentEvents
+                .Where(item =>
+                    item.Revision > _latestOnlineActionRevision &&
+                    item.Moon != null)
+                .OrderBy(item => item.Revision)
+                .ToList();
+            foreach (var item in newItems)
+            {
+                if (item.ActorParticipantId != _onlineRun.ParticipantId)
+                    AddAction(_onlineRun.DescribeFeedItem(item));
+            }
+
+            if (newItems.Count > 0)
+            {
+                _latestOnlineActionRevision = Math.Max(
+                    _latestOnlineActionRevision,
+                    newItems.Max(item => item.Revision));
+            }
+        }
+
         protected override void OnClosed(EventArgs e)
         {
             _diagnostics.Information("Aviscribe is shutting down.");
@@ -2258,6 +2853,15 @@ namespace Aviscribe.UI
             }
 
             _processor?.Dispose();
+            _settingsOnlineRunView?.Dispose();
+            _settingsOnlineRunView = null;
+            try
+            {
+                _onlineRun.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            catch
+            {
+            }
             _snapshotBroker.Dispose();
             _previewBitmap?.Dispose();
             foreach (var bitmap in _moonImageCache.Values)
@@ -2269,8 +2873,28 @@ namespace Aviscribe.UI
         }
 
         private sealed record MoonListItem(Moon Moon, string Label, Bitmap? Image = null)
+            : INotifyPropertyChanged
         {
+            private bool _isTracked;
+
             public bool HasImage => Image != null;
+
+            public bool IsTracked
+            {
+                get => _isTracked;
+                set
+                {
+                    if (_isTracked == value)
+                        return;
+
+                    _isTracked = value;
+                    PropertyChanged?.Invoke(
+                        this,
+                        new PropertyChangedEventArgs(nameof(IsTracked)));
+                }
+            }
+
+            public event PropertyChangedEventHandler? PropertyChanged;
 
             public override string ToString() => Label;
         }
@@ -2293,6 +2917,13 @@ namespace Aviscribe.UI
 
         private sealed record AccentColorListItem(
             AccentColorPreference Preference,
+            string Name)
+        {
+            public override string ToString() => Name;
+        }
+
+        private sealed record TextSizeListItem(
+            TextSizePreference Preference,
             string Name)
         {
             public override string ToString() => Name;

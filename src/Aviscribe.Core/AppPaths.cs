@@ -24,9 +24,6 @@ public static class AppPaths
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         Environment.GetEnvironmentVariable("XDG_STATE_HOME"));
 
-    public static string TessData =>
-        Path.Combine(DataFolder, "tessdata");
-
     public static string MoonList =>
         Path.Combine(DataFolder, "moon-list.json");
 
@@ -53,6 +50,9 @@ public static class AppPaths
 
     public static string AppPreferencesPath =>
         Path.Combine(UserDataFolder, "preferences.json");
+
+    public static string OnlineResumePath =>
+        Path.Combine(UserDataFolder, "online-resume.json");
 
     public static AppPlatform CurrentPlatform()
     {

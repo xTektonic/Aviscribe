@@ -7,6 +7,22 @@ namespace Aviscribe.Core.Tests;
 
 public sealed class FrameProcessorDiagnosticsTests
 {
+    private static readonly Rect[] StoryBackgroundPatches =
+    [
+        new(1480, 876, 24, 24),
+        new(1524, 824, 24, 24),
+        new(1396, 828, 24, 24),
+        new(700, 944, 24, 24)
+    ];
+
+    private static readonly Scalar[] StoryBackgroundColors =
+    [
+        new(2.1, 0.7, 225.1),
+        new(2.7, 0.9, 224.9),
+        new(9.4, 4.1, 224.6),
+        new(10.7, 5.0, 225.3)
+    ];
+
     [Fact]
     public async Task OcrEventsAreAlwaysLogged()
     {
@@ -79,6 +95,80 @@ public sealed class FrameProcessorDiagnosticsTests
         Assert.Contains(
             "OCR RESULT (Talkatoo): \"diagnostic probe\"",
             diagnostics.Messages);
+    }
+
+    [Fact]
+    public async Task AdaptiveTalkatooDoesNotBlockStoryMoonOcr()
+    {
+        var repository = MoonRepository.LoadDefault();
+        var storyMoon = repository.Moons.First(moon =>
+            moon.IsStory && !string.IsNullOrWhiteSpace(moon.ChineseTraditional));
+        var diagnostics = new RecordingDiagnostics();
+        using var ocr = new RecordingOcrService(storyMoon.ChineseTraditional);
+        var state = new GameState();
+        state.Settings.AdaptiveTalkatooDetection = true;
+        state.SetKingdom(storyMoon.Kingdom);
+        var matcher = new MoonMatcher(
+            repository,
+            state.Settings.InputLanguage,
+            state.Settings.OutputLanguage);
+        using var processor = new FrameProcessor(
+            ocr,
+            matcher,
+            state,
+            diagnostics: diagnostics);
+        using var frame = CreateStoryMoonFrame();
+
+        processor.Start();
+        try
+        {
+            var start = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            for (var index = 0; index < 12 && !ocr.Read.IsSet; index++)
+            {
+                processor.PushFrame(new VideoFrame(
+                    frame.Clone(),
+                    start + CaptureTiming.PreferredFrameInterval * index));
+                await Task.Delay(20, TestContext.Current.CancellationToken);
+            }
+
+            Assert.True(
+                ocr.Read.Wait(
+                    TimeSpan.FromSeconds(5),
+                    TestContext.Current.CancellationToken),
+                "Story-moon OCR was not enqueued while adaptive Talkatoo detection was enabled.");
+        }
+        finally
+        {
+            processor.Stop();
+        }
+
+        Assert.Contains(
+            diagnostics.Messages,
+            message => message.StartsWith(
+                "ENQUEUE OCR (StoryMoon",
+                StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            diagnostics.Messages,
+            message => message.StartsWith(
+                "ENQUEUE OCR (Talkatoo",
+                StringComparison.Ordinal));
+    }
+
+    private static Mat CreateStoryMoonFrame()
+    {
+        var image = new Mat(
+            new Size(1920, 1080),
+            MatType.CV_8UC3,
+            Scalar.Black);
+        for (var index = 0; index < StoryBackgroundPatches.Length; index++)
+        {
+            Cv2.Rectangle(
+                image,
+                StoryBackgroundPatches[index],
+                StoryBackgroundColors[index],
+                thickness: -1);
+        }
+        return image;
     }
 
     private sealed class RecordingOcrService(string result) :

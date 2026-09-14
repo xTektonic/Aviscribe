@@ -72,13 +72,6 @@ $targets = @(
         )
     }
     [pscustomobject]@{
-        Path = "src/Aviscribe.Windows.Capture/Properties/AssemblyInfo.cs"
-        Replacements = @(
-            [pscustomobject]@{ Pattern = '(?m)^(\[assembly: AssemblyVersion\(")[^"]+("\)\]\s*)$'; Value = '${1}' + $assemblyVersion + '${2}' }
-            [pscustomobject]@{ Pattern = '(?m)^(\[assembly: AssemblyFileVersion\(")[^"]+("\)\]\s*)$'; Value = '${1}' + $assemblyVersion + '${2}' }
-        )
-    }
-    [pscustomobject]@{
         Path = "README.md"
         Replacements = @(
             [pscustomobject]@{ Pattern = '(?m)^(\./tools/set-version\.ps1 )\S+(\s*)$'; Value = '${1}' + $Version + '${2}' }

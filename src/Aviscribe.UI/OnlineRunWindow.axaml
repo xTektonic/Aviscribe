@@ -1,0 +1,220 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Aviscribe.UI.OnlineRunView">
+  <UserControl.Styles>
+    <Style Selector="Border.statusDot">
+      <Setter Property="Width" Value="9"/>
+      <Setter Property="Height" Value="9"/>
+      <Setter Property="CornerRadius" Value="5"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.statusDot.connected">
+      <Setter Property="Background" Value="{DynamicResource SuccessBrush}"/>
+    </Style>
+    <Style Selector="Border.statusDot.warning">
+      <Setter Property="Background" Value="{DynamicResource WarningBrush}"/>
+    </Style>
+    <Style Selector="Border.statusDot.disconnected">
+      <Setter Property="Background" Value="{DynamicResource DangerBrush}"/>
+    </Style>
+  </UserControl.Styles>
+  <Grid Name="layoutRoot"
+        Margin="20,0,12,20"
+        MaxWidth="960"
+        HorizontalAlignment="Stretch"
+        RowDefinitions="Auto,Auto,*"
+        RowSpacing="14">
+    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+      <StackPanel Spacing="3">
+        <TextBlock Classes="pageTitle" Text="Multiplayer"/>
+        <StackPanel Orientation="Horizontal" Spacing="7">
+          <Border Name="multiplayerStatusDot" Classes="statusDot disconnected"/>
+          <TextBlock Name="txtOnlineStatus" Classes="bodyMuted" Text="Not in a room" TextWrapping="Wrap"/>
+        </StackPanel>
+      </StackPanel>
+      <Button Name="btnOnlineLeave"
+              Grid.Column="1"
+              Content="Leave Room"
+              IsVisible="False"
+              VerticalAlignment="Top"
+              ToolTip.Tip="Leave this room and delete the saved rejoin credential."/>
+      <Button Name="btnClose" Grid.Column="2" Content="Close" VerticalAlignment="Top"
+              ToolTip.Tip="Close this window without leaving the room."/>
+    </Grid>
+
+    <Border Grid.Row="1" Classes="soft">
+      <TextBlock Name="txtOnlineMessage" Classes="caption" Text="Requires a SMOO+ Server build with Aviscribe integration." TextWrapping="Wrap"/>
+    </Border>
+
+    <Grid Grid.Row="2">
+      <ScrollViewer Name="pnlDisconnected" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Spacing="14">
+          <Border Classes="card">
+            <StackPanel Spacing="10">
+              <TextBlock Classes="sectionTitle" Text="Server"/>
+              <Grid ColumnDefinitions="*,120" ColumnSpacing="10">
+                <StackPanel Spacing="4">
+                  <TextBlock Classes="caption" Text="ADDRESS"/>
+                  <TextBox Name="txtServerAddress" PlaceholderText="127.0.0.1"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="4">
+                  <TextBlock Classes="caption" Text="PORT"/>
+                  <TextBox Name="txtServerPort" PlaceholderText="1027"/>
+                </StackPanel>
+              </Grid>
+              <StackPanel Spacing="4">
+                <TextBlock Classes="caption" Text="YOUR DISPLAY NAME"/>
+                <TextBox Name="txtDisplayName" MaxLength="32"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <TextBlock Classes="sectionTitle" Text="Create a room"/>
+                <TextBlock Classes="bodyMuted" Text="Starts a blank shared run and gives you a room join code." TextWrapping="Wrap"/>
+                <Button Name="btnCreateRun" Classes="primary" Content="Create Room" HorizontalAlignment="Left"
+                        ToolTip.Tip="Create a multiplayer room using the server and display name above."/>
+              </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Classes="card">
+              <StackPanel Spacing="10">
+                <TextBlock Classes="sectionTitle" Text="Join a room"/>
+                <TextBox Name="txtJoinCode"
+                         Width="150"
+                         HorizontalAlignment="Left"
+                         PlaceholderText="XXXX-XXXX"
+                         MaxLength="9"/>
+                <Button Name="btnJoinRun" Classes="primary" Content="Join Room" HorizontalAlignment="Left"
+                        ToolTip.Tip="Join the room identified by the code above."/>
+              </StackPanel>
+            </Border>
+          </Grid>
+          <Button Name="btnResumeRun" Content="Rejoin previous room" HorizontalAlignment="Left"
+                  ToolTip.Tip="Reconnect using the last saved room credential."/>
+        </StackPanel>
+      </ScrollViewer>
+
+      <ScrollViewer Name="pnlConnected"
+                    IsVisible="False"
+                    VerticalContentAlignment="Stretch"
+                    HorizontalScrollBarVisibility="Disabled">
+        <Grid RowDefinitions="Auto,Auto,*" RowSpacing="14">
+          <Border Classes="card">
+            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="16" RowSpacing="10">
+              <StackPanel Grid.ColumnSpan="2" Spacing="3">
+                <TextBlock Classes="caption" Text="ROOM JOIN CODE"/>
+                <Grid ColumnDefinitions="150,Auto" ColumnSpacing="8" HorizontalAlignment="Left">
+                  <TextBox Name="txtConnectedCode"
+                           IsReadOnly="True"
+                           Text="—"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           Padding="8,3"
+                           MinHeight="36"
+                           VerticalContentAlignment="Center"/>
+                  <Button Name="btnCopyJoinCode"
+                          Grid.Column="1"
+                          Content="Copy"
+                          ToolTip.Tip="Copy the room join code to the clipboard."/>
+                </Grid>
+              </StackPanel>
+              <StackPanel Grid.Row="1" Spacing="3">
+                <TextBlock Classes="caption" Text="ROOM OWNER"/>
+                <TextBlock Name="txtOwner" FontWeight="SemiBold" Text="—"/>
+              </StackPanel>
+              <StackPanel Grid.Row="1" Grid.Column="1" Spacing="3">
+                <TextBlock Classes="caption" Text="CAPTURE SHARING"/>
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                  <Border Name="captureSharingDot" Classes="statusDot disconnected"/>
+                  <TextBlock Name="txtCaptureSharing" FontWeight="SemiBold" Text="Paused · start capture"/>
+                </StackPanel>
+              </StackPanel>
+            </Grid>
+          </Border>
+
+          <Border Name="pnlOwnerControls" Grid.Row="1" Classes="card" IsVisible="False">
+            <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="14">
+              <StackPanel Spacing="3">
+                <TextBlock Classes="sectionTitle" Text="Run controls"/>
+                <TextBlock Classes="bodyMuted" Text="Only the room owner can change or end the current run." TextWrapping="Wrap"/>
+              </StackPanel>
+
+              <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="14">
+                <StackPanel Spacing="4">
+                  <TextBlock Classes="caption" Text="RUN CATEGORY"/>
+                  <ComboBox Name="cbOnlineCategory"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="4">
+                  <TextBlock Classes="caption" Text="MOON LIST"/>
+                  <CheckBox Name="chkOnlinePostgame"
+                            Content="Include postgame kingdoms"
+                            MinHeight="34"
+                            VerticalContentAlignment="Center"
+                            ToolTip.Tip="Allow Cloud, Ruined, Mushroom, Dark, and Darker kingdoms in the current shared run."/>
+                </StackPanel>
+              </Grid>
+
+              <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                <Button Name="btnOnlineApplySettings" Classes="primary"
+                        Content="Apply Settings"
+                        ToolTip.Tip="Change the category and postgame mode without clearing shared moon state."/>
+                <TextBlock Grid.Column="1" Classes="caption"
+                           Text="Update this run in place for every player; existing moon state is preserved."
+                           TextWrapping="Wrap" VerticalAlignment="Center"/>
+              </Grid>
+
+              <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <StackPanel Spacing="3">
+                  <Button Name="btnOnlineReset" Content="Start New Run" HorizontalAlignment="Left"
+                          ToolTip.Tip="Clear all shared moon state and start a new run with the selected settings."/>
+                  <TextBlock Classes="caption" Text="Clear shared moon state and use the settings above." TextWrapping="Wrap"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="3" HorizontalAlignment="Right">
+                  <Button Name="btnOnlineEnd" Content="Close Room" Classes="danger" HorizontalAlignment="Right"
+                          ToolTip.Tip="Permanently close this room for every player."/>
+                  <TextBlock Classes="caption" Text="Close the room for everyone." TextAlignment="Right"/>
+                </StackPanel>
+              </Grid>
+            </Grid>
+          </Border>
+
+          <Grid Grid.Row="2"
+                ColumnDefinitions="0.8*,1.2*"
+                ColumnSpacing="12"
+                MinHeight="194">
+            <Border Classes="card">
+              <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                <TextBlock Classes="sectionTitle" Text="Players"/>
+                <ListBox Name="lstOnlineParticipants" Grid.Row="1" MinHeight="160">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:CompileBindings="False">
+                      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="9" Margin="2,4">
+                        <Border Classes="statusDot" Background="{Binding StatusBrush}"/>
+                        <TextBlock Grid.Column="1" Text="{Binding DisplayName}"/>
+                        <TextBlock Grid.Column="2" Classes="caption" Text="{Binding Detail}"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </Grid>
+            </Border>
+            <Border Grid.Column="1" Classes="card">
+              <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                <TextBlock Classes="sectionTitle" Text="Recent activity"/>
+                <ListBox Name="lstOnlineEvents" Grid.Row="1" MinHeight="160">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:CompileBindings="False">
+                      <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="2,4"/>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </Grid>
+            </Border>
+          </Grid>
+        </Grid>
+      </ScrollViewer>
+    </Grid>
+  </Grid>
+</UserControl>

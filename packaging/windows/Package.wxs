@@ -22,9 +22,14 @@
                   Name="Aviscribe"
                   Description="Talkatoo run assistant"
                   Advertise="yes"
+                  Icon="Aviscribe.exe"
                   WorkingDirectory="INSTALLFOLDER" />
       </File>
     </Component>
+
+    <Icon Id="Aviscribe.exe"
+          SourceFile="$(var.PublishDir)\Aviscribe.exe" />
+    <Property Id="ARPPRODUCTICON" Value="Aviscribe.exe" />
 
     <Files Include="$(var.PublishDir)\**"
            Directory="INSTALLFOLDER">

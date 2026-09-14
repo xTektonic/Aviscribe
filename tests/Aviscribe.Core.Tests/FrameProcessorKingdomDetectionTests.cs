@@ -47,6 +47,7 @@ public sealed class FrameProcessorKingdomDetectionTests
         var repository = MoonRepository.LoadDefault();
         var state = new GameState();
         state.SetKingdom("Cascade");
+        state.Settings.AutomaticallySwitchKingdoms = false;
         var textDetector = new CountingAbsentTextDetector();
         var kingdomDetector = new ScriptedKingdomDetector(Match("Sand"));
         using var processor = new FrameProcessor(

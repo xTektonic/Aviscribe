@@ -4,6 +4,8 @@ Aviscribe is a cross-platform Talkatoo translator for Super Mario Odyssey. Curre
 
 Aviscribe works by capturing gameplay from a camera, capture card, virtual camera, or application window, recognizing Talkatoo and moon collection text, and displaying that info for the user to see.
 
+Aviscribe can also synchronize a run between players through a compatible SMOO+ server. See [Multiplayer with SMOO+](docs/online-runs.md) for setup and usage.
+
 For support, feedback, and to be notified of new builds, join the [Discord server](https://discord.gg/ADDAuJVxjn).
 
 ![Aviscribe run interface](docs/images/aviscribe-ui.png)
@@ -58,7 +60,7 @@ chmod +x Aviscribe-*-x86_64.AppImage
 4. Configure the run and language, then use the **Run** screen to review pending,
    counted, and uncounted results.
 
-OCR uses the CPU by default. An optional WebGPU processor is available under **Settings > Setup > OCR processor**. Using the GPU can significantly decrease text and moon recognition times. If it cannot initialize, Aviscribe falls back to CPU processing.
+OCR uses WebGPU by default when it is available, which can significantly decrease text and moon recognition times. If WebGPU cannot initialize or fails during processing, Aviscribe automatically falls back to CPU processing. You can explicitly select CPU under **Settings > Setup > OCR processor**.
 
 Capture permissions depend on the platform:
 
@@ -107,18 +109,18 @@ dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-bui
 The packaging scripts produce self-contained builds for Windows x64, macOS Apple Silicon, and Linux x64. Set the version first if needed:
 
 ~~~powershell
-./tools/set-version.ps1 1.0.0
+./tools/set-version.ps1 1.0.6
 ~~~
 
 Run the package script on its target operating system:
 
 ~~~powershell
-./packaging/windows/package.ps1 -Version 1.0.0
+./packaging/windows/package.ps1 -Version 1.0.6
 ~~~
 
 ~~~text
-bash packaging/macos/package.sh 1.0.0
-bash packaging/linux/package.sh 1.0.0
+bash packaging/macos/package.sh 1.0.6
+bash packaging/linux/package.sh 1.0.6
 ~~~
 
 Packages and publish outputs are written to artifacts/.

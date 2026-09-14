@@ -4,6 +4,7 @@
         Width="780" Height="680"
         MinWidth="620" MinHeight="500"
         Title="Aviscribe Diagnostics"
+        Icon="avares://Aviscribe.UI/Assets/aviscribe-icon.png"
         WindowStartupLocation="CenterOwner">
   <Grid Margin="24" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="16">
     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
@@ -54,7 +55,8 @@
                 HorizontalAlignment="Right">
       <Button Name="btnOpenLogFolder" Content="Open Log Folder"
               ToolTip.Tip="Open the folder containing Aviscribe diagnostic logs."/>
-      <Button Name="btnCloseDiagnostics" Classes="primary" Content="Close"/>
+      <Button Name="btnCloseDiagnostics" Classes="primary" Content="Close"
+              ToolTip.Tip="Close the diagnostics window."/>
     </StackPanel>
   </Grid>
 </Window>
