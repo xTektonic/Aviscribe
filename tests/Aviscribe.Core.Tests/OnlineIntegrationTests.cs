@@ -59,6 +59,40 @@ public sealed class OnlineIntegrationTests
     }
 
     [Fact]
+    public async Task ConcurrentRunChangesLeaveEveryFactProjected()
+    {
+        var repository = MoonRepository.LoadDefault();
+        var state = new GameState();
+        var coordinator = new RunCoordinator(state, repository);
+        var moons = repository.Moons.Take(32).ToArray();
+        using var start = new ManualResetEventSlim();
+        var updates = moons
+            .Select(moon => Task.Run(() =>
+            {
+                start.Wait();
+                coordinator.SetPending(moon);
+            }))
+            .ToArray();
+
+        start.Set();
+        await Task.WhenAll(updates);
+
+        var facts = coordinator.CreateFactSnapshot();
+        var projection = state.CreateSnapshot();
+        foreach (var moon in moons)
+        {
+            Assert.Contains(facts, fact =>
+                fact.MoonId == moon.Id &&
+                fact.Kingdom.Equals(moon.Kingdom, StringComparison.OrdinalIgnoreCase) &&
+                fact.Hinted &&
+                !fact.Collected);
+            Assert.Contains(
+                projection.KingdomStates[moon.Kingdom].Pending,
+                candidate => Same(candidate, moon));
+        }
+    }
+
+    [Fact]
     public void CatalogHashIgnoresTranslationsButTracksGameplayMetadata()
     {
         var original = new Moon
@@ -149,8 +183,31 @@ public sealed class OnlineIntegrationTests
             ActorDisplayName = "Owner"
         });
 
-        Assert.Equal($"Runner - {moon.English} → Counted", collection);
+        Assert.Equal($"Runner - {moon.English} → Collected", collection);
         Assert.Equal("Owner started a new run.", reset);
+    }
+
+    [Fact]
+    public void MultiplayerFeedDescriptionsRemainStableAfterPlacementChanges()
+    {
+        var repository = MoonRepository.LoadDefault();
+        var runs = new RunCoordinator(new GameState(), repository);
+        var online = new OnlineRunCoordinator(runs);
+        var moon = repository.Moons.First();
+        var wire = runs.Catalog.ToWire(moon);
+        var item = new OnlineFeedItem
+        {
+            Kind = nameof(RunEventKind.HintObserved),
+            ActorDisplayName = "Runner",
+            Moon = new WireMoonKeyDto { KingdomId = wire.KingdomId, MoonId = wire.MoonId }
+        };
+
+        var before = online.DescribeFeedItem(item);
+        runs.SetCounted(moon);
+        var after = online.DescribeFeedItem(item);
+
+        Assert.Equal($"Runner - {moon.English} → Hinted", before);
+        Assert.Equal(before, after);
     }
 
     [Fact]
@@ -177,7 +234,8 @@ public sealed class OnlineIntegrationTests
              Feed(2, remoteMoon, RunEventKind.HintObserved, remotePlayer)],
             localPlayer,
             generationChanged: false,
-            afterRevision: 0);
+            afterRevision: 0,
+            snapshotRevision: 2);
 
         Assert.True(tracker.Contains(localMoon));
         Assert.False(tracker.Contains(remoteMoon));
@@ -200,9 +258,31 @@ public sealed class OnlineIntegrationTests
             [Feed(4, moon, RunEventKind.HintObserved, remotePlayer)],
             localPlayer,
             generationChanged: false,
-            afterRevision: 4);
+            afterRevision: 4,
+            snapshotRevision: 4);
 
         Assert.True(tracker.Contains(moon));
+    }
+
+    [Fact]
+    public void SnapshotDropsStaleOwnershipWhenRetainedFeedHasARevisionGap()
+    {
+        var localPlayer = Guid.NewGuid();
+        var remotePlayer = Guid.NewGuid();
+        var localMoon = new WireMoonKey(1, 10);
+        var unrelatedMoon = new WireMoonKey(1, 11);
+        var tracker = new LocalPendingMoonTracker();
+        tracker.Apply(localMoon, RunEventKind.HintObserved, addedByLocalParticipant: true);
+
+        tracker.Reconcile(
+            [Fact(localMoon, hinted: true, collected: false)],
+            [Feed(5, unrelatedMoon, RunEventKind.HintObserved, remotePlayer)],
+            localPlayer,
+            generationChanged: false,
+            afterRevision: 1,
+            snapshotRevision: 5);
+
+        Assert.False(tracker.Contains(localMoon));
     }
 
     [Fact]

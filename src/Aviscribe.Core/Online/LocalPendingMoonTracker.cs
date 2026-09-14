@@ -33,14 +33,19 @@ internal sealed class LocalPendingMoonTracker
         IEnumerable<OnlineFeedItem> recentEvents,
         Guid participantId,
         bool generationChanged,
-        long afterRevision)
+        long afterRevision,
+        long snapshotRevision)
     {
-        if (generationChanged)
+        var orderedEvents = recentEvents
+            .OrderBy(item => item.Revision)
+            .ToList();
+        var historyIsComplete = snapshotRevision <= afterRevision ||
+                                (orderedEvents.Count > 0 && orderedEvents[0].Revision <= afterRevision + 1);
+        if (generationChanged || !historyIsComplete)
             _moons.Clear();
 
-        foreach (var item in recentEvents
-                     .Where(item => generationChanged || item.Revision > afterRevision)
-                     .OrderBy(item => item.Revision))
+        foreach (var item in orderedEvents
+                     .Where(item => generationChanged || item.Revision > afterRevision))
         {
             if (item.Moon == null ||
                 !Enum.TryParse<RunEventKind>(item.Kind, out var kind))

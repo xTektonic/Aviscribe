@@ -3,6 +3,7 @@ namespace Aviscribe.Core.Online;
 public sealed class RunCoordinator
 {
     private readonly object _sync = new();
+    private readonly object _projectionSync = new();
     private readonly GameState _state;
     private readonly MoonRepository _repository;
     private readonly Dictionary<MoonFactKey, RunFact> _facts = new();
@@ -182,37 +183,40 @@ public sealed class RunCoordinator
 
     private void Project()
     {
-        Dictionary<string, (List<Moon> Pending, List<Moon> Counted, List<Moon> Wrong)> projected =
-            new(StringComparer.OrdinalIgnoreCase);
-        lock (_sync)
+        lock (_projectionSync)
         {
-            foreach (var item in _facts)
+            Dictionary<string, (List<Moon> Pending, List<Moon> Counted, List<Moon> Wrong)> projected =
+                new(StringComparer.OrdinalIgnoreCase);
+            lock (_sync)
             {
-                var moon = _repository.Moons.FirstOrDefault(candidate =>
-                    candidate.Id == item.Key.MoonId &&
-                    candidate.Kingdom.Equals(item.Key.Kingdom, StringComparison.OrdinalIgnoreCase));
-                if (moon == null) continue;
-                var fact = item.Value;
-                if (fact.Hinted && !fact.Collected)
+                foreach (var item in _facts)
                 {
-                    Get(projected, moon.Kingdom).Pending.Add(moon);
-                    if (moon.IsHintArt)
-                        Get(projected, moon.CollectionLocationKingdom).Pending.Add(moon);
+                    var moon = _repository.Moons.FirstOrDefault(candidate =>
+                        candidate.Id == item.Key.MoonId &&
+                        candidate.Kingdom.Equals(item.Key.Kingdom, StringComparison.OrdinalIgnoreCase));
+                    if (moon == null) continue;
+                    var fact = item.Value;
+                    if (fact.Hinted && !fact.Collected)
+                    {
+                        Get(projected, moon.Kingdom).Pending.Add(moon);
+                        if (moon.IsHintArt)
+                            Get(projected, moon.CollectionLocationKingdom).Pending.Add(moon);
+                    }
+                    if (!fact.Collected) continue;
+                    if (Counts(fact, moon)) Get(projected, moon.Kingdom).Counted.Add(moon);
+                    else Get(projected, moon.Kingdom).Wrong.Add(moon);
                 }
-                if (!fact.Collected) continue;
-                if (Counts(fact, moon)) Get(projected, moon.Kingdom).Counted.Add(moon);
-                else Get(projected, moon.Kingdom).Wrong.Add(moon);
             }
-        }
 
-        var current = _state.CreateSnapshot();
-        var states = projected.ToDictionary(
-            item => item.Key,
-            item => new KingdomStateSnapshot(item.Value.Pending, item.Value.Counted, item.Value.Wrong),
-            StringComparer.OrdinalIgnoreCase);
-        if (!states.ContainsKey(current.CurrentKingdom))
-            states[current.CurrentKingdom] = new KingdomStateSnapshot([], [], []);
-        _state.RestoreRun(current.CurrentKingdom, _state.Settings, states);
+            var current = _state.CreateSnapshot();
+            var states = projected.ToDictionary(
+                item => item.Key,
+                item => new KingdomStateSnapshot(item.Value.Pending, item.Value.Counted, item.Value.Wrong),
+                StringComparer.OrdinalIgnoreCase);
+            if (!states.ContainsKey(current.CurrentKingdom))
+                states[current.CurrentKingdom] = new KingdomStateSnapshot([], [], []);
+            _state.RestoreRun(current.CurrentKingdom, _state.Settings, states);
+        }
     }
 
     private bool Counts(RunFact fact, Moon moon) => fact.ManualClassification switch

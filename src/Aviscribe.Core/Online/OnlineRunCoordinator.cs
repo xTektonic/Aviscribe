@@ -425,7 +425,8 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
                 RecentEvents,
                 _credentials.ParticipantId,
                 generationChanged,
-                previousRevision);
+                previousRevision,
+                snapshot.Revision);
         }
         _runs.ApplySharedConfiguration(
             snapshot.Configuration.Category == "hardcore" ? RunCategory.Hardcore : RunCategory.Standard,
@@ -717,10 +718,8 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
             var moonName = moon?.English ?? $"Moon {item.Moon.KingdomId}:{item.Moon.MoonId}";
             var destination = item.Kind switch
             {
-                nameof(RunEventKind.HintObserved) when moon != null =>
-                    FormatPlacement(_runs.GetPlacement(moon)),
-                nameof(RunEventKind.CollectionObserved) when moon != null =>
-                    FormatPlacement(_runs.GetPlacement(moon)),
+                nameof(RunEventKind.HintObserved) => "Hinted",
+                nameof(RunEventKind.CollectionObserved) => "Collected",
                 nameof(RunEventKind.SetPending) => "Pending",
                 nameof(RunEventKind.SetCounted) => "Counted",
                 nameof(RunEventKind.SetUncounted) => "Wrong",
@@ -748,11 +747,4 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         };
     }
 
-    private static string FormatPlacement(RunMoonPlacement placement) => placement switch
-    {
-        RunMoonPlacement.Pending => "Pending",
-        RunMoonPlacement.Counted => "Counted",
-        RunMoonPlacement.Wrong => "Wrong",
-        _ => "Removed"
-    };
 }
