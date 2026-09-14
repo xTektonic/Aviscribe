@@ -3,7 +3,7 @@ param(
     [string]$OutputPath,
 
     [string]$FlashCapVersion = "1.11.9",
-    [string]$FlashCapCommit = "ba2de264b0c6bcd77c3ad2b65a83963393631e88",
+    [string]$FlashCapCommit = "1eccaf410285cf035c3c8ac00c8b15934065e347",
     [string]$PipeWireNetVersion = "0.2.1-alpha-aviscribe.1",
     [string]$PipeWireNetCommit = "263081ab3d5117c487cf8174548d98c38f4d32e8"
 )
