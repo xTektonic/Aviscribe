@@ -30,6 +30,20 @@ public sealed class OnlineIntegrationTests
     }
 
     [Fact]
+    public void RepeatedCollectionsReportAlreadyClassifiedOutcomes()
+    {
+        var repository = MoonRepository.LoadDefault();
+        var runs = new RunCoordinator(new GameState(), repository);
+        var counted = repository.Moons.First(moon => moon.IsStory);
+        var uncounted = repository.Moons.First(moon => !moon.IsStory);
+
+        Assert.Equal(CollectionOutcome.Counted, runs.ObserveCollection(counted));
+        Assert.Equal(CollectionOutcome.AlreadyCounted, runs.ObserveCollection(counted));
+        Assert.Equal(CollectionOutcome.Uncounted, runs.ObserveCollection(uncounted));
+        Assert.Equal(CollectionOutcome.AlreadyUncounted, runs.ObserveCollection(uncounted));
+    }
+
+    [Fact]
     public void ProjectionReplacementPreservesActiveKingdomAndSettings()
     {
         var repository = MoonRepository.LoadDefault();
@@ -267,6 +281,18 @@ public sealed class OnlineIntegrationTests
 
         tracker.Apply(localMoon, RunEventKind.CollectionObserved, addedByLocalParticipant: false);
         Assert.False(tracker.Contains(localMoon));
+    }
+
+    [Fact]
+    public void RemoteDuplicateHintDoesNotRemoveLocalPendingOwnership()
+    {
+        var moon = new WireMoonKey(1, 10);
+        var tracker = new LocalPendingMoonTracker();
+
+        tracker.Apply(moon, RunEventKind.HintObserved, addedByLocalParticipant: true);
+        tracker.Apply(moon, RunEventKind.HintObserved, addedByLocalParticipant: false);
+
+        Assert.True(tracker.Contains(moon));
     }
 
     [Fact]

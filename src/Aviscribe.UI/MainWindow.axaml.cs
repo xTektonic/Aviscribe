@@ -2196,7 +2196,7 @@ namespace Aviscribe.UI
             Moon moon)
         {
             var subject = FormatLocalActionSubject(moon);
-            if (!runEvent.Changed && runEvent.Kind == RunEventKind.HintObserved)
+            if (!runEvent.Changed)
                 return $"[DUPE] {subject} → {DescribeCurrentMoonList(moon)}";
 
             return $"{subject} → {DescribeCurrentMoonList(moon)}";

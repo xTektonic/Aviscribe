@@ -20,8 +20,6 @@ internal sealed class LocalPendingMoonTracker
         {
             if (addedByLocalParticipant)
                 _moons.Add(moon);
-            else
-                _moons.Remove(moon);
             return;
         }
 

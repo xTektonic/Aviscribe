@@ -90,22 +90,28 @@ public sealed class RunCoordinator
     }
 
     public bool ObserveHint(Moon moon, bool automaticCapture = true) =>
-        ApplyLocal(RunEventKind.HintObserved, moon, automaticCapture);
+        ApplyLocal(RunEventKind.HintObserved, moon, automaticCapture).Changed;
 
     public CollectionOutcome ObserveCollection(Moon moon, bool automaticCapture = true)
     {
-        ApplyLocal(RunEventKind.CollectionObserved, moon, automaticCapture);
-        lock (_sync)
+        var result = ApplyLocal(
+            RunEventKind.CollectionObserved,
+            moon,
+            automaticCapture);
+        var counted = Counts(result.Fact!.Value, moon);
+        return (result.Changed, counted) switch
         {
-            var fact = _facts[Key(moon)];
-            return Counts(fact, moon) ? CollectionOutcome.Counted : CollectionOutcome.Uncounted;
-        }
+            (true, true) => CollectionOutcome.Counted,
+            (true, false) => CollectionOutcome.Uncounted,
+            (false, true) => CollectionOutcome.AlreadyCounted,
+            _ => CollectionOutcome.AlreadyUncounted
+        };
     }
 
-    public bool SetPending(Moon moon) => ApplyLocal(RunEventKind.SetPending, moon, false);
-    public bool SetCounted(Moon moon) => ApplyLocal(RunEventKind.SetCounted, moon, false);
-    public bool SetUncounted(Moon moon) => ApplyLocal(RunEventKind.SetUncounted, moon, false);
-    public bool Remove(Moon moon) => ApplyLocal(RunEventKind.RemoveMoon, moon, false);
+    public bool SetPending(Moon moon) => ApplyLocal(RunEventKind.SetPending, moon, false).Changed;
+    public bool SetCounted(Moon moon) => ApplyLocal(RunEventKind.SetCounted, moon, false).Changed;
+    public bool SetUncounted(Moon moon) => ApplyLocal(RunEventKind.SetUncounted, moon, false).Changed;
+    public bool Remove(Moon moon) => ApplyLocal(RunEventKind.RemoveMoon, moon, false).Changed;
 
     public RunMoonPlacement GetPlacement(Moon moon)
     {
@@ -143,42 +149,43 @@ public sealed class RunCoordinator
     public bool ApplyRemote(SharedRunEvent runEvent)
     {
         var moon = Catalog.Resolve(runEvent.Moon);
-        return moon != null && Apply(runEvent.Kind, moon);
+        return moon != null && Apply(runEvent.Kind, moon).Changed;
     }
 
-    private bool ApplyLocal(RunEventKind kind, Moon moon, bool automaticCapture)
+    private RunMutation ApplyLocal(RunEventKind kind, Moon moon, bool automaticCapture)
     {
-        var changed = Apply(kind, moon);
+        var result = Apply(kind, moon);
         var runEvent = new SharedRunEvent(
             Guid.NewGuid(),
             kind,
             Catalog.ToWire(moon),
             automaticCapture,
-            changed);
+            result.Changed);
         LocalEventObserved?.Invoke(this, runEvent);
-        if (changed)
+        if (result.Changed)
             LocalEventCreated?.Invoke(this, runEvent);
-        return changed;
+        return result;
     }
 
-    private bool Apply(RunEventKind kind, Moon moon)
+    private RunMutation Apply(RunEventKind kind, Moon moon)
     {
         bool changed;
+        RunFact? next;
         lock (_sync)
         {
             var key = Key(moon);
             _facts.TryGetValue(key, out var current);
             var hadCurrent = _facts.ContainsKey(key);
-            var next = RunFactReducer.Apply(hadCurrent ? current : null, kind);
+            next = RunFactReducer.Apply(hadCurrent ? current : null, kind);
             changed = next.HasValue
                 ? !hadCurrent || current != next.Value
                 : hadCurrent;
-            if (!changed) return false;
+            if (!changed) return new RunMutation(false, next);
             if (next.HasValue) _facts[key] = next.Value;
             else _facts.Remove(key);
         }
         Project();
-        return true;
+        return new RunMutation(true, next);
     }
 
     private void Project()
@@ -224,6 +231,8 @@ public sealed class RunCoordinator
     };
 
     private static MoonFactKey Key(Moon moon) => MoonFactKey.FromMoon(moon);
+
+    private readonly record struct RunMutation(bool Changed, RunFact? Fact);
 
     private static (List<Moon> Pending, List<Moon> Counted, List<Moon> Wrong) Get(
         Dictionary<string, (List<Moon> Pending, List<Moon> Counted, List<Moon> Wrong)> states,

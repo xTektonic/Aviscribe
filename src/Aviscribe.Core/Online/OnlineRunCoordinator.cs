@@ -556,21 +556,27 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
 
     private void ClearSession(string message)
     {
-        DeleteResume();
-        lock (_sync)
+        string? deletionError;
+        lock (_persistenceSync)
         {
-            _outbox.Clear();
-            _localPendingMoons.Clear();
+            lock (_sync)
+            {
+                _outbox.Clear();
+                _localPendingMoons.Clear();
+                _credentials = null;
+                _api = null;
+                _capabilities = null;
+                OwnerParticipantId = null;
+                Participants = [];
+                RecentEvents = [];
+                _retryIndex = 0;
+                _sharingPaused = false;
+            }
+            deletionError = DeleteResume();
         }
-        _credentials = null;
-        _api = null;
-        _capabilities = null;
-        OwnerParticipantId = null;
-        Participants = [];
-        RecentEvents = [];
-        _retryIndex = 0;
-        _sharingPaused = false;
-        SetState(OnlineConnectionState.Offline, message);
+        SetState(
+            OnlineConnectionState.Offline,
+            deletionError == null ? message : $"{message} {deletionError}");
     }
 
     private async Task StopSessionAsync()
@@ -649,37 +655,48 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
 
     private void PersistResume()
     {
-        if (_credentials == null) return;
+        OnlineResumeRecord? credentials = null;
         try
         {
             lock (_persistenceSync)
             {
                 lock (_sync)
                 {
-                    _credentials.Outbox = _outbox.ToList();
-                    _credentials.LocallyOwnedPendingMoons = _localPendingMoons.CreateSnapshot().ToList();
+                    credentials = _credentials;
+                    if (credentials == null) return;
+                    credentials.Outbox = _outbox.ToList();
+                    credentials.LocallyOwnedPendingMoons = _localPendingMoons.CreateSnapshot().ToList();
                 }
-                _resumeStore.Save(_resumePath, _credentials);
+                _resumeStore.Save(_resumePath, credentials);
             }
         }
         catch (Exception ex)
         {
-            _sharingPaused = true;
-            State = OnlineConnectionState.SharingPaused;
-            LastMessage = $"Multiplayer sharing paused because the rejoin queue could not be saved: {ex.Message}";
-            RaiseStateChanged();
+            var currentSession = false;
+            lock (_sync)
+            {
+                currentSession = ReferenceEquals(_credentials, credentials);
+                if (currentSession)
+                {
+                    _sharingPaused = true;
+                    State = OnlineConnectionState.SharingPaused;
+                    LastMessage = $"Multiplayer sharing paused because the rejoin queue could not be saved: {ex.Message}";
+                }
+            }
+            if (currentSession) RaiseStateChanged();
         }
     }
 
-    private void DeleteResume()
+    private string? DeleteResume()
     {
         try
         {
             _resumeStore.Delete(_resumePath);
+            return null;
         }
         catch (Exception ex)
         {
-            LastMessage = $"The previous-run record could not be removed: {ex.Message}";
+            return $"The previous-run record could not be removed: {ex.Message}";
         }
     }
 
@@ -697,15 +714,21 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
 
     private void SetState(OnlineConnectionState state, string? message)
     {
-        var sharingPaused = state == OnlineConnectionState.Connected &&
-            _sharingPaused;
-        State = sharingPaused ? OnlineConnectionState.SharingPaused : state;
-        if (!sharingPaused)
+        lock (_sync)
         {
-            if (!string.IsNullOrWhiteSpace(message))
-                LastMessage = message;
-            else if (state == OnlineConnectionState.Connected)
-                LastMessage = null;
+            if (state != OnlineConnectionState.Offline && _credentials == null)
+                return;
+
+            var sharingPaused = state == OnlineConnectionState.Connected &&
+                _sharingPaused;
+            State = sharingPaused ? OnlineConnectionState.SharingPaused : state;
+            if (!sharingPaused)
+            {
+                if (!string.IsNullOrWhiteSpace(message))
+                    LastMessage = message;
+                else if (state == OnlineConnectionState.Connected)
+                    LastMessage = null;
+            }
         }
         RaiseStateChanged();
     }
