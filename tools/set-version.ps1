@@ -42,21 +42,9 @@ $targets = @(
         )
     }
     [pscustomobject]@{
-        Path = ".github/workflows/desktop-ci.yml"
-        Replacements = @(
-            [pscustomobject]@{ Pattern = '(?m)^(\s*AVISCRIBE_VERSION:\s*")[^"]+("\s*)$'; Value = '${1}' + $Version + '${2}' }
-        )
-    }
-    [pscustomobject]@{
         Path = "packaging/windows/package.ps1"
         Replacements = @(
             [pscustomobject]@{ Pattern = '(?m)^(\s*\[string\]\$Version\s*=\s*")[^"]+(",\s*)$'; Value = '${1}' + $Version + '${2}' }
-        )
-    }
-    [pscustomobject]@{
-        Path = "packaging/windows/Aviscribe.Package.wixproj"
-        Replacements = @(
-            [pscustomobject]@{ Pattern = '(?m)^(\s*<AppVersion Condition="[^"]+">)[^<]+(</AppVersion>\s*)$'; Value = '${1}' + $Version + '${2}' }
         )
     }
     [pscustomobject]@{
