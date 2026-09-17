@@ -45,6 +45,7 @@ dotnet tool run vpk -- pack \
   --packId io.github.xtektonic.aviscribe \
   --packVersion "${version}" \
   --packDir "${app_dir}" \
+  --mainExe Aviscribe \
   --packTitle Aviscribe \
   --packAuthors xTektonic \
   --runtime osx-arm64 \
