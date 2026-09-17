@@ -93,6 +93,9 @@ jobs:
       - name: Build Windows installer and update packages
         shell: pwsh
         run: ./packaging/windows/package.ps1 -Version "${{ needs.validate.outputs.version }}"
+      - name: Test optional desktop shortcut
+        shell: pwsh
+        run: ./packaging/windows/test-desktop-shortcut.ps1 -MsiPath "artifacts/packages/Aviscribe-${{ needs.validate.outputs.version }}-win-x64.msi"
       - name: Inspect Windows payload
         shell: pwsh
         run: |

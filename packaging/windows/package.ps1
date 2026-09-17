@@ -54,7 +54,7 @@ dotnet tool run vpk -- pack `
     --channel win `
     --icon (Join-Path $repoRoot "src\Aviscribe.Desktop\Assets\aviscribe.ico") `
     --outputDir $packageDirectory `
-    --shortcuts StartMenuRoot `
+    --shortcuts Desktop,StartMenuRoot `
     --msi `
     --msiVersion "$Version.0" `
     --instLocation PerMachine `
@@ -71,4 +71,5 @@ $releaseMsi = Join-Path $packageDirectory "Aviscribe-$Version-win-x64.msi"
 if (-not (Test-Path -LiteralPath $generatedMsi)) {
     throw "Velopack did not produce the expected MSI."
 }
+& (Join-Path $PSScriptRoot "desktop-shortcut.ps1") -MsiPath $generatedMsi
 Move-Item -LiteralPath $generatedMsi -Destination $releaseMsi -Force

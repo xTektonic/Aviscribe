@@ -26,7 +26,7 @@ Download the package for your operating system from the [latest release](https:/
 ### Windows
 
 1. Download `Aviscribe-*-win-x64.msi`.
-2. Open the installer and follow the prompts.
+2. Open the installer and follow the prompts. Optionally select **Create a desktop shortcut (all users)** before installing; it is unchecked by default.
 3. Leave **Launch Aviscribe** selected on the final page to open it immediately. Aviscribe is also added to the Start menu.
 
 ### macOS
@@ -122,6 +122,8 @@ Packages and publish outputs are written to `artifacts/`. Restore the repository
 ~~~text
 dotnet tool restore
 ~~~
+
+Windows packaging adds an optional desktop-shortcut feature to Velopack's generated MSI. CI checks its default and selected states without installing the application. For unattended installations, pass `AVISCRIBE_DESKTOP_SHORTCUT=1` to `msiexec` to opt in; otherwise no desktop shortcut is created. The Start menu shortcut is always installed. macOS and Linux packaging do not add desktop shortcuts.
 
 Installed copies check the stable GitHub Releases feed whenever Aviscribe starts. Draft and prerelease releases are not offered. When an update is available, Aviscribe asks before downloading it and restarts only after the download completes.
 
