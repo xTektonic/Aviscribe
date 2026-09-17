@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Aviscribe.Core.Capture;
 using Aviscribe.Core.Ocr;
+using Aviscribe.Core.Online;
 
 namespace Aviscribe.Core
 {
@@ -17,9 +18,19 @@ namespace Aviscribe.Core
         public List<int> PendingMoonIds { get; set; } = new();
         public List<int> CollectedMoonIds { get; set; } = new();
         public List<int> UncountedCollectedMoonIds { get; set; } = new();
+        public List<SavedRunFact> RunFacts { get; set; } = new();
         public Dictionary<string, SavedKingdomState> KingdomStates { get; set; } =
             new(System.StringComparer.OrdinalIgnoreCase);
         public List<SavedReviewState> AmbiguousReviews { get; set; } = new();
+    }
+
+    public sealed class SavedRunFact
+    {
+        public string Kingdom { get; set; } = string.Empty;
+        public int MoonId { get; set; }
+        public bool Hinted { get; set; }
+        public bool Collected { get; set; }
+        public ManualClassification ManualClassification { get; set; }
     }
 
     public sealed class SavedKingdomState

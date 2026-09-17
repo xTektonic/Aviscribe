@@ -7,6 +7,12 @@ public sealed class AppPreferences
     public int QuickStartVersionSeen { get; set; }
     public AppThemePreference Theme { get; set; } = AppThemePreference.System;
     public AccentColorPreference AccentColor { get; set; } = AccentColorPreference.System;
+    public TextSizePreference TextSize { get; set; } =
+        TextSizePreference.Default;
+    public string OnlineServerAddress { get; set; } = string.Empty;
+    public int OnlineServerPort { get; set; }
+    public string OnlineDisplayName { get; set; } = string.Empty;
+    public bool OnlyWriteOwnHints { get; set; }
 }
 
 public enum AppThemePreference
@@ -25,4 +31,12 @@ public enum AccentColorPreference
     Orange,
     Red,
     Purple
+}
+
+public enum TextSizePreference
+{
+    Default,
+    Small,
+    Large,
+    ExtraLarge
 }

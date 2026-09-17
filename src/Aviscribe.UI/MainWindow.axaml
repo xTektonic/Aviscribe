@@ -10,7 +10,7 @@
   <Window.Styles>
     <Style Selector="ListBox.runList">
       <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontSize" Value="{DynamicResource FontSize}"/>
       <Setter Property="Background" Value="Transparent"/>
     </Style>
     <Style Selector="ListBox.runList > ListBoxItem">
@@ -41,6 +41,7 @@
     <Style Selector="TabControl.settings > TabItem">
       <Setter Property="MinWidth" Value="205"/>
       <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="VerticalContentAlignment" Value="Stretch"/>
       <Setter Property="Padding" Value="14,11"/>
     </Style>
   </Window.Styles>
@@ -50,7 +51,10 @@
       <Grid Margin="14" RowDefinitions="Auto,*,Auto" RowSpacing="10">
         <Border Classes="card compact">
           <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
-            <Grid ColumnDefinitions="200,Auto,Auto,Auto,*,Auto,Auto" ColumnSpacing="14">
+            <Grid ColumnDefinitions="200,Auto,Auto,Auto,*,Auto,Auto"
+                  RowDefinitions="Auto,Auto"
+                  ColumnSpacing="14"
+                  RowSpacing="8">
               <StackPanel Spacing="4">
                 <TextBlock Classes="caption" Text="CURRENT KINGDOM"/>
                 <ComboBox Name="cbKingdomSelect" Width="200" HorizontalAlignment="Left"
@@ -66,7 +70,9 @@
               </StackPanel>
               <StackPanel Grid.Column="3" VerticalAlignment="Center">
                 <TextBlock Classes="caption" Text="REQUIREMENT"/>
-                <TextBlock Name="txtRequirement" Text="0" FontSize="18" FontWeight="SemiBold"/>
+                <TextBlock Name="txtRequirement" Text="0"
+                           FontSize="{DynamicResource RequirementFontSize}"
+                           FontWeight="SemiBold"/>
               </StackPanel>
               <Button Name="btnUpdatePreview" Grid.Column="5" Classes="primary"
                       Content="Start Capture"
@@ -75,7 +81,14 @@
               <Button Name="btnResetKingdom" Grid.Column="6" Classes="danger"
                       Content="Reset Run"
                       VerticalAlignment="Center"
+                      ToolTip.ShowOnDisabled="True"
                       ToolTip.Tip="Clear every kingdom list and all items waiting for review."/>
+              <Button Name="btnOnlineRun"
+                      Grid.Row="1" Grid.Column="5" Grid.ColumnSpan="2"
+                      HorizontalAlignment="Right"
+                      Content="Multiplayer"
+                      IsVisible="False"
+                      ToolTip.Tip="Create, join, or manage a multiplayer room."/>
             </Grid>
 
             <Grid Grid.Row="1" ColumnDefinitions="96,Auto,Auto,*" ColumnSpacing="10">
@@ -105,20 +118,25 @@
           <Border Classes="card" BorderBrush="{DynamicResource WarningBrush}">
             <Grid RowDefinitions="Auto,*" RowSpacing="10">
               <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Classes="sectionTitle" Text="Pending"/>
+                <TextBlock Name="txtPendingTitle" Classes="sectionTitle" Text="Pending (0/3)"/>
                 <TextBlock Grid.Column="1" Classes="caption" Text="Detected and waiting"/>
               </Grid>
               <ListBox Name="lstPending" Grid.Row="1" Classes="runList">
                 <ListBox.ItemTemplate>
                   <DataTemplate x:CompileBindings="False">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                      <Border Width="250" Height="141" CornerRadius="5" ClipToBounds="True"
-                              IsVisible="{Binding HasImage}" Background="Black">
-                        <Image Source="{Binding Image}" Stretch="UniformToFill"/>
-                      </Border>
-                      <TextBlock Text="{Binding Label}" TextWrapping="Wrap"
-                                 VerticalAlignment="Center" MaxWidth="280"/>
-                    </StackPanel>
+                    <Grid>
+                      <Border IsVisible="{Binding IsTracked}"
+                              Background="{DynamicResource SystemControlHighlightAccentBrush}"
+                              Opacity="0.22" CornerRadius="4"/>
+                      <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Border Width="250" Height="141" CornerRadius="5" ClipToBounds="True"
+                                IsVisible="{Binding HasImage}" Background="Black">
+                          <Image Source="{Binding Image}" Stretch="UniformToFill"/>
+                        </Border>
+                        <TextBlock Text="{Binding Label}" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" MaxWidth="280"/>
+                      </StackPanel>
+                    </Grid>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>
@@ -148,7 +166,18 @@
                   <TextBlock Classes="sectionTitle" Text="Kingdom Moons"/>
                   <TextBlock Grid.Column="1" Name="txtMoonCount" Classes="caption"/>
                 </Grid>
-                <ListBox Name="lstMoonList" Grid.Row="1" Classes="runList" SelectionMode="Multiple"/>
+                <ListBox Name="lstMoonList" Grid.Row="1" Classes="runList">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:CompileBindings="False">
+                      <Grid>
+                        <Border IsVisible="{Binding IsTracked}"
+                                Background="{DynamicResource SystemControlHighlightAccentBrush}"
+                                Opacity="0.22" CornerRadius="4"/>
+                        <TextBlock Text="{Binding Label}"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
               </Grid>
             </Border>
 
@@ -160,7 +189,8 @@
                 <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="7">
                   <ComboBox Name="cbReviewSelect" HorizontalAlignment="Stretch"
                             ToolTip.Tip="Choose the correct moon when a detected name has more than one likely match."/>
-                  <Button Name="btnReviewApply" Grid.Column="1" Content="Use"/>
+                  <Button Name="btnReviewApply" Grid.Column="1" Content="Use"
+                          ToolTip.Tip="Apply the selected moon to this OCR result."/>
                   <Button Name="btnReviewDismiss" Grid.Column="2" Content="Dismiss"
                           ToolTip.Tip="Remove this item without changing any run list."/>
                 </Grid>
@@ -170,8 +200,37 @@
         </Grid>
 
         <Border Grid.Row="2" Classes="soft">
-          <TextBlock Name="txtCommandFeedback" Text="Ready" Classes="caption"
-                     VerticalAlignment="Center"/>
+          <Grid ColumnDefinitions="1.7*,0.9*,1.1*" ColumnSpacing="10">
+            <StackPanel Name="pnlMultiplayerStatus"
+                        Orientation="Horizontal"
+                        Spacing="6"
+                        VerticalAlignment="Center"
+                        ToolTip.Tip="Shows local capture status and, while in a room, whether automatic detections are being shared.">
+              <Border Name="multiplayerStatusDot"
+                      Width="9" Height="9" CornerRadius="5"
+                      Background="{DynamicResource DangerBrush}"
+                      VerticalAlignment="Center"/>
+              <TextBlock Name="txtMultiplayerStatus" Classes="caption" Text="Offline"
+                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
+            </StackPanel>
+            <Grid Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="9">
+              <TextBlock Classes="caption" Text="LATEST ACTION" FontWeight="SemiBold"
+                         VerticalAlignment="Center"/>
+              <ItemsControl Name="lstActions" Grid.Column="1" VerticalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="14"/>
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:CompileBindings="False">
+                    <TextBlock Text="{Binding}" Classes="caption" TextTrimming="CharacterEllipsis"
+                               MaxWidth="520"/>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Grid>
+          </Grid>
         </Border>
 
         <ComboBox Name="cbMoonSelect" IsVisible="False"/>
@@ -191,7 +250,7 @@
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="20,0,12,20" Spacing="14" MaxWidth="1120" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="3">
-                  <TextBlock Classes="sectionTitle" Text="Setup"/>
+                  <TextBlock Classes="pageTitle" Text="Setup"/>
                   <TextBlock Classes="bodyMuted" Text="Complete the initial setup needed to use the translator."/>
                 </StackPanel>
 
@@ -204,13 +263,13 @@
                         <TextBlock Name="txtSelectedCaptureSource" Text="No capture source selected" TextWrapping="Wrap"/>
                       </Border>
                       <Button Name="btnChooseCaptureSource" Grid.Column="1" Classes="primary"
-                              Content="Choose Source..."
+                              Content="Choose Source"
                               ToolTip.Tip="Choose a capture card, camera, virtual camera, or supported application window."/>
                     </Grid>
                     <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8">
                       <Button Name="btnSettingsUpdatePreview" Content="Start / Refresh Preview"
                               ToolTip.Tip="Start capture from the selected source and refresh the preview below."/>
-                      <Button Name="btnCropGameplay" Grid.Column="1" Content="Crop Gameplay..."
+                      <Button Name="btnCropGameplay" Grid.Column="1" Classes="primary" Content="Crop Gameplay"
                               ToolTip.Tip="Select the 16:9 gameplay area when the source includes borders or other content."/>
                       <TextBlock Name="txtCropSummary" Grid.Column="2" Classes="caption"
                                  Text="Crop: Full frame (1920 x 1080)" TextWrapping="Wrap"
@@ -220,6 +279,9 @@
                             BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1">
                       <Image Name="imgPreview" Stretch="Uniform"/>
                     </Border>
+                    <TextBlock Classes="caption"
+                               Text="This preview is a static snapshot and does not update automatically. Select Start / Refresh Preview to update it."
+                               TextWrapping="Wrap"/>
                   </StackPanel>
                 </Border>
 
@@ -228,11 +290,21 @@
                     <TextBlock Classes="sectionTitle" Text="Overlay output"/>
                     <CheckBox Name="chkWriteOverlay" Content="Write pending moons to a file"
                               ToolTip.Tip="Keep a plain-text file synchronized with the Pending list."/>
+                    <CheckBox Name="chkOnlyWriteOwnHints"
+                              Content="Only include my hints in multiplayer"
+                              ToolTip.Tip="When you are in a multiplayer room, omit Pending moons found by other players from this text file. Single-player output is unchanged."/>
                     <TextBlock Text="Output path" FontWeight="SemiBold"
                                ToolTip.Tip="The text file Aviscribe updates whenever the Pending list changes."/>
-                    <TextBox Name="txtOverlayPath"
-                             PlaceholderText="Choose a path for pending-moons.txt"
-                             ToolTip.Tip="Enter the full path to the text file used by your overlay."/>
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                      <TextBox Name="txtOverlayPath" IsReadOnly="True"
+                               PlaceholderText="Choose a path for pending-moons.txt"
+                               ToolTip.Tip="The full path to the text file used by your overlay."/>
+                      <Button Name="btnBrowseOverlayPath" Grid.Column="1" Classes="primary" Content="Browse"
+                              ToolTip.Tip="Choose where Aviscribe writes the pending-moons text file."/>
+                      <Button Name="btnCopyOverlayPath" Grid.Column="2" Width="80" Content="Copy"
+                              HorizontalContentAlignment="Center"
+                              ToolTip.Tip="Copy the overlay output path to the clipboard."/>
+                    </Grid>
                     <TextBlock Classes="caption" Text="Add this file as a text source in OBS and enable reading from a file." TextWrapping="Wrap"/>
                   </StackPanel>
                 </Border>
@@ -271,10 +343,10 @@
                 <Border Classes="card">
                   <StackPanel Spacing="12">
                     <TextBlock Text="OCR processor" FontWeight="SemiBold"
-                               ToolTip.Tip="Choose the processor used for text recognition. CPU is the compatible default."/>
+                               ToolTip.Tip="Choose the processor used for text recognition. GPU is preferred and automatically falls back to CPU when unavailable."/>
                     <ComboBox Name="cbOcrModeSelect"
                               ToolTip.Tip="GPU mode accelerates supported work through WebGPU and safely falls back to CPU if unavailable."/>
-                    <TextBlock Classes="caption" Text="GPU mode can improve OCR performance on supported systems; CPU remains the safest default." TextWrapping="Wrap"/>
+                    <TextBlock Classes="caption" Text="GPU mode is used when available and automatically falls back to CPU when needed." TextWrapping="Wrap"/>
                     <Separator/>
                     <CheckBox Name="chkAdaptiveTalkatooDetection"
                               Content="Use adaptive Talkatoo detection"
@@ -292,7 +364,7 @@
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="20,0,12,20" Spacing="14" MaxWidth="960" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="3">
-                  <TextBlock Classes="sectionTitle" Text="Run Configuration"/>
+                  <TextBlock Classes="pageTitle" Text="Run Configuration"/>
                   <TextBlock Classes="bodyMuted" Text="Adjust specific run settings."/>
                 </StackPanel>
                 <Border Classes="card">
@@ -319,11 +391,17 @@
             </ScrollViewer>
           </TabItem>
 
+          <TabItem Header="Multiplayer">
+            <ContentControl Name="multiplayerSettingsHost"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"/>
+          </TabItem>
+
           <TabItem Header="Hotkeys">
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="20,0,12,20" Spacing="14" MaxWidth="900" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="3">
-                  <TextBlock Classes="sectionTitle" Text="Hotkeys"/>
+                  <TextBlock Classes="pageTitle" Text="Hotkeys"/>
                   <TextBlock Classes="bodyMuted" Text="Hotkeys work from the Run screen. Focus the moon-number box before using an action shortcut."/>
                 </StackPanel>
                 <Border Classes="card">
@@ -351,12 +429,12 @@
             </ScrollViewer>
           </TabItem>
 
-          <TabItem Header="Theme">
+          <TabItem Header="Appearance">
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="20,0,12,20" Spacing="14" MaxWidth="700" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="3">
-                  <TextBlock Classes="sectionTitle" Text="Theme"/>
-                  <TextBlock Classes="bodyMuted" Text="Choose the app appearance and accent color."/>
+                  <TextBlock Classes="pageTitle" Text="Appearance"/>
+                  <TextBlock Classes="bodyMuted" Text="Choose the app theme, accent color, and text size."/>
                 </StackPanel>
                 <Border Classes="card">
                   <StackPanel Spacing="12">
@@ -369,6 +447,11 @@
                     <ComboBox Name="cbAccentColorSelect" Width="220" HorizontalAlignment="Left"
                               ToolTip.Tip="Choose the color used for selections, highlights, and primary actions."/>
                     <TextBlock Classes="caption" Text="System accent follows your operating system and is the default." TextWrapping="Wrap"/>
+                    <Separator/>
+                    <TextBlock Text="Text size" FontWeight="SemiBold"/>
+                    <ComboBox Name="cbTextSizeSelect" Width="220" HorizontalAlignment="Left"
+                              ToolTip.Tip="Adjust the size of moon names, section labels, and key run totals."/>
+                    <TextBlock Classes="caption" Text="Changes moon names, section labels, and key run totals throughout the app." TextWrapping="Wrap"/>
                   </StackPanel>
                 </Border>
               </StackPanel>
@@ -379,7 +462,7 @@
             <ScrollViewer HorizontalScrollBarVisibility="Disabled">
               <StackPanel Margin="20,0,12,20" Spacing="14" MaxWidth="960" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="3">
-                  <TextBlock Classes="sectionTitle" Text="Help"/>
+                  <TextBlock Classes="pageTitle" Text="Help"/>
                 </StackPanel>
                 <Border Classes="card">
                   <Grid ColumnDefinitions="*,Auto" ColumnSpacing="18">
@@ -388,7 +471,8 @@
                       <TextBlock Classes="bodyMuted" Text="Review the basics whenever you need a quick refresher." TextWrapping="Wrap"/>
                     </StackPanel>
                     <Button Name="btnOpenQuickStart" Grid.Column="1" Classes="primary"
-                            Content="Open Quick Start" VerticalAlignment="Center"/>
+                            Content="Open Quick Start" VerticalAlignment="Center"
+                            ToolTip.Tip="Open the quick-start guide."/>
                   </Grid>
                 </Border>
                 <Border Classes="card">

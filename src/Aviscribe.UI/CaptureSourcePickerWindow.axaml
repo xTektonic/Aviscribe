@@ -5,6 +5,7 @@
         Title="Choose Capture Source"
         Width="560" Height="500"
         MinWidth="420" MinHeight="360"
+        Icon="avares://Aviscribe.UI/Assets/aviscribe-icon.png"
         WindowStartupLocation="CenterOwner">
   <Grid RowDefinitions="Auto,*,Auto" Margin="24" RowSpacing="18">
     <StackPanel Spacing="5">
@@ -30,7 +31,8 @@
     <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
       <TextBlock Name="txtPickerStatus" VerticalAlignment="Center" Classes="caption"
                  TextWrapping="Wrap"/>
-      <Button Name="btnCancel" Grid.Column="1" Content="Cancel"/>
+      <Button Name="btnCancel" Grid.Column="1" Content="Cancel"
+              ToolTip.Tip="Close without changing the capture source."/>
       <Button Name="btnChoose" Grid.Column="2" Classes="primary" Content="Choose" IsDefault="True"
               ToolTip.Tip="Use the selected source for capture and preview."/>
     </Grid>

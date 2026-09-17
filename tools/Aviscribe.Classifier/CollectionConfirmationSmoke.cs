@@ -2,11 +2,15 @@ using Aviscribe.Core;
 using Aviscribe.Core.Capture;
 using Aviscribe.Core.Ocr;
 using OpenCvSharp;
+using System.Runtime.CompilerServices;
 
 namespace Aviscribe.Classifier
 {
     internal static class CollectionConfirmationSmoke
     {
+        private static readonly ConditionalWeakTable<FrameProcessor, FrameClock>
+            FrameClocks = new();
+
         public static void Run()
         {
             LongHeldResolvedMoonGetReadsOnce();
@@ -405,6 +409,7 @@ namespace Aviscribe.Classifier
             int count,
             bool changingStoryPattern = false)
         {
+            var clock = FrameClocks.GetValue(processor, _ => new FrameClock());
             for (var index = 0; index < count; index++)
             {
                 using var image = new Mat(
@@ -422,8 +427,20 @@ namespace Aviscribe.Classifier
                     Cv2.Rectangle(image, pattern, Scalar.White, thickness: -1);
                 }
 
-                processor.PushFrame(new VideoFrame(image.Clone(), DateTime.UtcNow));
+                processor.PushFrame(new VideoFrame(image.Clone(), clock.Next()));
                 Thread.Sleep(12);
+            }
+        }
+
+        private sealed class FrameClock
+        {
+            private DateTime _timestamp = DateTime.UnixEpoch;
+
+            public DateTime Next()
+            {
+                var timestamp = _timestamp;
+                _timestamp += CaptureTiming.PreferredFrameInterval;
+                return timestamp;
             }
         }
 

@@ -14,6 +14,9 @@ public sealed class AppPreferencesStoreTests
         var preferences = new AppPreferencesStore().Load(path);
 
         Assert.Equal(0, preferences.QuickStartVersionSeen);
+        Assert.Equal(string.Empty, preferences.OnlineServerAddress);
+        Assert.Equal(0, preferences.OnlineServerPort);
+        Assert.False(preferences.OnlyWriteOwnHints);
     }
 
     [Fact]
@@ -25,7 +28,8 @@ public sealed class AppPreferencesStoreTests
             {
                 QuickStartVersionSeen = AppPreferences.CurrentQuickStartVersion,
                 Theme = AppThemePreference.Dark,
-                AccentColor = AccentColorPreference.Teal
+                AccentColor = AccentColorPreference.Teal,
+                TextSize = TextSizePreference.Large
             });
 
             var restored = store.Load(path);
@@ -35,6 +39,7 @@ public sealed class AppPreferencesStoreTests
                 restored.QuickStartVersionSeen);
             Assert.Equal(AppThemePreference.Dark, restored.Theme);
             Assert.Equal(AccentColorPreference.Teal, restored.AccentColor);
+            Assert.Equal(TextSizePreference.Large, restored.TextSize);
         });
     }
 
@@ -51,6 +56,9 @@ public sealed class AppPreferencesStoreTests
             Assert.Equal(0, restored.QuickStartVersionSeen);
             Assert.Equal(AppThemePreference.System, restored.Theme);
             Assert.Equal(AccentColorPreference.System, restored.AccentColor);
+            Assert.Equal(
+                TextSizePreference.Default,
+                restored.TextSize);
         });
     }
 

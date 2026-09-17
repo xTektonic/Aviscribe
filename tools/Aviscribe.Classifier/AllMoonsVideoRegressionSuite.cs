@@ -138,7 +138,7 @@ namespace Aviscribe.Classifier
                         continue;
 
                     Console.WriteLine(
-                        $"PASS {expectation.Name} at frame {frameIndex}: \"{text}\" -> {result.BestMatch.English}");
+                        $"PASS {expectation.Name} at frame {frameIndex}: \"{text}\"  {result.BestMatch.English}");
                     passed = true;
                     break;
                 }

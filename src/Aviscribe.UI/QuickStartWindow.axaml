@@ -6,6 +6,7 @@
         MinWidth="720" MinHeight="520"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
+        Icon="avares://Aviscribe.UI/Assets/aviscribe-icon.png"
         ShowInTaskbar="False">
   <Grid Margin="28" RowDefinitions="Auto,*,Auto" RowSpacing="20">
     <StackPanel Spacing="6">
@@ -70,10 +71,12 @@
       <TextBlock Classes="caption" Text="You can reopen this guide from Settings > Help."
                  VerticalAlignment="Center"/>
       <Button Name="btnClose" Grid.Column="1" Content="Got it" MinWidth="96"
-              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+              ToolTip.Tip="Close the quick-start guide."/>
       <Button Name="btnOpenSettings" Grid.Column="2" Classes="primary"
               Content="Open Settings" MinWidth="132" IsDefault="True"
-              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+              HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+              ToolTip.Tip="Close this guide and open Aviscribe settings."/>
     </Grid>
   </Grid>
 </Window>

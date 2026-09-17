@@ -1,0 +1,380 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
+using Avalonia.Media;
+using Avalonia.Threading;
+using Aviscribe.Core;
+using Aviscribe.Core.Online;
+using System.Net.Sockets;
+
+namespace Aviscribe.UI;
+
+public partial class OnlineRunView : UserControl, IDisposable
+{
+    private static readonly IBrush ConnectedBrush = new SolidColorBrush(Color.Parse("#2E9B68"));
+    private static readonly IBrush WarningBrush = new SolidColorBrush(Color.Parse("#D99227"));
+    private static readonly IBrush DisconnectedBrush = new SolidColorBrush(Color.Parse("#C65353"));
+    private readonly OnlineRunCoordinator _online = null!;
+    private readonly AppPreferences _preferences = null!;
+    private readonly Action _savePreferences = null!;
+    private readonly Func<bool> _hasLocalState = null!;
+    private readonly Func<Task<bool>> _confirmReplace = null!;
+    private readonly Func<RunSettings> _settings = null!;
+    private bool _busy;
+    private string? _localMessage;
+    private (Guid? SessionId, int Generation, RunCategory Category, bool IncludePostGame)?
+        _configurationSeen;
+
+    public OnlineRunView()
+    {
+        InitializeComponent();
+    }
+
+    public OnlineRunView(
+        OnlineRunCoordinator online,
+        AppPreferences preferences,
+        Action savePreferences,
+        Func<bool> hasLocalState,
+        Func<Task<bool>> confirmReplace,
+        Func<RunSettings> settings,
+        bool showCloseButton = false)
+        : this()
+    {
+        _online = online;
+        _preferences = preferences;
+        _savePreferences = savePreferences;
+        _hasLocalState = hasLocalState;
+        _confirmReplace = confirmReplace;
+        _settings = settings;
+
+        if (showCloseButton)
+            this.GetControl<Grid>("layoutRoot").Margin = new Thickness(22);
+
+        this.GetControl<TextBox>("txtServerAddress").Text = preferences.OnlineServerAddress;
+        this.GetControl<TextBox>("txtServerPort").Text = preferences.OnlineServerPort > 0
+            ? preferences.OnlineServerPort.ToString()
+            : string.Empty;
+        this.GetControl<TextBox>("txtDisplayName").Text = preferences.OnlineDisplayName;
+        this.GetControl<ComboBox>("cbOnlineCategory").ItemsSource = Enum.GetValues<RunCategory>();
+        this.GetControl<ComboBox>("cbOnlineCategory").SelectedItem = settings().Category;
+        this.GetControl<CheckBox>("chkOnlinePostgame").IsChecked = settings().IncludePostGameKingdoms;
+
+        this.GetControl<Button>("btnClose").IsVisible = showCloseButton;
+        this.GetControl<Button>("btnClose").Click += (_, _) => CloseRequested?.Invoke(this, EventArgs.Empty);
+        this.GetControl<Button>("btnCreateRun").Click += CreateRun;
+        this.GetControl<Button>("btnJoinRun").Click += JoinRun;
+        this.GetControl<Button>("btnResumeRun").Click += ResumeRun;
+        this.GetControl<Button>("btnOnlineLeave").Click += LeaveRun;
+        this.GetControl<Button>("btnOnlineApplySettings").Click += ApplySettings;
+        this.GetControl<Button>("btnOnlineReset").Click += ResetRun;
+        this.GetControl<Button>("btnOnlineEnd").Click += CloseRoom;
+        this.GetControl<Button>("btnCopyJoinCode").Click += CopyJoinCode;
+        _online.StateChanged += OnlineStateChanged;
+        Refresh();
+    }
+
+    public event EventHandler? CloseRequested;
+
+    public void Dispose() => _online.StateChanged -= OnlineStateChanged;
+
+    private async void CreateRun(object? sender, RoutedEventArgs args)
+    {
+        if (!await ValidateAndConfirmAsync(alwaysConfirmNonEmpty: true)) return;
+        await RunBusyAsync(async token =>
+        {
+            var endpoint = SaveEndpointPreferences();
+            await _online.CreateAsync(endpoint.Address, endpoint.Port, endpoint.DisplayName, _settings(), token);
+        });
+    }
+
+    private async void JoinRun(object? sender, RoutedEventArgs args)
+    {
+        if (!await ValidateAndConfirmAsync(alwaysConfirmNonEmpty: true)) return;
+        var code = this.GetControl<TextBox>("txtJoinCode").Text ?? string.Empty;
+        if (code.Trim().Replace("-", string.Empty).Length != 8)
+        {
+            ShowMessage("Enter the eight-character join code.");
+            return;
+        }
+        await RunBusyAsync(async token =>
+        {
+            var endpoint = SaveEndpointPreferences();
+            await _online.JoinAsync(endpoint.Address, endpoint.Port, endpoint.DisplayName, code, token);
+        });
+    }
+
+    private async void ResumeRun(object? sender, RoutedEventArgs args)
+    {
+        if (!await ValidateAndConfirmAsync(alwaysConfirmNonEmpty: true, validateFields: false)) return;
+        await RunBusyAsync(_online.ResumePreviousAsync);
+    }
+
+    private async void LeaveRun(object? sender, RoutedEventArgs args)
+    {
+        if (!await ConfirmAsync(
+                "Leave Multiplayer Room?",
+                "You will leave the room and the saved rejoin credential will be deleted.",
+                "Leave Room")) return;
+        await RunBusyAsync(_online.LeaveAsync);
+    }
+
+    private async void ResetRun(object? sender, RoutedEventArgs args)
+    {
+        if (!await ConfirmAsync(
+                "Start a New Run?",
+                "This clears shared moon state for every player in the room and starts a new run.",
+                "Start New Run")) return;
+        var settings = GetSelectedSettings();
+        await RunBusyAsync(token => _online.ResetAsync(settings, token));
+    }
+
+    private async void ApplySettings(object? sender, RoutedEventArgs args)
+    {
+        var settings = GetSelectedSettings();
+        await RunBusyAsync(token =>
+            _online.UpdateConfigurationAsync(settings, token));
+    }
+
+    private RunSettings GetSelectedSettings()
+    {
+        var settings = _settings().Clone();
+        if (this.GetControl<ComboBox>("cbOnlineCategory").SelectedItem is
+            RunCategory category)
+        {
+            settings.Category = category;
+        }
+        settings.IncludePostGameKingdoms =
+            this.GetControl<CheckBox>("chkOnlinePostgame").IsChecked == true;
+        return settings;
+    }
+
+    private async void CloseRoom(object? sender, RoutedEventArgs args)
+    {
+        if (!await ConfirmAsync(
+                "Close Multiplayer Room?",
+                "This closes the room for every player. It cannot be resumed.",
+                "Close Room")) return;
+        await RunBusyAsync(_online.EndAsync);
+    }
+
+    private async void CopyJoinCode(object? sender, RoutedEventArgs args)
+    {
+        var code = _online.JoinCode;
+        if (string.IsNullOrWhiteSpace(code)) return;
+        try
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard == null)
+            {
+                ShowMessage("Clipboard access is unavailable. Select the room code and copy it manually.");
+                return;
+            }
+            await clipboard.SetTextAsync(code);
+            ShowMessage("Room join code copied to the clipboard.");
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Could not copy the room code: {ex.Message}. You can still select and copy it manually.");
+        }
+    }
+
+    private async Task<bool> ValidateAndConfirmAsync(bool alwaysConfirmNonEmpty, bool validateFields = true)
+    {
+        if (_busy) return false;
+        if (validateFields)
+        {
+            var address = this.GetControl<TextBox>("txtServerAddress").Text;
+            var name = this.GetControl<TextBox>("txtDisplayName").Text;
+            if (string.IsNullOrWhiteSpace(address) || string.IsNullOrWhiteSpace(name) ||
+                !int.TryParse(this.GetControl<TextBox>("txtServerPort").Text, out var port) || port is < 1 or > 65535)
+            {
+                ShowMessage("Enter a server address, valid port, and display name.");
+                return false;
+            }
+        }
+        return !alwaysConfirmNonEmpty || !_hasLocalState() || await _confirmReplace();
+    }
+
+    private (string Address, int Port, string DisplayName) SaveEndpointPreferences()
+    {
+        var address = this.GetControl<TextBox>("txtServerAddress").Text!.Trim();
+        var port = int.Parse(this.GetControl<TextBox>("txtServerPort").Text!);
+        var name = this.GetControl<TextBox>("txtDisplayName").Text!.Trim();
+        _preferences.OnlineServerAddress = address;
+        _preferences.OnlineServerPort = port;
+        _preferences.OnlineDisplayName = name;
+        _savePreferences();
+        return (address, port, name);
+    }
+
+    private async Task RunBusyAsync(Func<CancellationToken, Task> action)
+    {
+        if (_busy) return;
+        _busy = true;
+        _localMessage = null;
+        Refresh();
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await action(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            ShowMessage("Could not connect to the SMOO+ server before the request timed out. Check that the server is running and that the address and port are correct.");
+        }
+        catch (SocketException)
+        {
+            ShowMessage("Could not connect to the SMOO+ server. Check that the server is running and that the address and port are correct.");
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(string.IsNullOrWhiteSpace(ex.Message)
+                ? "The multiplayer request failed. Check that the SMOO+ server is running and supports Aviscribe integration."
+                : ex.Message);
+        }
+        finally
+        {
+            _busy = false;
+            Refresh();
+        }
+    }
+
+    private void OnlineStateChanged(object? sender, EventArgs args) =>
+        Dispatcher.UIThread.Post(Refresh);
+
+    private void Refresh()
+    {
+        var joined = _online.IsJoined;
+        this.GetControl<Control>("pnlDisconnected").IsVisible = !joined;
+        this.GetControl<Control>("pnlConnected").IsVisible = joined;
+        this.GetControl<Button>("btnOnlineLeave").IsVisible = joined;
+        this.GetControl<TextBlock>("txtOnlineStatus").Text = _online.State switch
+        {
+            OnlineConnectionState.Connected => $"Room connected · {_online.Participants.Count(item => item.IsOnline)} players online",
+            OnlineConnectionState.Reconnecting => "Reconnecting",
+            OnlineConnectionState.SharingPaused => "Room connected · sharing paused",
+            _ => "Not in a room"
+        };
+        SetStatusDot(this.GetControl<Border>("multiplayerStatusDot"), _online.State);
+        this.GetControl<TextBlock>("txtOnlineMessage").Text = _localMessage ??
+            (!string.IsNullOrWhiteSpace(_online.LastMessage)
+                ? _online.LastMessage
+                : "Requires a SMOO+ Server build with Aviscribe integration.");
+        this.GetControl<Button>("btnResumeRun").IsVisible = _online.HasPreviousRun;
+        foreach (var name in new[] { "btnCreateRun", "btnJoinRun", "btnResumeRun", "btnOnlineLeave", "btnOnlineApplySettings", "btnOnlineReset", "btnOnlineEnd", "btnCopyJoinCode" })
+            this.GetControl<Button>(name).IsEnabled = !_busy;
+        if (!joined) return;
+
+        var currentSettings = _settings();
+        var currentConfiguration = (
+            _online.SessionId,
+            _online.Generation,
+            currentSettings.Category,
+            currentSettings.IncludePostGameKingdoms);
+        if (_configurationSeen != currentConfiguration)
+        {
+            _configurationSeen = currentConfiguration;
+            this.GetControl<ComboBox>("cbOnlineCategory").SelectedItem =
+                currentSettings.Category;
+            this.GetControl<CheckBox>("chkOnlinePostgame").IsChecked =
+                currentSettings.IncludePostGameKingdoms;
+        }
+
+        this.GetControl<TextBox>("txtConnectedCode").Text = string.IsNullOrWhiteSpace(_online.JoinCode) ? "—" : _online.JoinCode;
+        this.GetControl<Button>("btnCopyJoinCode").IsEnabled = !_busy && !string.IsNullOrWhiteSpace(_online.JoinCode);
+        this.GetControl<TextBlock>("txtCaptureSharing").Text = _online.CaptureSharingArmed
+            ? _online.State switch
+            {
+                OnlineConnectionState.Connected => "Sharing active",
+                OnlineConnectionState.Reconnecting => "Queued · reconnecting",
+                _ => "Sharing paused"
+            }
+            : "Paused · start capture";
+        SetStatusDot(
+            this.GetControl<Border>("captureSharingDot"),
+            !_online.CaptureSharingArmed
+                ? "warning"
+                : _online.State == OnlineConnectionState.Connected
+                    ? "connected"
+                    : "warning");
+        var owner = _online.Participants.FirstOrDefault(item => item.ParticipantId == _online.OwnerParticipantId);
+        this.GetControl<TextBlock>("txtOwner").Text = owner?.DisplayName ?? "Vacant";
+        this.GetControl<ListBox>("lstOnlineParticipants").ItemsSource = _online.Participants.Select(item =>
+        {
+            var isCurrentPlayerWaiting = item.ParticipantId == _online.ParticipantId &&
+                                         _online.State == OnlineConnectionState.Reconnecting;
+            var status = isCurrentPlayerWaiting ? "Connecting" : item.IsOnline ? "Online" : "Offline";
+            var brush = isCurrentPlayerWaiting ? WarningBrush : item.IsOnline ? ConnectedBrush : DisconnectedBrush;
+            var role = item.ParticipantId == _online.OwnerParticipantId ? " · Owner" : string.Empty;
+            return new PlayerListItem(item.DisplayName, status + role, brush);
+        }).ToList();
+        this.GetControl<ListBox>("lstOnlineEvents").ItemsSource = _online.RecentEvents
+            .OrderByDescending(item => item.Revision)
+            .Select(_online.DescribeFeedItem)
+            .ToList();
+        this.GetControl<Border>("pnlOwnerControls").IsVisible = _online.IsOwner;
+    }
+
+    private static void SetStatusDot(Border dot, OnlineConnectionState state)
+        => SetStatusDot(dot, state switch
+        {
+            OnlineConnectionState.Connected => "connected",
+            OnlineConnectionState.Reconnecting or OnlineConnectionState.SharingPaused => "warning",
+            _ => "disconnected"
+        });
+
+    private static void SetStatusDot(Border dot, string statusClass)
+    {
+        dot.Classes.Remove("connected");
+        dot.Classes.Remove("warning");
+        dot.Classes.Remove("disconnected");
+        dot.Classes.Add(statusClass);
+    }
+
+    private void ShowMessage(string message)
+    {
+        _localMessage = message;
+        this.GetControl<TextBlock>("txtOnlineMessage").Text = message;
+    }
+
+    private async Task<bool> ConfirmAsync(string title, string message, string action)
+    {
+        var confirmation = new Window
+        {
+            Title = title,
+            Width = 450,
+            Height = 205,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ShowInTaskbar = false,
+            Icon = (TopLevel.GetTopLevel(this) as Window)?.Icon
+        };
+        var confirm = new Button { Content = action };
+        confirm.Classes.Add("danger");
+        var cancel = new Button { Content = "Cancel" };
+        confirm.Click += (_, _) => confirmation.Close(true);
+        cancel.Click += (_, _) => confirmation.Close(false);
+        confirmation.Content = new StackPanel
+        {
+            Margin = new Avalonia.Thickness(24),
+            Spacing = 12,
+            Children =
+            {
+                new TextBlock { Text = title, FontSize = 20, FontWeight = Avalonia.Media.FontWeight.SemiBold },
+                new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Children = { cancel, confirm }
+                }
+            }
+        };
+        var owner = TopLevel.GetTopLevel(this) as Window;
+        return owner != null && await confirmation.ShowDialog<bool>(owner);
+    }
+
+    private sealed record PlayerListItem(string DisplayName, string Detail, IBrush StatusBrush);
+}
