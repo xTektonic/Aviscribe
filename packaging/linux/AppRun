@@ -1,3 +1,0 @@
-#!/bin/sh
-app_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-exec "${app_dir}/usr/lib/aviscribe/Aviscribe" "$@"
