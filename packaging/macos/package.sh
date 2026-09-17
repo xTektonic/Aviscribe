@@ -13,7 +13,11 @@ package_dir="${artifacts_root}/packages"
 portable_dir="${staging_dir}/portable"
 
 rm -rf "${publish_dir}" "${staging_dir}"
-mkdir -p "${publish_dir}" "${contents_dir}/MacOS" "${package_dir}"
+mkdir -p \
+  "${publish_dir}" \
+  "${contents_dir}/MacOS" \
+  "${contents_dir}/Resources" \
+  "${package_dir}"
 find "${package_dir}" -maxdepth 1 -type f \( \
   -name "*${version}*" -o \
   -name '*.dmg' -o \
