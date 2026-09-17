@@ -2,9 +2,8 @@ name: Desktop CI
 
 on:
   push:
-    tags: ["v*"]
-  pull_request:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -17,17 +16,28 @@ permissions:
 env:
   DOTNET_NOLOGO: "true"
   DOTNET_CLI_TELEMETRY_OPTOUT: "true"
-  AVISCRIBE_VERSION: "1.1.0"
 
 jobs:
   validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
+      - name: Read and validate version
+        id: version
+        shell: pwsh
+        run: |
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.Version
+          if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+            throw "Directory.Build.props contains invalid release version '$version'."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
       - name: Build pinned local NuGet feed
         shell: pwsh
         run: ./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
@@ -41,6 +51,9 @@ jobs:
         run: dotnet build Aviscribe.sln --configuration Release --no-restore
       - name: Automated tests
         run: dotnet test Aviscribe.sln --configuration Release --no-build
+      - name: Validate version script
+        shell: pwsh
+        run: ./tools/set-version.ps1 "${{ steps.version.outputs.version }}" -WhatIf
       - name: Smoke suites
         run: |
           for command in \
@@ -54,10 +67,9 @@ jobs:
           done
 
   windows-x64:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: validate
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
@@ -66,9 +78,24 @@ jobs:
       - name: Build pinned local NuGet feed
         shell: pwsh
         run: ./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
-      - name: Build Windows installer
+      - name: Download previous packages for deltas
+        if: github.event_name == 'push'
         shell: pwsh
-        run: ./packaging/windows/package.ps1 -Version $env:AVISCRIBE_VERSION
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force artifacts/packages | Out-Null
+          gh release download --repo $env:GITHUB_REPOSITORY --pattern "*-full.nupkg" --dir artifacts/packages
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "No previous published packages were available; building a full release only."
+            $global:LASTEXITCODE = 0
+          }
+      - name: Build Windows installer and update packages
+        shell: pwsh
+        run: ./packaging/windows/package.ps1 -Version "${{ needs.validate.outputs.version }}"
+      - name: Test optional desktop shortcut
+        shell: pwsh
+        run: ./packaging/windows/test-desktop-shortcut.ps1 -MsiPath "artifacts/packages/Aviscribe-${{ needs.validate.outputs.version }}-win-x64.msi"
       - name: Inspect Windows payload
         shell: pwsh
         run: |
@@ -90,39 +117,33 @@ jobs:
           '@
           $iconCount = [NativeIconInspection]::ExtractIconEx(
             "$publish/Aviscribe.exe", -1, $null, $null, 0)
-          if ($iconCount -eq 0) {
-            throw "Aviscribe.exe does not contain an application icon."
-          }
+          if ($iconCount -eq 0) { throw "Aviscribe.exe does not contain an application icon." }
           foreach ($library in @("OpenCvSharpExtern.dll", "onnxruntime.dll")) {
-            if (-not (Get-ChildItem $publish -Recurse -Filter $library)) {
-              throw "$library is missing."
-            }
+            if (-not (Get-ChildItem $publish -Recurse -Filter $library)) { throw "$library is missing." }
           }
           foreach ($library in @("FlashCap.dll", "FlashCap.Core.dll")) {
-            if (-not (Test-Path "$publish/$library")) {
-              throw "$library is missing from the Windows payload."
-            }
+            if (-not (Test-Path "$publish/$library")) { throw "$library is missing from the Windows payload." }
           }
           foreach ($library in @("Accord.Video.DirectShow.dll", "CoreCompat.System.Drawing.dll")) {
-            if (Test-Path "$publish/$library") {
-              throw "$library should not be present in the FlashCap-only payload."
-            }
+            if (Test-Path "$publish/$library") { throw "$library should not be present in the FlashCap-only payload." }
           }
-          if (-not (Get-ChildItem "artifacts/packages" -Filter "*.msi")) {
-            throw "The Windows installer is missing."
-          }
+          if (-not (Get-ChildItem artifacts/packages -Filter "*.msi")) { throw "The MSI is missing." }
+          if (-not (Test-Path artifacts/packages/releases.win.json)) { throw "The Windows update feed is missing." }
+          if (-not (Get-ChildItem artifacts/packages -Filter "*-full.nupkg")) { throw "The Windows update package is missing." }
       - uses: actions/upload-artifact@v4
         with:
-          name: Aviscribe-${{ env.AVISCRIBE_VERSION }}-win-x64
-          path: artifacts/packages/*.msi
+          name: Aviscribe-${{ needs.validate.outputs.version }}-win-x64
+          path: |
+            artifacts/packages/*.msi
+            artifacts/packages/*.nupkg
+            artifacts/packages/releases.win.json
           if-no-files-found: error
           retention-days: 14
 
   macos-arm64:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: validate
     runs-on: macos-14
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
@@ -131,11 +152,19 @@ jobs:
       - name: Build pinned local NuGet feed
         shell: pwsh
         run: ./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
-      - name: Build macOS application and DMG
-        run: bash packaging/macos/package.sh "${AVISCRIBE_VERSION}"
+      - name: Download previous packages for deltas
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifacts/packages
+          gh release download --repo "${GITHUB_REPOSITORY}" --pattern '*-full.nupkg' --dir artifacts/packages || \
+            echo "No previous published packages were available; building a full release only."
+      - name: Build macOS application, update packages, and DMG
+        run: bash packaging/macos/package.sh "${{ needs.validate.outputs.version }}"
       - name: Inspect macOS payload
         run: |
-          app="artifacts/staging/macos/Aviscribe.app"
+          app="artifacts/staging/macos/dmg/Aviscribe.app"
           test -x "${app}/Contents/MacOS/Aviscribe"
           file "${app}/Contents/MacOS/Aviscribe" | grep -q arm64
           find "${app}" -name "libOpenCvSharpExtern.dylib" -print -quit | grep -q .
@@ -145,20 +174,25 @@ jobs:
           test ! -f "${app}/Contents/MacOS/Accord.Video.DirectShow.dll"
           test ! -f "${app}/Contents/MacOS/CoreCompat.System.Drawing.dll"
           plutil -lint "${app}/Contents/Info.plist"
+          test -f "${app}/Contents/MacOS/sq.version"
           codesign --verify --deep --strict "${app}"
-          test -f "artifacts/packages/Aviscribe-${AVISCRIBE_VERSION}-osx-arm64.dmg"
+          test -f "artifacts/packages/Aviscribe-${{ needs.validate.outputs.version }}-osx-arm64.dmg"
+          test -f artifacts/packages/releases.osx.json
+          find artifacts/packages -name '*-full.nupkg' -print -quit | grep -q .
       - uses: actions/upload-artifact@v4
         with:
-          name: Aviscribe-${{ env.AVISCRIBE_VERSION }}-osx-arm64
-          path: artifacts/packages/*.dmg
+          name: Aviscribe-${{ needs.validate.outputs.version }}-osx-arm64
+          path: |
+            artifacts/packages/*.dmg
+            artifacts/packages/*.nupkg
+            artifacts/packages/releases.osx.json
           if-no-files-found: error
           retention-days: 14
 
   linux-x64:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: validate
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
@@ -167,13 +201,21 @@ jobs:
       - name: Build pinned local NuGet feed
         shell: pwsh
         run: ./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
-      - name: Install runtime and package prerequisites
+      - name: Install runtime prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install --yes libfontconfig1 libice6 libsm6 libx11-6 xvfb
-      - name: Build Debian and AppImage packages
-        run: bash packaging/linux/package.sh "${AVISCRIBE_VERSION}"
-      - name: Inspect Linux payload and packages
+      - name: Download previous packages for deltas
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifacts/packages
+          gh release download --repo "${GITHUB_REPOSITORY}" --pattern '*-full.nupkg' --dir artifacts/packages || \
+            echo "No previous published packages were available; building a full release only."
+      - name: Build Linux AppImage and update packages
+        run: bash packaging/linux/package.sh "${{ needs.validate.outputs.version }}"
+      - name: Inspect Linux payload
         run: |
           publish="artifacts/publish/linux-x64"
           test -x "${publish}/Aviscribe"
@@ -183,9 +225,11 @@ jobs:
           test -f "${publish}/FlashCap.Core.dll"
           test ! -f "${publish}/Accord.Video.DirectShow.dll"
           test ! -f "${publish}/CoreCompat.System.Drawing.dll"
-          dpkg-deb --info "artifacts/packages/aviscribe_${AVISCRIBE_VERSION}_amd64.deb"
-          appimage="artifacts/packages/Aviscribe-${AVISCRIBE_VERSION}-x86_64.AppImage"
+          appimage="$(find artifacts/packages -maxdepth 1 -name '*.AppImage' -print -quit)"
+          test -n "${appimage}"
           test -x "${appimage}"
+          test -f artifacts/packages/releases.linux.json
+          find artifacts/packages -name '*-full.nupkg' -print -quit | grep -q .
           "${appimage}" --appimage-extract >/dev/null
           set +e
           timeout 8s xvfb-run -a "${publish}/Aviscribe"
@@ -197,9 +241,64 @@ jobs:
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: Aviscribe-${{ env.AVISCRIBE_VERSION }}-linux-x64
+          name: Aviscribe-${{ needs.validate.outputs.version }}-linux-x64
           path: |
-            artifacts/packages/*.deb
             artifacts/packages/*.AppImage
+            artifacts/packages/*.nupkg
+            artifacts/packages/releases.linux.json
           if-no-files-found: error
           retention-days: 14
+
+  draft-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [validate, windows-x64, macos-arm64, linux-x64]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: Aviscribe-${{ needs.validate.outputs.version }}-*
+          path: release-assets
+          merge-multiple: true
+      - name: Create or refresh draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" 2>/dev/null || true)"
+          if [[ -n "${release_json}" ]]; then
+            is_draft="$(jq -r '.draft' <<<"${release_json}")"
+            if [[ "${is_draft}" != "true" ]]; then
+              echo "Release ${tag} is already published and cannot be replaced."
+              exit 1
+            fi
+
+            release_id="$(jq -r '.id' <<<"${release_json}")"
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+              -f name="Aviscribe ${VERSION}" \
+              -f target_commitish="${GITHUB_SHA}" \
+              -F draft=true >/dev/null
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" \
+              -f sha="${GITHUB_SHA}" -F force=true >/dev/null
+            jq -r '.assets[].id' <<<"${release_json}" | while read -r asset_id; do
+              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}"
+            done
+          else
+            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+              echo "Tag ${tag} already exists without a matching draft release."
+              exit 1
+            fi
+            gh release create "${tag}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${GITHUB_SHA}" \
+              --title "Aviscribe ${VERSION}" \
+              --generate-notes \
+              --draft
+          fi
+
+          gh release upload "${tag}" release-assets/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --clobber

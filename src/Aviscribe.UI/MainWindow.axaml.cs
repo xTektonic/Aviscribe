@@ -53,6 +53,8 @@ namespace Aviscribe.UI
         private readonly RawFrameSnapshotBroker _snapshotBroker = new();
         private readonly SemaphoreSlim _captureLifecycleGate = new(1, 1);
         private readonly CancellationTokenSource _closingCancellation = new();
+        private readonly StartupUpdateCoordinator _startupUpdates;
+        private readonly IStartupMaintenanceService _startupMaintenance;
         private IPlatformSettings? _platformSettings;
 
         private FrameProcessor? _processor;
@@ -130,18 +132,29 @@ namespace Aviscribe.UI
         private OnlineRunView? _settingsOnlineRunView;
 
         public MainWindow()
-            : this(new DesignVideoProvider(), NullAppDiagnostics.Instance)
+            : this(
+                new DesignVideoProvider(),
+                NullAppDiagnostics.Instance,
+                DisabledAppUpdateService.Instance,
+                NoOpStartupMaintenanceService.Instance)
         {
         }
 
         public MainWindow(
             IVideoProvider provider,
-            IAppDiagnostics? diagnostics = null)
+            IAppDiagnostics? diagnostics = null,
+            IAppUpdateService? updates = null,
+            IStartupMaintenanceService? startupMaintenance = null)
         {
             InitializeComponent();
 
             _videoProvider = provider;
             _diagnostics = diagnostics ?? NullAppDiagnostics.Instance;
+            _startupUpdates = new StartupUpdateCoordinator(
+                updates ?? DisabledAppUpdateService.Instance,
+                _diagnostics);
+            _startupMaintenance =
+                startupMaintenance ?? NoOpStartupMaintenanceService.Instance;
             _repo = MoonRepository.LoadDefault();
             _stateStore = new RunStateStore(_repo);
             LoadAppPreferences();
@@ -175,7 +188,7 @@ namespace Aviscribe.UI
             UpdateRunState();
             UpdateOnlineUi();
             Opened += InitializePlatformAppearance;
-            Opened += ShowFirstRunQuickStart;
+            Opened += RunStartupSequence;
         }
 
         private void NormalizeLanguageSettings()
@@ -1582,13 +1595,25 @@ namespace Aviscribe.UI
             }
         }
 
-        private async void ShowFirstRunQuickStart(object? sender, EventArgs args)
+        private async void RunStartupSequence(object? sender, EventArgs args)
         {
-            if (Design.IsDesignMode ||
-                _preferences.QuickStartVersionSeen >= AppPreferences.CurrentQuickStartVersion)
+            if (Design.IsDesignMode)
                 return;
 
-            await ShowQuickStartAsync();
+            Opened -= RunStartupSequence;
+            try
+            {
+                await _startupMaintenance.RunAsync(_closingCancellation.Token);
+                await _startupUpdates.RunAsync(
+                    new AvaloniaUpdateInteraction(this),
+                    _closingCancellation.Token);
+
+                if (_preferences.QuickStartVersionSeen < AppPreferences.CurrentQuickStartVersion)
+                    await ShowQuickStartAsync();
+            }
+            catch (OperationCanceledException) when (_closingCancellation.IsCancellationRequested)
+            {
+            }
         }
 
         private async void OpenQuickStart(object? sender, RoutedEventArgs args)

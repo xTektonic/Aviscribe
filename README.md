@@ -26,8 +26,8 @@ Download the package for your operating system from the [latest release](https:/
 ### Windows
 
 1. Download `Aviscribe-*-win-x64.msi`.
-2. Open the installer and follow the prompts.
-3. Launch Aviscribe from the Start menu.
+2. Open the installer and follow the prompts. Optionally select **Create a desktop shortcut (all users)** before installing; it is unchecked by default.
+3. Leave **Launch Aviscribe** selected on the final page to open it immediately. Aviscribe is also added to the Start menu.
 
 ### macOS
 
@@ -39,13 +39,7 @@ Because Aviscribe is not currently notarized, macOS may block the first launch. 
 
 ### Linux
 
-For Ubuntu or another Debian-based distribution, download the `.deb` package and install it with:
-
-~~~bash
-sudo apt install ./aviscribe_*_amd64.deb
-~~~
-
-Alternatively, download the AppImage. On most Linux distributions, you can double-click the file to run it. If it does not open, mark it as executable in the file’s **Properties** window, or run:
+Download the AppImage. On most Linux distributions, you can double-click the file to run it. If it does not open, mark it as executable in the file’s **Properties** window, or run:
 
 ~~~bash
 chmod +x Aviscribe-*-x86_64.AppImage
@@ -106,7 +100,7 @@ dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-bui
 
 ## Packaging
 
-The packaging scripts produce self-contained builds for Windows x64, macOS Apple Silicon, and Linux x64. Set the version first if needed:
+The packaging scripts use Velopack to produce a Windows x64 MSI, a macOS Apple Silicon DMG, and a Linux x64 AppImage together with the update packages and platform release feeds. Set the version explicitly before packaging:
 
 ~~~powershell
 ./tools/set-version.ps1 1.1.0
@@ -123,7 +117,19 @@ bash packaging/macos/package.sh 1.1.0
 bash packaging/linux/package.sh 1.1.0
 ~~~
 
-Packages and publish outputs are written to artifacts/.
+Packages and publish outputs are written to `artifacts/`. Restore the repository's pinned Velopack tool before running a packaging script directly:
+
+~~~text
+dotnet tool restore
+~~~
+
+Windows packaging adds an optional desktop-shortcut feature to Velopack's generated MSI. CI checks its default and selected states without installing the application. For unattended installations, pass `AVISCRIBE_DESKTOP_SHORTCUT=1` to `msiexec` to opt in; otherwise no desktop shortcut is created. The Start menu shortcut is always installed. macOS and Linux packaging do not add desktop shortcuts.
+
+Installed copies check the stable GitHub Releases feed whenever Aviscribe starts. Draft and prerelease releases are not offered. When an update is available, Aviscribe asks before downloading it and restarts only after the download completes.
+
+Pull requests build and validate all three packages. A push to `main` creates or refreshes a draft GitHub Release for the version in `Directory.Build.props`; publishing that draft makes the update available.
+
+Windows and macOS artifacts are not signed with trusted developer certificates. Windows SmartScreen and macOS Gatekeeper may therefore display warnings.
 
 ## Repository layout
 
