@@ -2869,7 +2869,11 @@ namespace Aviscribe.UI
                 new OperationCanceledException("The application was closed."));
             try
             {
-                StopCaptureAsync("The application was closed.")
+                // Some Windows capture backends capture the current synchronization
+                // context while stopping. OnClosed must remain synchronous, so begin
+                // teardown on the thread pool to avoid waiting on the UI context for
+                // a continuation that cannot run until this method returns.
+                Task.Run(() => StopCaptureAsync("The application was closed."))
                     .GetAwaiter()
                     .GetResult();
             }
