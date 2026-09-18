@@ -127,7 +127,7 @@ Windows packaging adds an optional desktop-shortcut feature to Velopack's genera
 
 Installed copies check the stable GitHub Releases feed whenever Aviscribe starts. Draft and prerelease releases are not offered. When an update is available, Aviscribe asks before downloading it and restarts only after the download completes.
 
-Pull requests build and validate all three packages. A push to `main` creates or refreshes a draft GitHub Release for the version in `Directory.Build.props`; publishing that draft makes the update available.
+Pull requests build and validate all three packages. A push to `main` creates or refreshes a draft GitHub Release for the version in `Directory.Build.props`; publishing that draft makes the update available. Published releases cannot be replaced; bump the version before creating a new release.
 
 Windows and macOS artifacts are not signed with trusted developer certificates. Windows SmartScreen and macOS Gatekeeper may therefore display warnings.
 
