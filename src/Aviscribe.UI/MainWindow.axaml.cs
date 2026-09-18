@@ -111,6 +111,8 @@ namespace Aviscribe.UI
         private bool _updatingLists;
         private bool _updatingIncludePostGameCheck;
         private bool _updatingKingdomSelection;
+        private bool _shutdownStarted;
+        private bool _shutdownComplete;
         private bool _dragStarted;
         private bool _suppressListClick;
         private Avalonia.Point _dragStartPoint;
@@ -2854,51 +2856,69 @@ namespace Aviscribe.UI
             }
         }
 
-        protected override void OnClosed(EventArgs e)
+        protected override void OnClosing(WindowClosingEventArgs e)
         {
-            _diagnostics.Information("Aviscribe is shutting down.");
-            if (_platformSettings != null)
-            {
-                _platformSettings.ColorValuesChanged -= OnPlatformColorValuesChanged;
-                _platformSettings = null;
-            }
-            _diagnosticsWindow?.Close();
-            _diagnosticsWindow = null;
-            _closingCancellation.Cancel();
-            _snapshotBroker.Cancel(
-                new OperationCanceledException("The application was closed."));
+            base.OnClosing(e);
+            if (_shutdownComplete)
+                return;
+
+            e.Cancel = true;
+            if (_shutdownStarted)
+                return;
+
+            _shutdownStarted = true;
+            _ = CompleteShutdownAsync();
+        }
+
+        private async Task CompleteShutdownAsync()
+        {
             try
             {
-                // Some Windows capture backends capture the current synchronization
-                // context while stopping. OnClosed must remain synchronous, so begin
-                // teardown on the thread pool to avoid waiting on the UI context for
-                // a continuation that cannot run until this method returns.
-                Task.Run(() => StopCaptureAsync("The application was closed."))
-                    .GetAwaiter()
-                    .GetResult();
-            }
-            catch
-            {
-            }
+                _diagnostics.Information("Aviscribe is shutting down.");
+                if (_platformSettings != null)
+                {
+                    _platformSettings.ColorValuesChanged -= OnPlatformColorValuesChanged;
+                    _platformSettings = null;
+                }
+                _diagnosticsWindow?.Close();
+                _diagnosticsWindow = null;
+                _closingCancellation.Cancel();
+                _snapshotBroker.Cancel(
+                    new OperationCanceledException("The application was closed."));
+                try
+                {
+                    await StopCaptureAsync("The application was closed.");
+                }
+                catch
+                {
+                }
 
-            _processor?.Dispose();
-            _settingsOnlineRunView?.Dispose();
-            _settingsOnlineRunView = null;
-            try
-            {
-                _onlineRun.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                _processor?.Dispose();
+                _settingsOnlineRunView?.Dispose();
+                _settingsOnlineRunView = null;
+                try
+                {
+                    await _onlineRun.DisposeAsync();
+                }
+                catch
+                {
+                }
+                _snapshotBroker.Dispose();
+                _previewBitmap?.Dispose();
+                foreach (var bitmap in _moonImageCache.Values)
+                    bitmap.Dispose();
+                _closingCancellation.Dispose();
+                _captureLifecycleGate.Dispose();
             }
-            catch
+            catch (Exception ex)
             {
+                _diagnostics.Error("Application shutdown failed.", ex);
             }
-            _snapshotBroker.Dispose();
-            _previewBitmap?.Dispose();
-            foreach (var bitmap in _moonImageCache.Values)
-                bitmap.Dispose();
-            _closingCancellation.Dispose();
-            _captureLifecycleGate.Dispose();
-
-            base.OnClosed(e);
+            finally
+            {
+                _shutdownComplete = true;
+                Close();
+            }
         }
 
         private sealed record MoonListItem(Moon Moon, string Label, Bitmap? Image = null)
