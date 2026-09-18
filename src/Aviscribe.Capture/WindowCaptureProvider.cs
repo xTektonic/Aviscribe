@@ -110,8 +110,23 @@ internal interface IWindowCaptureBackend
 {
     string Name { get; }
     IReadOnlyList<WindowCaptureTarget> EnumerateTargets();
-    Mat Capture(WindowCaptureTarget target);
+    Mat Capture(WindowCaptureTarget target) =>
+        throw new NotSupportedException("This backend requires a capture session.");
+    IWindowCaptureSession OpenSession(WindowCaptureTarget target) =>
+        new PollingWindowCaptureSession(this, target);
     bool TryRequestAccess() => false;
+}
+
+internal interface IWindowCaptureSession : IDisposable
+{
+    Mat Capture();
+}
+
+internal sealed class PollingWindowCaptureSession(
+    IWindowCaptureBackend backend, WindowCaptureTarget target) : IWindowCaptureSession
+{
+    public Mat Capture() => backend.Capture(target);
+    public void Dispose() { }
 }
 
 internal sealed record WindowCaptureTarget(

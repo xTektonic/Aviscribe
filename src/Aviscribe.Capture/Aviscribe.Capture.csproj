@@ -16,4 +16,5 @@
     <ProjectReference Include="..\Aviscribe.Core.Capture\Aviscribe.Core.Capture.csproj" />
     <ProjectReference Include="..\Aviscribe.Core\Aviscribe.Core.csproj" />
   </ItemGroup>
+  <Import Project="Native/ScreenCapture.targets" />
 </Project>

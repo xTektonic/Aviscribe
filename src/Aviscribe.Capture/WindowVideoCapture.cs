@@ -51,11 +51,32 @@ internal sealed class WindowVideoCapture : IVideoCapture
             if (State == CaptureState.Running)
                 return;
 
+            if (_captureTask != null)
+                await _captureTask.ConfigureAwait(false);
             SetState(CaptureState.Starting);
             _runCancellation?.Dispose();
             _runCancellation = new CancellationTokenSource();
-            SetState(CaptureState.Running);
-            _captureTask = Task.Run(() => CaptureLoopAsync(_runCancellation.Token), CancellationToken.None);
+            var token = _runCancellation.Token;
+            using var startupCancellation = cancellationToken.Register(_runCancellation.Cancel);
+            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _captureTask = Task.Run(() => CaptureLoopAsync(started, token), CancellationToken.None);
+            try
+            {
+                // Report success only after the native backend produces a frame.
+                await started.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                _runCancellation.Cancel();
+                await _captureTask.ConfigureAwait(false);
+                _captureTask = null;
+                startupCancellation.Dispose();
+                _runCancellation.Dispose();
+                _runCancellation = null;
+                if (cancellationToken.IsCancellationRequested)
+                    SetState(CaptureState.Stopped);
+                throw;
+            }
         }
         finally
         {
@@ -66,7 +87,6 @@ internal sealed class WindowVideoCapture : IVideoCapture
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        Task? captureTask;
         try
         {
             if (State is CaptureState.Stopped or CaptureState.Disposed)
@@ -74,31 +94,43 @@ internal sealed class WindowVideoCapture : IVideoCapture
 
             SetState(CaptureState.Stopping);
             _runCancellation?.Cancel();
-            captureTask = _captureTask;
+            var captureTask = _captureTask;
             _captureTask = null;
+            if (captureTask != null)
+            {
+                await captureTask.ConfigureAwait(false);
+            }
+            _runCancellation?.Dispose();
+            _runCancellation = null;
+            SetState(CaptureState.Stopped);
         }
         finally
         {
             _lifecycleGate.Release();
         }
-
-        if (captureTask != null)
-        {
-            try
-            {
-                await captureTask.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-        }
-
-        _runCancellation?.Dispose();
-        _runCancellation = null;
-        SetState(CaptureState.Stopped);
     }
 
-    private async Task CaptureLoopAsync(CancellationToken cancellationToken)
+    private async Task CaptureLoopAsync(TaskCompletionSource started, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var session = _backend.OpenSession(_target);
+            await ReadFramesAsync(session, started, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            started.TrySetCanceled(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            SetState(CaptureState.Faulted);
+            RaiseError($"Could not capture {_target.Name}: {ex.Message}", ex);
+            started.TrySetException(ex);
+        }
+    }
+
+    private async Task ReadFramesAsync(
+        IWindowCaptureSession session, TaskCompletionSource started, CancellationToken cancellationToken)
     {
         var consecutiveFailures = 0;
         using var frameTimer = new PeriodicTimer(FrameInterval);
@@ -106,7 +138,12 @@ internal sealed class WindowVideoCapture : IVideoCapture
         {
             try
             {
-                var captured = _backend.Capture(_target);
+                var captured = session.Capture();
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    captured.Dispose();
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
                 if (captured.Empty())
                 {
                     captured.Dispose();
@@ -115,20 +152,18 @@ internal sealed class WindowVideoCapture : IVideoCapture
 
                 consecutiveFailures = 0;
                 SelectedFormat = CreateFormat(captured.Width, captured.Height);
+                if (!started.Task.IsCompleted)
+                {
+                    SetState(CaptureState.Running);
+                    started.TrySetResult();
+                }
                 DispatchFrame(new VideoFrame(captured, DateTime.UtcNow, Interlocked.Increment(ref _sequenceNumber)));
             }
-            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
             {
                 consecutiveFailures++;
-                if (consecutiveFailures >= 10)
-                {
-                    SetState(CaptureState.Faulted);
-                    RaiseError(
-                        $"Could not capture {_target.Name}: {ex.Message}",
-                        ex,
-                        deviceDisconnected: true);
-                    return;
-                }
+                if (!started.Task.IsCompleted || consecutiveFailures >= 10)
+                    throw;
             }
 
             if (!await frameTimer

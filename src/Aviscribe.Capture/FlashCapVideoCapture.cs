@@ -1,6 +1,7 @@
 using Aviscribe.Core.Capture;
 using FlashCap;
 using OpenCvSharp;
+using Aviscribe.Core.Diagnostics;
 
 namespace Aviscribe.Capture;
 
@@ -9,6 +10,7 @@ internal sealed class FlashCapVideoCapture : IVideoCapture
     private readonly CaptureDeviceDescriptor _descriptor;
     private readonly VideoCharacteristics _characteristics;
     private readonly PixelBufferArrivedDelegate _pixelBufferCallback;
+    private readonly IAppDiagnostics _diagnostics;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private CaptureDevice? _captureDevice;
     private CancellationTokenSource? _runCancellation;
@@ -21,13 +23,15 @@ internal sealed class FlashCapVideoCapture : IVideoCapture
         VideoDevice device,
         VideoFormat selectedFormat,
         CaptureDeviceDescriptor descriptor,
-        VideoCharacteristics characteristics)
+        VideoCharacteristics characteristics,
+        IAppDiagnostics? diagnostics = null)
     {
         Device = device;
         SelectedFormat = selectedFormat;
         _descriptor = descriptor;
         _characteristics = characteristics;
         _pixelBufferCallback = OnPixelBuffer;
+        _diagnostics = diagnostics ?? NullAppDiagnostics.Instance;
     }
 
     public event Action<VideoFrame>? FrameReceived;
@@ -55,6 +59,9 @@ internal sealed class FlashCapVideoCapture : IVideoCapture
             SetState(CaptureState.Starting);
             try
             {
+                _diagnostics.Information(
+                    $"Opening {Device.Name}; {SelectedFormat}; backend {Device.Backend}; " +
+                    $"FlashCap {typeof(CaptureDevice).Assembly.GetName().Version}.");
                 _captureDevice = await _descriptor.OpenAsync(
                     _characteristics,
                     TranscodeFormats.Auto,
@@ -63,6 +70,7 @@ internal sealed class FlashCapVideoCapture : IVideoCapture
                     _pixelBufferCallback,
                     cancellationToken).ConfigureAwait(false);
 
+                _diagnostics.Debug($"Capture device opened: {Device.Name}; starting native session.");
                 await _captureDevice
                     .StartAsync(cancellationToken)
                     .ConfigureAwait(false);

@@ -108,6 +108,8 @@ The packaging scripts use Velopack to produce a Windows x64 MSI, a macOS Apple S
 
 Run the package script on its target operating system:
 
+macOS builds also require Xcode Command Line Tools (`xcode-select --install`) to compile the ScreenCaptureKit bridge. The bridge is built automatically for local runs and included in published applications.
+
 ~~~powershell
 ./packaging/windows/package.ps1 -Version 1.1.0
 ~~~
@@ -124,6 +126,8 @@ dotnet tool restore
 ~~~
 
 Windows packaging adds an optional desktop-shortcut feature to Velopack's generated MSI. CI checks its default and selected states without installing the application. For unattended installations, pass `AVISCRIBE_DESKTOP_SHORTCUT=1` to `msiexec` to opt in; otherwise no desktop shortcut is created. The Start menu shortcut is always installed. macOS and Linux packaging do not add desktop shortcuts.
+
+macOS signing uses `packaging/macos/Aviscribe.entitlements` for both the initial bundle and Velopack's final signature. It includes camera access as well as the .NET runtime permissions. Packaging verifies the final executable's entitlements and the ScreenCaptureKit library. CI also tests native frame ownership, padded rows, idle frames, and stream errors without requesting screen access. Before publishing a macOS release, run the [live capture checks](docs/macos-capture-validation.md) against the installed DMG.
 
 Installed copies check the stable GitHub Releases feed whenever Aviscribe starts. Draft and prerelease releases are not offered. When an update is available, Aviscribe asks before downloading it and restarts only after the download completes.
 

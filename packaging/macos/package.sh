@@ -14,6 +14,7 @@ portable_dir="${staging_dir}/portable"
 icon_source="${repo_root}/src/Aviscribe.UI/Assets/aviscribe-icon.png"
 iconset_dir="${staging_dir}/Aviscribe.iconset"
 icon_file="${contents_dir}/Resources/Aviscribe.icns"
+entitlements="${repo_root}/packaging/macos/Aviscribe.entitlements"
 
 rm -rf "${publish_dir}" "${staging_dir}"
 mkdir -p \
@@ -63,7 +64,8 @@ sed "s/@VERSION@/${version}/g" \
   > "${contents_dir}/Info.plist"
 
 signing_identity="${CODESIGN_IDENTITY:--}"
-codesign --force --deep --sign "${signing_identity}" "${app_dir}"
+codesign --force --deep --options runtime --entitlements "${entitlements}" \
+  --sign "${signing_identity}" "${app_dir}"
 codesign --verify --deep --strict "${app_dir}"
 plutil -lint "${contents_dir}/Info.plist"
 
@@ -79,6 +81,7 @@ dotnet tool run vpk -- pack \
   --channel osx \
   --outputDir "${package_dir}" \
   --signAppIdentity "${signing_identity}" \
+  --signEntitlements "${entitlements}" \
   --noInst
 
 find "${package_dir}" -maxdepth 1 -name '*.nupkg' ! -name "*${version}*" -delete
@@ -90,6 +93,7 @@ ditto -x -k "${portable_zip}" "${portable_dir}"
 packaged_app="$(find "${portable_dir}" -maxdepth 2 -name 'Aviscribe.app' -type d -print -quit)"
 test -n "${packaged_app}"
 codesign --verify --deep --strict "${packaged_app}"
+bash "${repo_root}/packaging/macos/verify-bundle.sh" "${packaged_app}"
 
 dmg_root="${staging_dir}/dmg"
 mkdir -p "${dmg_root}"

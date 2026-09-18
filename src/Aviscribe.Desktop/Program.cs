@@ -24,14 +24,14 @@ internal static class Program
     {
         var diagnostics = CreateDiagnostics();
         diagnostics.Information(
-            $"Starting Aviscribe on {RuntimeInformation.OSDescription} " +
+            $"Starting Aviscribe {typeof(Program).Assembly.GetName().Version} on {RuntimeInformation.OSDescription} " +
             $"({RuntimeInformation.ProcessArchitecture}).");
         var updates = new VelopackUpdateService();
 
         return AppBuilder
             .Configure(() => new AviscribeApp(
                 new CompositeVideoProvider(
-                    new FlashCapVideoProvider(),
+                    new FlashCapVideoProvider(diagnostics),
                     PlatformWindowCaptureProvider.Create(diagnostics)),
                 diagnostics,
                 updates,

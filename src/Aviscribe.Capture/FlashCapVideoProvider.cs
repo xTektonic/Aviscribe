@@ -1,11 +1,19 @@
 using Aviscribe.Core.Capture;
 using FlashCap;
 using System.Collections.ObjectModel;
+using Aviscribe.Core.Diagnostics;
 
 namespace Aviscribe.Capture;
 
 public sealed class FlashCapVideoProvider : IVideoProvider
 {
+    private readonly IAppDiagnostics _diagnostics;
+
+    public FlashCapVideoProvider(IAppDiagnostics? diagnostics = null)
+    {
+        _diagnostics = diagnostics ?? NullAppDiagnostics.Instance;
+    }
+
     private readonly object _sync = new();
     private readonly CaptureDevices _captureDevices = new();
     private IReadOnlyList<VideoDevice> _devices = [];
@@ -44,7 +52,8 @@ public sealed class FlashCapVideoProvider : IVideoProvider
             entry.Device,
             selectedFormat,
             entry.Descriptor,
-            characteristics);
+            characteristics,
+            _diagnostics);
     }
 
     public ValueTask<IReadOnlyList<VideoDevice>> RefreshAsync(

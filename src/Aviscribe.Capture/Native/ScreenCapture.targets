@@ -1,0 +1,19 @@
+<Project>
+  <!-- Build the bridge for both local Mac runs and packaged publishes. -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <ScreenCaptureLibrary>$(BaseIntermediateOutputPath)$(Configuration)/$(TargetFramework)/$(RuntimeIdentifier)/native/libAviscribeScreenCapture.dylib</ScreenCaptureLibrary>
+    <ScreenCaptureArch Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">-arch arm64</ScreenCaptureArch>
+    <ScreenCaptureArch Condition="'$(RuntimeIdentifier)' == 'osx-x64'">-arch x86_64</ScreenCaptureArch>
+  </PropertyGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <Content Include="$(ScreenCaptureLibrary)" Link="libAviscribeScreenCapture.dylib"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="BuildScreenCaptureBridge" BeforeTargets="PrepareForBuild"
+          Condition="$([MSBuild]::IsOSPlatform('OSX'))"
+          Inputs="$(MSBuildThisFileDirectory)ScreenCapture.m;$(MSBuildThisFileFullPath)"
+          Outputs="$(ScreenCaptureLibrary)">
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(ScreenCaptureLibrary)'))" />
+    <Exec Command="xcrun clang -dynamiclib -fobjc-arc -fblocks -O2 -Wall -Wextra -Werror -Wno-unused-parameter -fvisibility=hidden -mmacosx-version-min=14.0 $(ScreenCaptureArch) -framework Foundation -framework ScreenCaptureKit -framework CoreMedia -framework CoreVideo -install_name @rpath/libAviscribeScreenCapture.dylib &quot;$(MSBuildThisFileDirectory)ScreenCapture.m&quot; -o &quot;$(ScreenCaptureLibrary)&quot;" />
+  </Target>
+</Project>

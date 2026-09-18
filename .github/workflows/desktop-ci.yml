@@ -162,9 +162,12 @@ jobs:
             echo "No previous published packages were available; building a full release only."
       - name: Build macOS application, update packages, and DMG
         run: bash packaging/macos/package.sh "${{ needs.validate.outputs.version }}"
+      - name: Test native ScreenCaptureKit bridge
+        run: bash packaging/macos/test-native.sh
       - name: Inspect macOS payload
         run: |
           app="artifacts/staging/macos/dmg/Aviscribe.app"
+          bash packaging/macos/verify-bundle.sh "${app}"
           test -x "${app}/Contents/MacOS/Aviscribe"
           file "${app}/Contents/MacOS/Aviscribe" | grep -q arm64
           find "${app}" -name "libOpenCvSharpExtern.dylib" -print -quit | grep -q .

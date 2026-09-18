@@ -1,5 +1,4 @@
 using Aviscribe.Core.Capture;
-using OpenCvSharp;
 using System.Runtime.InteropServices;
 
 namespace Aviscribe.Capture;
@@ -9,14 +8,10 @@ internal sealed class MacWindowCaptureBackend : IWindowCaptureBackend
     private const string CoreGraphics = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
     private const string CoreFoundation = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
     private const uint WindowListOptionAll = 0;
-    private const uint WindowListOptionIncludingWindow = 1u << 3;
-    private const uint ImageBoundsIgnoreFraming = 1u << 0;
-    private const uint ImageBestResolution = 1u << 3;
-    private const uint PremultipliedFirstLittleEndian = 2u | (2u << 12);
     private static readonly Lazy<nint> CoreGraphicsLibrary =
         new(() => NativeLibrary.Load(CoreGraphics));
 
-    public string Name => "macOS CoreGraphics";
+    public string Name => "macOS ScreenCaptureKit";
 
     public bool TryRequestAccess() =>
         !CGPreflightScreenCaptureAccess() && CGRequestScreenCaptureAccess();
@@ -72,78 +67,8 @@ internal sealed class MacWindowCaptureBackend : IWindowCaptureBackend
         }
     }
 
-    public Mat Capture(WindowCaptureTarget target)
-    {
-        var image = CGWindowListCreateImage(
-            new CGRect
-            {
-                Origin = new CGPoint
-                {
-                    X = double.PositiveInfinity,
-                    Y = double.PositiveInfinity
-                }
-            },
-            WindowListOptionIncludingWindow,
-            (uint)target.NativeHandle,
-            ImageBoundsIgnoreFraming | ImageBestResolution);
-        if (image == 0)
-            throw new InvalidOperationException("macOS could not capture the selected window. It may be minimized, closed, or protected.");
-
-        try
-        {
-            var width = checked((int)CGImageGetWidth(image));
-            var height = checked((int)CGImageGetHeight(image));
-            var stride = checked(width * 4);
-            var pixels = Marshal.AllocHGlobal(checked(stride * height));
-            var colorSpace = CGColorSpaceCreateDeviceRGB();
-            if (colorSpace == 0)
-            {
-                Marshal.FreeHGlobal(pixels);
-                throw new InvalidOperationException("macOS could not create a capture color space.");
-            }
-
-            try
-            {
-                var context = CGBitmapContextCreate(
-                    pixels,
-                    (nuint)width,
-                    (nuint)height,
-                    8,
-                    (nuint)stride,
-                    colorSpace,
-                    PremultipliedFirstLittleEndian);
-                if (context == 0)
-                    throw new InvalidOperationException("macOS could not create a BGRA capture surface.");
-                try
-                {
-                    CGContextTranslateCTM(context, 0, height);
-                    CGContextScaleCTM(context, 1, -1);
-                    CGContextDrawImage(
-                        context,
-                        new CGRect { Size = new CGSize { Width = width, Height = height } },
-                        image);
-                }
-                finally
-                {
-                    CGContextRelease(context);
-                }
-
-                using var bgra = Mat.FromPixelData(height, width, MatType.CV_8UC4, pixels, stride);
-                var bgr = new Mat();
-                Cv2.CvtColor(bgra, bgr, ColorConversionCodes.BGRA2BGR);
-                return bgr;
-            }
-            finally
-            {
-                CGColorSpaceRelease(colorSpace);
-                Marshal.FreeHGlobal(pixels);
-            }
-        }
-        finally
-        {
-            CGImageRelease(image);
-        }
-    }
+    public IWindowCaptureSession OpenSession(WindowCaptureTarget target) =>
+        new MacScreenCaptureSession(checked((uint)target.NativeHandle));
 
     private static WindowCaptureTarget Unavailable(string reason) =>
         new("window:macos:permission", reason, 0, 0, 0, false, reason);
@@ -203,30 +128,8 @@ internal sealed class MacWindowCaptureBackend : IWindowCaptureBackend
     [DllImport(CoreGraphics)]
     private static extern nint CGWindowListCopyWindowInfo(uint option, uint relativeToWindow);
     [DllImport(CoreGraphics)]
-    private static extern nint CGWindowListCreateImage(CGRect screenBounds, uint listOption, uint windowId, uint imageOption);
-    [DllImport(CoreGraphics)]
     [return: MarshalAs(UnmanagedType.I1)]
     private static extern bool CGRectMakeWithDictionaryRepresentation(nint dictionary, out CGRect bounds);
-    [DllImport(CoreGraphics)]
-    private static extern nuint CGImageGetWidth(nint image);
-    [DllImport(CoreGraphics)]
-    private static extern nuint CGImageGetHeight(nint image);
-    [DllImport(CoreGraphics)]
-    private static extern void CGImageRelease(nint image);
-    [DllImport(CoreGraphics)]
-    private static extern nint CGColorSpaceCreateDeviceRGB();
-    [DllImport(CoreGraphics)]
-    private static extern void CGColorSpaceRelease(nint colorSpace);
-    [DllImport(CoreGraphics)]
-    private static extern nint CGBitmapContextCreate(nint data, nuint width, nuint height, nuint bitsPerComponent, nuint bytesPerRow, nint colorSpace, uint bitmapInfo);
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextTranslateCTM(nint context, double tx, double ty);
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextScaleCTM(nint context, double sx, double sy);
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextDrawImage(nint context, CGRect rectangle, nint image);
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextRelease(nint context);
     [DllImport(CoreFoundation)]
     private static extern nint CFArrayGetCount(nint array);
     [DllImport(CoreFoundation)]
