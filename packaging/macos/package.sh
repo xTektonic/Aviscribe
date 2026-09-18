@@ -11,6 +11,9 @@ app_dir="${staging_dir}/Aviscribe.app"
 contents_dir="${app_dir}/Contents"
 package_dir="${artifacts_root}/packages"
 portable_dir="${staging_dir}/portable"
+icon_source="${repo_root}/src/Aviscribe.UI/Assets/aviscribe-icon.png"
+iconset_dir="${staging_dir}/Aviscribe.iconset"
+icon_file="${contents_dir}/Resources/Aviscribe.icns"
 
 rm -rf "${publish_dir}" "${staging_dir}"
 mkdir -p \
@@ -32,6 +35,26 @@ dotnet publish "${repo_root}/src/Aviscribe.Desktop/Aviscribe.Desktop.csproj" \
   --self-contained true \
   --output "${publish_dir}" \
   -p:Version="${version}"
+
+mkdir -p "${iconset_dir}"
+while read -r pixels filename; do
+  sips --resampleHeightWidth "${pixels}" "${pixels}" \
+    "${icon_source}" \
+    --out "${iconset_dir}/${filename}" \
+    >/dev/null
+done <<'EOF'
+16 icon_16x16.png
+32 icon_16x16@2x.png
+32 icon_32x32.png
+64 icon_32x32@2x.png
+128 icon_128x128.png
+256 icon_128x128@2x.png
+256 icon_256x256.png
+512 icon_256x256@2x.png
+512 icon_512x512.png
+1024 icon_512x512@2x.png
+EOF
+iconutil --convert icns --output "${icon_file}" "${iconset_dir}"
 
 cp -R "${publish_dir}/." "${contents_dir}/MacOS/"
 chmod +x "${contents_dir}/MacOS/Aviscribe"

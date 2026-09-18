@@ -11,6 +11,8 @@
   <string>Aviscribe</string>
   <key>CFBundleIdentifier</key>
   <string>io.github.xtektonic.aviscribe</string>
+  <key>CFBundleIconFile</key>
+  <string>Aviscribe.icns</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
