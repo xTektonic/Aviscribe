@@ -86,6 +86,7 @@ BenchmarkDotNet.Artifacts/
 project.lock.json
 project.fragment.lock.json
 artifacts/
+.local/
 .artifacts/
 
 # ASP.NET Scaffolding
@@ -428,9 +429,9 @@ FodyWeavers.xsd
 *.msm
 *.msp
 
-# Aviscribe local classifier artifacts
+# Local development caches and validation artifacts
 /.dotnet-home/
 /.codex-localappdata/
-/tools/Aviscribe.Classifier/Data/
-/tools/Aviscribe.Classifier/Output/
-/tools/Aviscribe.Classifier/Models/
+/tools/Aviscribe.Validation/Data/
+/tools/Aviscribe.Validation/Output/
+/tools/Aviscribe.Validation/Models/

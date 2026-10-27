@@ -16,10 +16,8 @@ codesign --display --entitlements :- "${app}/Contents/MacOS/Aviscribe" > "${sign
 for key in com.apple.security.device.camera com.apple.security.cs.allow-jit; do
   test "$(/usr/libexec/PlistBuddy -c "Print :${key}" "${signature}")" = "true"
 done
-bridge="${app}/Contents/MacOS/libAviscribeScreenCapture.dylib"
-test -s "${bridge}"
-file "${bridge}" | grep -q arm64
-for symbol in aviscribe_screen_open aviscribe_screen_read aviscribe_screen_close aviscribe_screen_free; do
-  nm -gU "${bridge}" | grep -q "_${symbol}$"
-done
+test -s "${app}/Contents/MacOS/SMOVision.Capture.dll"
+test -s "${app}/Contents/MacOS/SMOVision.Assets.dll"
+test -s "${app}/Contents/MacOS/SMOVision/Ocr/rec.onnx"
+test -s "${app}/Contents/MacOS/SMOVision/Ocr/dict.txt"
 codesign --verify --deep --strict "${app}"

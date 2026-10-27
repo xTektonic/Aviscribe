@@ -38,7 +38,11 @@ namespace Aviscribe.Core
 
         public static MoonRepository LoadDefault()
         {
-            return Load(AppPaths.MoonList);
+            return new MoonRepository
+            {
+                Moons = SMOVision.Core.GameCatalog.Default.Moons
+                    .Select(Integration.SmoCatalog.Convert).ToList()
+            };
         }
 
         public bool IsPostGameKingdom(string kingdom)

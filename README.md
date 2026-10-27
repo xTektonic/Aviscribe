@@ -1,6 +1,6 @@
 # Aviscribe
 
-Aviscribe is a cross-platform Talkatoo translator for Super Mario Odyssey. Currently only Traditional Chinese gameplay is supported, with output being available in all native Super Mario Odyssey languages. 
+Aviscribe is a cross-platform Talkatoo translator for Super Mario Odyssey. English, Traditional Chinese, and Simplified Chinese gameplay are supported, with output being available in all native Super Mario Odyssey languages.
 
 Aviscribe works by capturing gameplay from a camera, capture card, virtual camera, or application window, recognizing Talkatoo and moon collection text, and displaying that info for the user to see.
 
@@ -69,12 +69,22 @@ If a source is not listed after changing permissions or connecting hardware, ref
 
 Aviscribe requires the .NET 10 SDK. The required SDK version is pinned in [global.json](global.json).
 
-The project uses three private packages built from pinned repositories. From the repository root, create the local package feed before restoring:
+This branch consumes the [SMOVision `0.1.0-beta.2` release](https://github.com/xTektonic/SMOVision/releases/tag/v0.1.0-beta.2).
+Prepare its nine checksum-pinned packages before restoring:
 
 ~~~powershell
-./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
-dotnet restore Aviscribe.sln
+./tools/prepare-smovision.ps1
+dotnet restore Aviscribe.sln --configfile NuGet.Config
 ~~~
+
+The script downloads and verifies the exact release archive, then verifies each
+package. For an already extracted release, set `SMOVISION_FEED` or pass
+`-FromFeed <bundle>/packages`. Packages and a version-specific isolated NuGet cache
+are stored under ignored `.local/`; earlier package caches are not reused. No SMOVision
+source checkout is required or built. If GitHub access is unavailable, provide the
+released packages with `-FromFeed`. Hosted CI access still needs validation.
+The beta libraries and vendored replay helper use AGPL-3.0-or-later; see
+[dependency notices](docs/dependencies.md).
 
 Build, test, and run the desktop application with:
 
@@ -86,17 +96,25 @@ dotnet run --project src/Aviscribe.Desktop
 
 On Windows, open Aviscribe.sln in Visual Studio and use Aviscribe.Desktop as the startup project if you prefer an IDE workflow.
 
+`Aviscribe.sln` is the main solution for all six application, test, and validation
+projects. `Aviscribe.slnLaunch` is an optional Visual Studio desktop launch profile,
+not a second solution.
+
 ## Validation
 
-The automated tests are hardware-independent. The classifier tool also provides smoke checks for the state, capture crop, frame processor, Talkatoo confirmation, and matcher paths:
+Automated tests cover application rules, saved-state compatibility, capture lifecycle,
+frame leases, and the SMOVision observation-to-run boundary. Run the package and state
+smoke checks after building:
 
 ~~~text
-dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- state-smoke
-dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- capture-crop-smoke
-dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- frameprocessor-smoke
-dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- talkatoo-confirmation-smoke
-dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- matcher-smoke
+dotnet run --project tools/Aviscribe.Validation --configuration Release --no-build -- state-smoke
+dotnet run --project tools/Aviscribe.Validation --configuration Release --no-build -- smovision-smoke
 ~~~
+
+The [replay tool](tools/Aviscribe.Validation/README.md) uses the beta's vendored FFmpeg sample decoder and the
+same SMOVision recognition and run projection as live capture. It requires FFmpeg and FFprobe; desktop live
+capture does not. See the [integration ledger](docs/smovision-integration-ledger.md)
+for integration limitations and validation results.
 
 ## Packaging
 
@@ -108,7 +126,8 @@ The packaging scripts use Velopack to produce a Windows x64 MSI, a macOS Apple S
 
 Run the package script on its target operating system:
 
-macOS builds also require Xcode Command Line Tools (`xcode-select --install`) to compile the ScreenCaptureKit bridge. The bridge is built automatically for local runs and included in published applications.
+Capture and OCR native dependencies are supplied by SMOVision packages. Pending-moon
+images are embedded in `SMOVision.Assets.dll`; keep that assembly in the published app. The former Aviscribe ScreenCaptureKit bridge is no longer built or shipped.
 
 ~~~powershell
 ./packaging/windows/package.ps1 -Version 1.1.0
@@ -127,27 +146,31 @@ dotnet tool restore
 
 Windows packaging adds an optional desktop-shortcut feature to Velopack's generated MSI. CI checks its default and selected states without installing the application. For unattended installations, pass `AVISCRIBE_DESKTOP_SHORTCUT=1` to `msiexec` to opt in; otherwise no desktop shortcut is created. The Start menu shortcut is always installed. macOS and Linux packaging do not add desktop shortcuts.
 
-macOS signing uses `packaging/macos/Aviscribe.entitlements` for both the initial bundle and Velopack's final signature. It includes camera access as well as the .NET runtime permissions. Packaging verifies the final executable's entitlements and the ScreenCaptureKit library. CI also tests native frame ownership, padded rows, idle frames, and stream errors without requesting screen access. Before publishing a macOS release, run the [live capture checks](docs/macos-capture-validation.md) against the installed DMG.
+macOS signing retains camera and .NET runtime entitlements. Bundle checks verify
+SMOVision and OCR assets. macOS capture requires fresh validation: the supplied
+SMOVision package uses CoreGraphics, while Aviscribe previously used ScreenCaptureKit.
+Porting those recent improvements upstream is tracked in the integration ledger.
 
 Installed copies check the stable GitHub Releases feed whenever Aviscribe starts. Draft and prerelease releases are not offered. When an update is available, Aviscribe asks before downloading it and restarts only after the download completes.
 
-Pull requests build and validate all three packages. A push to `main` creates or refreshes a draft GitHub Release for the version in `Directory.Build.props`; publishing that draft makes the update available. Published releases cannot be replaced; bump the version before creating a new release.
+The CI workflow is configured to build and validate all three packages for pull requests. Hosted validation with the SMOVision beta feed remains unverified. A push to `main` creates or refreshes a draft GitHub Release for the version in `Directory.Build.props`; publishing that draft makes the update available. Published releases cannot be replaced; bump the version before creating a new release.
 
 Windows and macOS artifacts are not signed with trusted developer certificates. Windows SmartScreen and macOS Gatekeeper may therefore display warnings.
 
 ## Repository layout
 
-- src/Aviscribe.Core: run state, moon matching, OCR, and frame processing
-- src/Aviscribe.Core.Capture: capture contracts and crop models
-- src/Aviscribe.Capture: video-device and platform window capture
+- src/Aviscribe.Core: run state, SMOVision integration, and app compatibility models
 - src/Aviscribe.UI: Avalonia views and controls
 - src/Aviscribe.Desktop: application entry point
-- tools/Aviscribe.Classifier: dataset, detector, OCR, and video analysis tools
+- tools/Aviscribe.Validation: state/package smoke checks and SMOVision video replays
 - tests: automated tests
 
-The classifier tool has its own usage notes in
-[tools/Aviscribe.Classifier/README.md](tools/Aviscribe.Classifier/README.md).
+The validation tool has its own usage notes in
+[tools/Aviscribe.Validation/README.md](tools/Aviscribe.Validation/README.md).
 
 ## License
 
-Aviscribe is licensed under the MIT License. See [LICENSE](LICENSE).
+Aviscribe's original source is licensed under the [MIT License](LICENSE). The
+SMOVision beta libraries and vendored replay helper are licensed under
+**AGPL-3.0-or-later**; see [dependency notes](docs/dependencies.md) for their
+license notices and links to the upstream distribution requirements.

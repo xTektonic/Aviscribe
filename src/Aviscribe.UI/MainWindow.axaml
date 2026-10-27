@@ -317,8 +317,8 @@
                         <TextBlock Text="Game text language" FontWeight="SemiBold"
                                    ToolTip.Tip="The language shown inside the game and read by OCR."/>
                         <ComboBox Name="cbInputLanguageSelect"
-                                  ToolTip.Tip="Select the language visible in the captured game feed. Traditional Chinese is currently supported."/>
-                        <TextBlock Classes="caption" Text="Traditional Chinese is currently supported. Other OCR inputs are unavailable." TextWrapping="Wrap"/>
+                                  ToolTip.Tip="Select English, Traditional Chinese, or Simplified Chinese to match the captured game feed."/>
+                        <TextBlock Classes="caption" Text="English, Traditional Chinese, and Simplified Chinese are supported." TextWrapping="Wrap"/>
                       </StackPanel>
                       <StackPanel Grid.Column="1" Spacing="5">
                         <TextBlock Text="Display language" FontWeight="SemiBold"

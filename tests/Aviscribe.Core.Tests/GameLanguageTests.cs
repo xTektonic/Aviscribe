@@ -5,12 +5,12 @@ namespace Aviscribe.Core.Tests;
 public class GameLanguageTests
 {
     [Fact]
-    public void InputLanguages_OnlySupportTraditionalChinese()
+    public void InputLanguages_SupportEnglishAndBothChineseVariants()
     {
         var supportedLanguages = Enum.GetValues<GameLanguage>()
             .Where(GameLanguageCatalog.IsSupportedInputLanguage);
 
-        Assert.Equal([GameLanguage.ChineseTraditional], supportedLanguages);
+        Assert.Equal([GameLanguage.English, GameLanguage.ChineseTraditional, GameLanguage.ChineseSimplified], supportedLanguages);
     }
 
     [Fact]

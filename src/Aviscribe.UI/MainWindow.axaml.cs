@@ -14,7 +14,7 @@ using Avalonia.VisualTree;
 using Aviscribe.Core;
 using Aviscribe.Core.Capture;
 using Aviscribe.Core.Diagnostics;
-using Aviscribe.Core.KingdomDetection;
+using Aviscribe.Core.Integration;
 using Aviscribe.Core.Ocr;
 using Aviscribe.Core.Online;
 using OpenCvSharp;
@@ -57,8 +57,7 @@ namespace Aviscribe.UI
         private readonly IStartupMaintenanceService _startupMaintenance;
         private IPlatformSettings? _platformSettings;
 
-        private FrameProcessor? _processor;
-        private OnnxOcrService? _ocrService;
+        private SmoGameSession? _processor;
         private DiagnosticsWindow? _diagnosticsWindow;
         private string _processorCaptureDeviceId = string.Empty;
         private AmbiguousOcrResult? _activeReview;
@@ -184,7 +183,7 @@ namespace Aviscribe.UI
             NormalizeLanguageSettings();
             _outputWriter.Language = _state.Settings.OutputLanguage;
             InitControls();
-            InitFrameProcessor();
+            InitVisionSession();
             _lastActionKingdom = _state.CurrentKingdom;
             _state.Changed += OnGameStateChanged;
             UpdateRunState();
@@ -274,14 +273,14 @@ namespace Aviscribe.UI
             _inputLanguageSelect.ItemsSource = inputLanguageItems;
             _inputLanguageSelect.SelectedItem = inputLanguageItems.Single(item =>
                 Equals(item.Content, _state.Settings.InputLanguage));
-            _inputLanguageSelect.SelectionChanged += (_, _) =>
+            _inputLanguageSelect.SelectionChanged += async (_, _) =>
             {
                 if (_inputLanguageSelect.SelectedItem is ComboBoxItem { Content: GameLanguage language })
                 {
                     _state.Settings.InputLanguage = language;
                     _diagnostics.Information($"Game text language changed to {language}.");
                     if (_processor != null)
-                        RecreateFrameProcessor();
+                        await RecreateVisionSessionAsync();
                     _state.NotifySettingsChanged();
                 }
             };
@@ -378,10 +377,11 @@ namespace Aviscribe.UI
                 this.GetControl<CheckBox>("chkAutomaticallySwitchKingdoms");
             automaticallySwitchKingdomsCheck.IsChecked =
                 _state.Settings.AutomaticallySwitchKingdoms;
-            automaticallySwitchKingdomsCheck.IsCheckedChanged += (_, _) =>
+            automaticallySwitchKingdomsCheck.IsCheckedChanged += async (_, _) =>
             {
                 var enabled = automaticallySwitchKingdomsCheck.IsChecked == true;
                 _state.Settings.AutomaticallySwitchKingdoms = enabled;
+                if (_processor != null) await RecreateVisionSessionAsync();
                 _diagnostics.Information($"Automatic kingdom switching = {enabled}.");
                 _state.NotifySettingsChanged();
                 SetStatus(enabled
@@ -393,10 +393,11 @@ namespace Aviscribe.UI
                 this.GetControl<CheckBox>("chkAdaptiveTalkatooDetection");
             adaptiveTalkatooDetectionCheck.IsChecked =
                 _state.Settings.AdaptiveTalkatooDetection;
-            adaptiveTalkatooDetectionCheck.IsCheckedChanged += (_, _) =>
+            adaptiveTalkatooDetectionCheck.IsCheckedChanged += async (_, _) =>
             {
                 var enabled = adaptiveTalkatooDetectionCheck.IsChecked == true;
                 _state.Settings.AdaptiveTalkatooDetection = enabled;
+                if (_processor != null) await RecreateVisionSessionAsync();
                 _diagnostics.Information($"Adaptive Talkatoo detection = {enabled}.");
                 _state.NotifySettingsChanged();
                 SetStatus(enabled
@@ -485,16 +486,16 @@ namespace Aviscribe.UI
             };
             ocrModeSelect.ItemsSource = ocrModes;
             ocrModeSelect.SelectedItem = ocrModes.First(item => item.Mode == _state.Settings.OcrMode);
-            ocrModeSelect.SelectionChanged += (_, _) =>
+            ocrModeSelect.SelectionChanged += async (_, _) =>
             {
                 if (ocrModeSelect.SelectedItem is not OcrModeListItem item ||
                     item.Mode == _state.Settings.OcrMode)
                     return;
                 _state.Settings.OcrMode = item.Mode;
                 _diagnostics.Information($"Requested OCR processor changed to {item.Name}.");
-                RecreateFrameProcessor();
+                await RecreateVisionSessionAsync();
                 _state.NotifySettingsChanged();
-                var status = _ocrService?.RuntimeStatus;
+                var status = _processor?.RuntimeStatus;
                 SetStatus(status?.IsFallback == true
                     ? $"GPU OCR unavailable; using CPU: {status.FallbackReason}"
                     : $"OCR provider changed to {status?.ActiveProvider ?? item.Name}");
@@ -802,73 +803,35 @@ namespace Aviscribe.UI
             }
         }
 
-        private void InitFrameProcessor()
+        private void InitVisionSession()
         {
-            var matcher = new MoonMatcher(
-                _repo,
-                _state.Settings.InputLanguage,
-                _state.Settings.OutputLanguage
-            );
-
-            var ocr = new OnnxOcrService(
-                AppPaths.OcrModelPath,
-                AppPaths.CharsetPath,
-                _state.Settings.OcrMode,
-                _diagnostics);
-            _ocrService = ocr;
-            var detector = LoadTextPresenceDetector();
-            var kingdomDetector = LoadKingdomDetector();
-
-            _processor = new FrameProcessor(
-                ocr,
-                matcher,
-                _state,
-                detector,
-                GetCropForDevice(_captureDeviceId),
-                _diagnostics,
-                kingdomDetector,
-                _runCoordinator);
+            _processor = new SmoGameSession(_state, _repo, GetCropForDevice(_captureDeviceId), _diagnostics, _runCoordinator);
             _processorCaptureDeviceId = _captureDeviceId;
-            _processor.AmbiguousMatchReceived += (_, result) =>
-            {
-                var kingdom = _state.CurrentKingdom;
-                EnqueueReview(kingdom, result);
-            };
+            _processor.AmbiguousMatchReceived += (_, result) => EnqueueReview(_state.CurrentKingdom, result);
+            _processor.ProcessingFailed += SetStatus;
         }
 
-        private void RecreateFrameProcessor()
+        private async Task RecreateVisionSessionCoreAsync()
         {
             var wasRunning = _processorRunning;
+            _processorRunning = false;
+            UpdateCaptureSharingState(isActive: false);
             var previous = _processor;
-
-            previous?.Stop();
-            InitFrameProcessor();
-
-            if (wasRunning)
-                _processor?.Start();
-
-            previous?.Dispose();
+            _processor = null;
+            if (previous != null) await previous.DisposeAsync().ConfigureAwait(false);
+            InitVisionSession();
+            if (wasRunning) _processor?.Start();
+            _processorRunning = wasRunning;
+            UpdateCaptureSharingState();
         }
 
-        private ITextPresenceDetector LoadTextPresenceDetector()
+        private async Task RecreateVisionSessionAsync()
         {
-            return new HeuristicTextPresenceDetector();
-        }
-
-        private IKingdomDetector? LoadKingdomDetector()
-        {
-            try
-            {
-                return new TemplateKingdomDetector(
-                    AppPaths.KingdomIconTemplateFolder);
-            }
-            catch (Exception ex)
-            {
-                _diagnostics.Error(
-                    "Automatic kingdom detection could not be initialized.",
-                    ex);
-                return null;
-            }
+            try { await _captureLifecycleGate.WaitAsync(_closingCancellation.Token); }
+            catch (OperationCanceledException) when (_closingCancellation.IsCancellationRequested) { return; }
+            try { await RecreateVisionSessionCoreAsync(); }
+            catch (Exception ex) { _diagnostics.Error("Could not restart SMOVision.", ex); SetStatus(ex.Message); }
+            finally { _captureLifecycleGate.Release(); }
         }
 
         private void OnFrame(VideoFrame frame)
@@ -878,8 +841,8 @@ namespace Aviscribe.UI
             VideoFrame? ownedFrame = frame;
             try
             {
-                Volatile.Write(ref _sourceWidth, frame.Frame.Width);
-                Volatile.Write(ref _sourceHeight, frame.Frame.Height);
+                Volatile.Write(ref _sourceWidth, frame.Width);
+                Volatile.Write(ref _sourceHeight, frame.Height);
 
                 _snapshotBroker.Offer(frame);
 
@@ -976,7 +939,7 @@ namespace Aviscribe.UI
                         selected.Id,
                         StringComparison.Ordinal))
                 {
-                    RecreateFrameProcessor();
+                    await RecreateVisionSessionCoreAsync().ConfigureAwait(false);
                 }
                 else
                 {
@@ -1066,6 +1029,9 @@ namespace Aviscribe.UI
         {
             _snapshotBroker.Cancel(new OperationCanceledException(reason));
             _diagnostics.Debug($"Stopping capture: {reason}.");
+            var processingStop = _processor?.StopAsync() ?? Task.CompletedTask;
+            _processorRunning = false;
+            UpdateCaptureSharingState(isActive: false);
 
             var capture = _video;
             _video = null;
@@ -1100,10 +1066,13 @@ namespace Aviscribe.UI
                 }
                 finally
                 {
-                    _processor?.Stop();
-                    _processorRunning = false;
-                    UpdateCaptureSharingState(isActive: false);
-                    _currentDevice = null;
+                    try { await processingStop.ConfigureAwait(false); }
+                    finally
+                    {
+                        _processorRunning = false;
+                        UpdateCaptureSharingState(isActive: false);
+                        _currentDevice = null;
+                    }
                 }
             }
         }
@@ -1112,6 +1081,7 @@ namespace Aviscribe.UI
             object? sender,
             CaptureErrorEventArgs args)
         {
+            _processor?.Invalidate();
             UpdateCaptureSharingState(isActive: false);
             _snapshotBroker.Cancel(
                 args.Exception ?? new IOException(args.Message));
@@ -2542,8 +2512,8 @@ namespace Aviscribe.UI
 
             try
             {
-                var uri = new Uri($"avares://Aviscribe.UI/Assets/moons/{key}");
-                using var stream = AssetLoader.Open(uri);
+                using var stream = SMOVision.Assets.MoonImages.OpenRead(SmoCatalog.MoonId(moon));
+                if (stream is null) return null;
                 var image = new Bitmap(stream);
                 _moonImageCache[key] = image;
                 return image;
@@ -2617,7 +2587,7 @@ namespace Aviscribe.UI
 
         private string FormatOcrRuntimeStatus()
         {
-            var status = _ocrService?.RuntimeStatus;
+            var status = _processor?.RuntimeStatus;
             if (status == null)
                 return "OCR session is not initialized";
             var active = $"{status.ActiveProvider} ({status.ActiveDevice})";
@@ -2893,7 +2863,7 @@ namespace Aviscribe.UI
                 {
                 }
 
-                _processor?.Dispose();
+                if (_processor != null) await _processor.DisposeAsync();
                 _settingsOnlineRunView?.Dispose();
                 _settingsOnlineRunView = null;
                 try

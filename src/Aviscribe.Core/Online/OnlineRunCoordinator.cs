@@ -410,6 +410,7 @@ public sealed class OnlineRunCoordinator : IAsyncDisposable
         var previousRevision = _credentials.Revision;
         if (generationChanged || snapshot.Generation != _credentials.Generation)
         {
+            _runs.InvalidateCaptureContext();
             lock (_sync) _outbox.Clear();
         }
         _credentials.Generation = snapshot.Generation;

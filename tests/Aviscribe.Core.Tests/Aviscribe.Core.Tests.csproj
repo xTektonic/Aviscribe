@@ -23,6 +23,5 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Aviscribe.Core\Aviscribe.Core.csproj" />
-    <ProjectReference Include="..\..\src\Aviscribe.Core.Capture\Aviscribe.Core.Capture.csproj" />
   </ItemGroup>
 </Project>

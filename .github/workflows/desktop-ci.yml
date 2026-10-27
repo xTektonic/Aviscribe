@@ -38,9 +38,9 @@ jobs:
             throw "Directory.Build.props contains invalid release version '$version'."
           }
           "version=$version" >> $env:GITHUB_OUTPUT
-      - name: Build pinned local NuGet feed
+      - name: Prepare pinned SMOVision beta feed
         shell: pwsh
-        run: ./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
+        run: ./tools/prepare-smovision.ps1
       - name: Install test prerequisites
         run: |
           sudo apt-get update
@@ -58,12 +58,9 @@ jobs:
         run: |
           for command in \
             state-smoke \
-            capture-crop-smoke \
-            frameprocessor-smoke \
-            talkatoo-confirmation-smoke \
-            matcher-smoke
+            smovision-smoke
           do
-            dotnet run --project tools/Aviscribe.Classifier --configuration Release --no-build -- "$command"
+            dotnet run --project tools/Aviscribe.Validation --configuration Release --no-build -- "$command"
           done
 
   windows-x64:
@@ -75,9 +72,9 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
-      - name: Build pinned local NuGet feed
+      - name: Prepare pinned SMOVision beta feed
         shell: pwsh
-        run: ./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
+        run: ./tools/prepare-smovision.ps1
       - name: Download previous packages for deltas
         if: github.event_name == 'push'
         shell: pwsh
@@ -121,11 +118,14 @@ jobs:
           foreach ($library in @("OpenCvSharpExtern.dll", "onnxruntime.dll")) {
             if (-not (Get-ChildItem $publish -Recurse -Filter $library)) { throw "$library is missing." }
           }
-          foreach ($library in @("FlashCap.dll", "FlashCap.Core.dll")) {
+          foreach ($library in @("FlashCap.dll", "FlashCap.Core.dll", "SMOVision.Capture.dll", "SMOVision.Vision.dll", "SMOVision.Assets.dll")) {
             if (-not (Test-Path "$publish/$library")) { throw "$library is missing from the Windows payload." }
           }
           foreach ($library in @("Accord.Video.DirectShow.dll", "CoreCompat.System.Drawing.dll")) {
-            if (Test-Path "$publish/$library") { throw "$library should not be present in the FlashCap-only payload." }
+            if (Test-Path "$publish/$library") { throw "$library should not be present in the SMOVision capture payload." }
+          }
+          foreach ($asset in @("SMOVision/Ocr/rec.onnx", "SMOVision/Ocr/dict.txt")) {
+            if (-not (Test-Path "$publish/$asset")) { throw "$asset is missing." }
           }
           if (-not (Get-ChildItem artifacts/packages -Filter "*.msi")) { throw "The MSI is missing." }
           if (-not (Test-Path artifacts/packages/releases.win.json)) { throw "The Windows update feed is missing." }
@@ -149,9 +149,9 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
-      - name: Build pinned local NuGet feed
+      - name: Prepare pinned SMOVision beta feed
         shell: pwsh
-        run: ./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
+        run: ./tools/prepare-smovision.ps1
       - name: Download previous packages for deltas
         if: github.event_name == 'push'
         env:
@@ -162,8 +162,6 @@ jobs:
             echo "No previous published packages were available; building a full release only."
       - name: Build macOS application, update packages, and DMG
         run: bash packaging/macos/package.sh "${{ needs.validate.outputs.version }}"
-      - name: Test native ScreenCaptureKit bridge
-        run: bash packaging/macos/test-native.sh
       - name: Inspect macOS payload
         run: |
           app="artifacts/staging/macos/dmg/Aviscribe.app"
@@ -207,9 +205,9 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
-      - name: Build pinned local NuGet feed
+      - name: Prepare pinned SMOVision beta feed
         shell: pwsh
-        run: ./tools/build-local-nuget.ps1 -OutputPath ../../LocalNuGet
+        run: ./tools/prepare-smovision.ps1
       - name: Install runtime prerequisites
         run: |
           sudo apt-get update
@@ -230,6 +228,10 @@ jobs:
           test -x "${publish}/Aviscribe"
           find "${publish}" -name "libOpenCvSharpExtern.so" -print -quit | grep -q .
           find "${publish}" -name "libonnxruntime.so" -print -quit | grep -q .
+          test -s "${publish}/SMOVision.Capture.dll"
+          test -s "${publish}/SMOVision.Assets.dll"
+          test -s "${publish}/SMOVision/Ocr/rec.onnx"
+          test -s "${publish}/SMOVision/Ocr/dict.txt"
           test -f "${publish}/FlashCap.dll"
           test -f "${publish}/FlashCap.Core.dll"
           test ! -f "${publish}/Accord.Video.DirectShow.dll"

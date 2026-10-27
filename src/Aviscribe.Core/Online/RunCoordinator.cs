@@ -19,6 +19,9 @@ public sealed class RunCoordinator
 
     public event EventHandler<SharedRunEvent>? LocalEventObserved;
     public event EventHandler<SharedRunEvent>? LocalEventCreated;
+    public event EventHandler? CaptureContextInvalidated;
+
+    public void InvalidateCaptureContext() => CaptureContextInvalidated?.Invoke(this, EventArgs.Empty);
 
     public IReadOnlyList<RunFactSnapshot> CreateFactSnapshot()
     {
@@ -131,6 +134,7 @@ public sealed class RunCoordinator
 
     public void ResetLocal()
     {
+        InvalidateCaptureContext();
         lock (_sync) _facts.Clear();
         Project();
     }

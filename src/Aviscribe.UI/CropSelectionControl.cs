@@ -4,7 +4,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Aviscribe.Core.Capture;
-using Aviscribe.Core.KingdomDetection;
+using SMOVision.Vision;
 using Aviscribe.Core.Ocr;
 using System;
 using System.Collections.Generic;
@@ -304,45 +304,30 @@ namespace Aviscribe.UI
                 new Rect(selectionBounds.Right, selectionBounds.Y, imageBounds.Right - selectionBounds.Right, selectionBounds.Height));
         }
 
+        private static readonly IReadOnlyList<DetectionZone> ScanGuides = GetScanGuides();
+        private static IReadOnlyList<DetectionZone> GetScanGuides()
+        {
+            // Reading these descriptors does not load OCR or inspect images.
+            var collection = new MoonOverlayDetector(MoonOverlayKind.Collection, () => throw new NotSupportedException());
+            var talkatoo = new MoonOverlayDetector(MoonOverlayKind.Talkatoo, () => throw new NotSupportedException());
+            var kingdom = new KingdomDetector();
+            return collection.DetectionZones.Concat(talkatoo.DetectionZones).Concat(kingdom.DetectionZones)
+                .Where(z => z.Kind == DetectionZoneKind.Ocr || z.DetectorId == SMOVision.Core.Fields.Kingdom.Id ||
+                    z.Id is "talkatoo.presence" or "collection.presence" or "collection.story-presence").ToArray();
+        }
         private static void DrawScanGuides(DrawingContext context, Rect selectionBounds)
         {
-            foreach (var guide in OcrReferenceLayout.Guides)
+            foreach (var guide in ScanGuides)
             {
-                var color = GuideColor(guide.Type);
-                var detectionPen = new Pen(
-                    new SolidColorBrush(Color.FromArgb(150, color.R, color.G, color.B)),
-                    1);
-                var ocrPen = new Pen(new SolidColorBrush(color), 2);
-                context.DrawRectangle(
-                    null,
-                    detectionPen,
-                    MapGuide(guide.DetectionBounds, selectionBounds));
-                context.DrawRectangle(
-                    null,
-                    ocrPen,
-                    MapGuide(guide.OcrBounds, selectionBounds));
+                var region = guide.Region;
+                var color = guide.DetectorId == SMOVision.Core.Fields.Kingdom.Id ? Color.FromRgb(117, 224, 134) :
+                    GuideColor(guide.DetectorId == SMOVision.Core.Fields.Talkatoo.Id ? OcrRegionType.Talkatoo :
+                        guide.Id.Contains("story", StringComparison.Ordinal) ? OcrRegionType.StoryMoon : OcrRegionType.MoonGet);
+                context.DrawRectangle(null, new Pen(new SolidColorBrush(color), 1), new Rect(
+                    selectionBounds.X + region.X * selectionBounds.Width,
+                    selectionBounds.Y + region.Y * selectionBounds.Height,
+                    region.Width * selectionBounds.Width, region.Height * selectionBounds.Height));
             }
-
-            var kingdomPen = new Pen(
-                new SolidColorBrush(Color.FromArgb(190, 117, 224, 134)),
-                1);
-            context.DrawRectangle(
-                null,
-                kingdomPen,
-                MapGuide(TemplateKingdomDetector.IconSearchBounds, selectionBounds));
-            context.DrawRectangle(
-                null,
-                kingdomPen,
-                MapGuide(TemplateKingdomDetector.HudUnderlineBounds, selectionBounds));
-        }
-
-        private static Rect MapGuide(CvRect guide, Rect selection)
-        {
-            return new Rect(
-                selection.X + guide.X / (double)OcrReferenceLayout.Width * selection.Width,
-                selection.Y + guide.Y / (double)OcrReferenceLayout.Height * selection.Height,
-                guide.Width / (double)OcrReferenceLayout.Width * selection.Width,
-                guide.Height / (double)OcrReferenceLayout.Height * selection.Height);
         }
 
         private static Color GuideColor(OcrRegionType type)

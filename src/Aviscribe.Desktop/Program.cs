@@ -1,8 +1,7 @@
 using Avalonia;
-using Aviscribe.Capture;
+using Aviscribe.Core.Integration;
 using Aviscribe.Core;
 using Aviscribe.Core.Diagnostics;
-using Aviscribe.Core.Capture;
 using Aviscribe.UI;
 using System.Runtime.InteropServices;
 using Velopack;
@@ -30,9 +29,7 @@ internal static class Program
 
         return AppBuilder
             .Configure(() => new AviscribeApp(
-                new CompositeVideoProvider(
-                    new FlashCapVideoProvider(diagnostics),
-                    PlatformWindowCaptureProvider.Create(diagnostics)),
+                new SmoVideoProvider(diagnostics),
                 diagnostics,
                 updates,
                 new LegacyWindowsInstallerMigration(updates, diagnostics)))

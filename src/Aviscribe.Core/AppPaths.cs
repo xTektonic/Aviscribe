@@ -9,9 +9,6 @@ public enum AppPlatform
 
 public static class AppPaths
 {
-    public static string DataFolder =>
-        Path.Combine(AppContext.BaseDirectory, "Data");
-
     public static string UserDataFolder => ResolveUserDataFolder(
         CurrentPlatform(),
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -23,24 +20,6 @@ public static class AppPaths
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         Environment.GetEnvironmentVariable("XDG_STATE_HOME"));
-
-    public static string MoonList =>
-        Path.Combine(DataFolder, "moon-list.json");
-
-    public static string OcrModelPath =>
-        Path.Combine(DataFolder, "rec.onnx");
-
-    public static string CharsetPath =>
-        Path.Combine(DataFolder, "dict.txt");
-
-    public static string DetectorRulesPath =>
-        Path.Combine(DataFolder, "detector-rules.json");
-
-    public static string LinearDetectorModelPath =>
-        Path.Combine(DataFolder, "linear-detector.json");
-
-    public static string KingdomIconTemplateFolder =>
-        Path.Combine(DataFolder, "KingdomIcons");
 
     public static string PendingOutputPath =>
         Path.Combine(UserDataFolder, "pending-moons.txt");
